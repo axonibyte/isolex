@@ -190,10 +190,10 @@ output text (path data at compile time; coordinates at render time) is
 formatted with exactly two decimal places, round-half-to-even.
 
 Determinism: identical lexicon bytes must produce identical IR bytes.
-Runtime `cos`/`sin` in expressions use the platform libm; a 1-ulp
-cross-platform difference is possible there and, after two-decimal
-formatting, visible only on exact-tie values — conformance is defined
-per-platform.
+Runtime `cos`/`sin` (in expressions and `arc` endpoints) are quantized
+to 1e-9 before use, which erases cross-platform libm last-ulp
+divergence; every other arithmetic operation is exact IEEE-754. Identical
+lexicon bytes therefore produce identical IR bytes on any platform.
 
 ## 8. Diagnostics
 
