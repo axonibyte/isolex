@@ -1,0 +1,9 @@
+# Fixed battery seeds: cost is known, hunts are opt-in via SEED/--rounds.
+# Any seed that ever finds a defect is promoted here permanently.
+1001
+20260904
+424242
+7777777
+# promoted 2026-09-04: truncation-nemesis false positives (battery bug, fixed)
+424254
+7777780

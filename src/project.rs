@@ -532,12 +532,12 @@ fn project_2d(ctx: &mut Ctx, shape: &Shape2, env: &BTreeMap<String, f64>, out: &
             let a0 = ev(ctx, &args[3], env);
             let a1 = ev(ctx, &args[4], env);
             let (x0, y0) = (
-                cx + r * a0.to_radians().cos(),
-                cy - r * a0.to_radians().sin(),
+                cx + r * crate::expr::quantize(a0.to_radians().cos()),
+                cy - r * crate::expr::quantize(a0.to_radians().sin()),
             );
             let (x1, y1) = (
-                cx + r * a1.to_radians().cos(),
-                cy - r * a1.to_radians().sin(),
+                cx + r * crate::expr::quantize(a1.to_radians().cos()),
+                cy - r * crate::expr::quantize(a1.to_radians().sin()),
             );
             let large = if (a1 - a0).abs() > 180.0 { 1 } else { 0 };
             let (fill, op, stroke, width, dash) = style_or(style, "none", "ink", 1.4);

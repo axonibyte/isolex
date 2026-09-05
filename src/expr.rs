@@ -518,8 +518,13 @@ pub fn eval(e: &Expr, env: &BTreeMap<String, f64>) -> Result<f64, ExprError> {
                 Func::Round => v[0].round(),
                 Func::Floor => v[0].floor(),
                 Func::Ceil => v[0].ceil(),
-                Func::Cos => v[0].to_radians().cos(),
-                Func::Sin => v[0].to_radians().sin(),
+                // Quantized to 1e-9 so platform libm differences (FreeBSD
+                // vs Linux differ at ~1e-16) cannot reach the IR bytes;
+                // 1e-9 is far below the two-decimal render resolution, so
+                // nothing visible changes. All downstream arithmetic is
+                // exact IEEE-754 and therefore already portable.
+                Func::Cos => quantize(v[0].to_radians().cos()),
+                Func::Sin => quantize(v[0].to_radians().sin()),
             }
         }
         Expr::If(c, t, a) => {
@@ -555,6 +560,12 @@ pub fn free_vars(e: &Expr, out: &mut std::collections::BTreeSet<String>) {
             free_vars(alt, out);
         }
     }
+}
+
+/// Round a transcendental result to 1e-9 to erase cross-platform libm
+/// last-ulp divergence (SPEC §7). Determinism, not accuracy.
+pub fn quantize(v: f64) -> f64 {
+    (v * 1e9).round() / 1e9
 }
 
 fn bool_num(b: bool) -> f64 {
