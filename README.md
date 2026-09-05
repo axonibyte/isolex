@@ -15,8 +15,8 @@ same input, same bytes, every time.
 ```kdl
 base "rack-unit" {
   param u 1
-  footprint 2 1 "=u * 0.28"
-  part "chassis" { box 0 0 0 2 1 "=u * 0.28" }
+  footprint 2 1 "u * 0.28"
+  part "chassis" { box 0 0 0 2 1 "u * 0.28" }
 }
 
 icon "switch-l3" {
@@ -39,5 +39,19 @@ isolex check src/          # parse + resolve + lint the lexicon
 isolex compile src/ --ir out.json
 isolex docs src/           # generate the lexicon's reference tables
 ```
+
+## Documentation
+
+- [docs/guide.md](docs/guide.md) — a task-oriented walk through authoring
+  a lexicon: your first icon, parts, inheritance & late binding,
+  fragments, screen-space paths, `repeat`/`when`, axes, expressions.
+- [docs/primitives.md](docs/primitives.md) — every geometry node, with an
+  example of each.
+- [docs/cookbook.md](docs/cookbook.md) — worked patterns from a real
+  ~900-icon lexicon.
+- [SPEC.md](SPEC.md) — the normative specification.
+
+Every example in the guides is compile-checked against the current
+compiler.
 
 Licensed under the Apache License, Version 2.0.
