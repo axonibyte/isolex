@@ -1,6 +1,6 @@
 # Pinned rather than :latest so a tag build today and a rebuild next year
 # use the same compiler. Bump deliberately, together with rust-version in
-# Cargo.toml.
+# Cargo.toml and the nightly pin in ci/build-target.sh.
 image: rust:1.97
 
 definitions:
@@ -35,6 +35,73 @@ definitions:
           - cargo clippy --all-targets --locked -- -D warnings
           - cargo test --release --locked
 
+    - step: &buildLinuxAmd64
+        name: Build x86_64-unknown-linux-gnu
+        caches:
+          - cargo
+        artifacts:
+          - dist/*
+        script:
+          - bash ci/build-target.sh x86_64-unknown-linux-gnu
+
+    - step: &buildLinuxArm64
+        name: Build aarch64-unknown-linux-gnu
+        caches:
+          - cargo
+        artifacts:
+          - dist/*
+        script:
+          - bash ci/build-target.sh aarch64-unknown-linux-gnu
+
+    - step: &buildWindowsAmd64
+        name: Build x86_64-pc-windows-gnu (+ Wine smoke test)
+        caches:
+          - cargo
+        artifacts:
+          - dist/*
+        script:
+          - bash ci/build-target.sh x86_64-pc-windows-gnu
+
+    - step: &buildFreebsdAmd64
+        name: Build x86_64-unknown-freebsd
+        caches:
+          - cargo
+        artifacts:
+          - dist/*
+        script:
+          - bash ci/build-target.sh x86_64-unknown-freebsd
+
+    - step: &buildFreebsdArm64
+        name: Build aarch64-unknown-freebsd
+        caches:
+          - cargo
+        artifacts:
+          - dist/*
+        script:
+          - bash ci/build-target.sh aarch64-unknown-freebsd
+
+    - step: &doDeploy
+        name: Deploy multi-target artifacts
+        clone:
+          enabled: false
+        script:
+          # BB_PUB_SECRET is a repository access token, sent as a Bearer
+          # header. Never add -v here: verbose output prints the
+          # Authorization header, which Bitbucket's secret masking may not
+          # catch.
+          - |
+            for f in dist/*; do
+              if [[ -f "$f" && "$f" != *.sha256 ]]; then
+                echo "Uploading $f..."
+                sha256sum "$f" | awk '{ print $1 }' > "${f}.sha256"
+                curl -sS --fail-with-body \
+                  -H "Authorization: Bearer ${BB_PUB_SECRET}" \
+                  -X POST "https://api.bitbucket.org/2.0/repositories/${BITBUCKET_REPO_OWNER}/${BITBUCKET_REPO_SLUG}/downloads" \
+                  --form files=@"${f}" --form files=@"${f}.sha256"
+                echo "Uploaded $f + checksum"
+              fi
+            done
+
 pipelines:
   branches:
     main:
@@ -52,5 +119,11 @@ pipelines:
     '**':
       - step: *doMirror
       - step: *doFetchAndTest
-      # Multi-target builds and the Downloads deploy land with the release
-      # unit (ci/build-target.sh), mirroring ddwill's tag flow.
+      - parallel: &buildAll
+          steps:
+            - step: *buildLinuxAmd64
+            - step: *buildLinuxArm64
+            - step: *buildWindowsAmd64
+            - step: *buildFreebsdAmd64
+            - step: *buildFreebsdArm64
+      - step: *doDeploy
