@@ -108,3 +108,42 @@ axis "state" {
     }
   }
 }
+
+fragment "mini-glyph" {
+  param size 3
+  part "dot" {
+    circle 0 0 "size" fill="ink"
+  }
+}
+
+icon "state-down" {
+  category "state"
+  canvas 24 24
+  describe "Red octagon with an X."
+  part "octagon" {
+    at 0 0 0 {
+      poly fill="accent" {
+        pt 7 2
+        pt 17 2
+        pt 22 7
+        pt 22 17
+        pt 17 22
+        pt 7 22
+        pt 2 17
+        pt 2 7
+      }
+      path d="M8,8 L16,16 M16,8 L8,16" stroke="ink" width=2.2
+    }
+  }
+}
+
+icon "state-planned" {
+  category "state"
+  canvas 24 24
+  describe "Dashed placeholder square."
+  part "outline" {
+    at 0 0 0 {
+      rect 3 3 18 18 rx=3 stroke="ink-muted" width=1.5 dash="3 2.5"
+    }
+  }
+}

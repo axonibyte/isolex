@@ -342,7 +342,12 @@ fn parse_body_child(ctx: &mut FileCtx, ch: &kdl::KdlNode, kind: DefKind, def: &m
                 ctx.diag(off, "a part needs a name");
                 return;
             };
-            let nodes = parse_geometry_children(ctx, ch, Ctx::ThreeD);
+            let body_ctx = if kind == DefKind::Fragment {
+                Ctx::AnyD
+            } else {
+                Ctx::ThreeD
+            };
+            let nodes = parse_geometry_children(ctx, ch, body_ctx);
             def.body.parts.push(PartDecl {
                 op: if ch.name().value() == "part" {
                     PartOp::Add
@@ -410,6 +415,9 @@ fn parse_body_child(ctx: &mut FileCtx, ch: &kdl::KdlNode, kind: DefKind, def: &m
 enum Ctx {
     ThreeD,
     TwoD,
+    /// Fragment part bodies: either dimension parses; the expander
+    /// validates against the actual insertion site.
+    AnyD,
     PolyPts3,
     PolyPts2,
 }
@@ -498,7 +506,22 @@ fn parse_geometry(ctx: &mut FileCtx, ch: &kdl::KdlNode, gctx: Ctx) -> Option<Nod
     }
 
     let in_2d = matches!(gctx, Ctx::TwoD);
-    let valid: &[&str] = if in_2d { NODES_2D } else { NODES_3D };
+    let valid: &[&str] = match gctx {
+        Ctx::TwoD => NODES_2D,
+        Ctx::AnyD => {
+            // union of both worlds; expand validates the insertion site
+            if NODES_2D.contains(&name) || NODES_3D.contains(&name) {
+                if NODES_2D.contains(&name) && !NODES_3D.contains(&name) {
+                    NODES_2D
+                } else {
+                    NODES_3D
+                }
+            } else {
+                NODES_3D
+            }
+        }
+        _ => NODES_3D,
+    };
     if !valid.contains(&name) {
         let wrong_ctx = if in_2d {
             NODES_3D.contains(&name)

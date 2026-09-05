@@ -1,84 +1,218 @@
-# The Isolex Language — Specification (v0, draft)
+# The Isolex Language — Specification (v0)
 
 Isolex is a declarative language for defining icon systems: families of
-glyphs described as data, layered by prototype inheritance, parameterized,
-and compiled deterministically to a resolved shape intermediate
-representation ("shape IR"). Source files use `.ilx` and are
-[KDL 2.0](https://kdl.dev/spec) documents; this specification defines the
-node vocabulary, the expression language, resolution semantics, and the
-IR — everything a second implementation would need.
-
-Sections marked *(normative text lands with the implementing change)* are
-skeleton placeholders: this document grows in lockstep with the reference
-compiler, and CI holds them together.
+glyphs described as data, layered by prototype inheritance,
+parameterized, and compiled deterministically to a resolved shape
+intermediate representation ("shape IR"). Source files use the `.ilx`
+extension and are [KDL 2.0](https://kdl.dev/spec) documents. This
+specification defines the node vocabulary, the expression language,
+resolution semantics, projection, and the IR — everything a second
+implementation needs to produce byte-identical output.
 
 ## 1. Lexicons and compilation units
 
 A **lexicon** is a directory tree of `.ilx` files compiled as one unit:
-one global namespace, duplicate names are errors, no imports in v0. Files
-are processed in sorted path order; definitions in file order; every
-downstream ordering is derived from these, which is what makes
+one global namespace across every definition kind; duplicate names are
+errors; there are no imports in v0. Files are processed in sorted path
+order and definitions in file order; every downstream ordering (emission,
+axis expansion, diagnostics) derives from these, which is what makes
 compilation byte-deterministic.
 
 ## 2. Top-level nodes
 
-`lexicon` (pack configuration) · `base` (abstract definition, never
-emitted) · `icon` (concrete, emitted) · `fragment` (parameterized
-geometry group) · `axis` (variant overlay). *(normative text lands with
-the implementing change)*
+- `lexicon { … }` — at most one per lexicon. Settings: `tokens "a" "b" …`
+  (the theme token vocabulary) and `stroke-widths 1.2 …` (the permitted
+  stroke widths). v0 records these for consumers; enforcement hooks are
+  reserved.
+- `base "name" { … }` — an abstract definition. Never emitted; may be
+  incomplete.
+- `icon "name" { … }` — a concrete definition. After resolution it must
+  have `category` and either `footprint` or `canvas`; anything else is an
+  error naming what is missing.
+- `fragment "name" { … }` — a parameterized geometry group instantiated
+  with `insert`. Fragments cannot extend or be extended.
+- `axis "name" { … }` — a variant overlay set (§6).
+
+`extends` may be written as a property (`icon "x" extends="y"`) or as a
+child node (`extends "y"`); declaring both is an error.
 
 ## 3. Definition contents
 
-`extends`, `category`, `footprint`/`canvas`, `describe`, `param`,
-named `part` blocks, `badge` sugar, `grant` (colour-reservation
-declarations), `axes` opt-in. *(normative text lands with the
-implementing change)*
+- `category "compute"` — grouping key; child value wins.
+- `footprint w d h` — the isometric tile volume; drives the viewBox.
+- `canvas w h` — a flat screen-space frame (badges, chrome).
+- `describe "…"` — documentation; chains **concatenate** ancestor→child.
+- `param name default` — a named number; the default may be an
+  expression. Params evaluate in declaration order, and earlier params
+  are in scope for later defaults.
+- `part "name" { …geometry… }` — all geometry lives in named parts; the
+  name is the handle children use to modify it.
+- `replace "name" { … }`, `remove "name"` — child-side part operations
+  (§6).
+- `axes "a" "b"` — opt into variant axes; unions down the chain.
+- `grant "token" reason="…"` — declares this definition's right to use a
+  reserved colour token; carried into the IR for governance tooling.
+- `badge "icon-name" corner="ne" scale=0.5` — places another icon's
+  compiled shapes at a viewBox corner (`ne` default; `nw`/`se`/`sw`;
+  scale default 0.5). A badge target must not itself contain a badge.
 
 ## 4. Geometry vocabulary
 
-Isometric nodes: `box`, `tile`, `cylinder`, `facerect`, `poly3d`,
-`shadow`. Screen-space anchor groups: `at x y z { … }` containing `line`,
-`circle`, `ellipse`, `rect`, `arc`, `path` (with `{expr}` interpolation),
-and `insert` for fragments. Projection constants and painter order are
-part of the language's meaning and are specified here. *(normative text
-lands with the implementing change)*
+Coordinates are in tile units for 3-D nodes and output units for 2-D
+nodes. Painter order is document order after resolution.
+
+3-D nodes (outside `at`):
+
+| Node | Args | Notes |
+|---|---|---|
+| `box x y z w d h` | `fills="body"\|"virt"\|"none"`, `opacity` | emits left, right, top faces, in that order, with fills `body-left`/`body-right`/`body-top` (or `virt`×3 / `none`×3), stroke `outline` at width 1.2 |
+| `tile x y z w d` | style | flat diamond; default fill `body-top`, stroke `outline` 1.2 |
+| `cylinder cx cy z r h` | `top`, `side`, `opacity` | body path then top ellipse; rx = √2·r·COS·S, ry = √2·r·SIN·S; defaults `body-right`/`body-top` |
+| `facerect "front"\|"right" a b z extent h` | `fill` (default `ink`), `opacity` | wall-mounted rectangle, stroke `none` |
+| `poly3d { pt x y z … }` | style | projected polygon; `pt` and `repeat` children only |
+| `shadow cx cy rx ry` | | ground ellipse, fill token `shadow`, opacity 0.35, stroke none |
+| `at x y z { …2-D… }` | | anchor group: binds `x`,`y` to the projected screen point for children |
+
+2-D nodes (inside `at`; coordinates are screen-absolute — the anchor
+exists to give you `x`/`y`):
+
+| Node | Args | Defaults |
+|---|---|---|
+| `line x1 y1 x2 y2` | | stroke `ink` 1.4 |
+| `circle cx cy r` | | stroke `outline` 1.2, fill `none` |
+| `ellipse cx cy rx ry` | | stroke `outline` 1.2, fill `none` |
+| `rect x y w h` (`rx=`) | | stroke `none` 1.4, fill `none` |
+| `arc cx cy r a0 a1` | | degrees, counter-clockwise from +x, y-flipped; stroke `ink` 1.4; large-arc flag set when \|a1−a0\| > 180 |
+| `path d="M{x-10},{y} h20"` | style | `{…}` interpolates numeric expressions with `x`/`y` in scope |
+| `poly { pt x y … }` | style | fill `ink`, stroke `none` |
+
+Context-polymorphic: `repeat count "var" { … }` and
+`insert "fragment" arg=… { }` work in both dimensions and inside poly
+bodies; `pt` only inside `poly`/`poly3d`. Fragment part bodies parse
+permissively in either dimension; the insertion site decides validity at
+expansion.
+
+Style properties everywhere applicable: `fill`, `stroke` (theme tokens
+or `none`), `width`, `dash` ("3 2.5"), `opacity`, and the `when` guard.
 
 ## 5. Values and expressions
 
-Numbers are literals; a string in a numeric position is an expression.
-The expression grammar (own parser, no host-language leakage):
-arithmetic `+ - * / %`, unary minus, parentheses; names in scope
-(params, loop variables, anchor `x`/`y`); `min`, `max`, `abs`, `round`,
-`floor`, `ceil`; `if(cond, a, b)` where comparisons and boolean
-operators are valid only inside `cond`. `repeat n as "i"` (count
-evaluated up front, capped), `when="expr"` guards. Deliberately absent:
-user-defined functions, recursion, assignment, strings-as-values, I/O,
-randomness — evaluation is total and pure. *(normative text lands with
-the implementing change)*
+A number value is a literal; a **string value in a numeric position is
+an expression**. Grammar (own parser; no host-language leakage):
+
+```
+or    := and ("or" and)*
+and   := not ("and" not)*
+not   := "not" not | cmp
+cmp   := add (("<"|"<="|">"|">="|"=="|"!=") add)?
+add   := mul (("+"|"-") mul)*
+mul   := unary (("*"|"/"|"%") unary)*
+unary := "-" unary | atom
+atom  := NUMBER | NAME | call | "(" or ")"
+call  := ("min"|"max") "(" or "," or ")"
+       | ("abs"|"round"|"floor"|"ceil"|"cos"|"sin") "(" or ")"
+       | "if" "(" or "," or "," or ")"
+```
+
+Two types exist. Comparisons and boolean operators produce `Bool`,
+legal only as an `if` condition or as the root of a `when` guard; every
+other position requires a `Num` root. `cos`/`sin` take degrees. `%` is
+IEEE-754 remainder with the dividend's sign (Rust/C `fmod`). Division
+and remainder by zero are compile-time errors when reached. `repeat`
+counts must evaluate to non-negative integers and are capped at 10 000.
+
+Deliberately absent: user-defined functions, recursion, assignment,
+strings-as-values, I/O, randomness. Evaluation is total and pure;
+compilation always terminates.
+
+Scoping: params and enclosing `repeat` variables are in scope;
+fragments are **hygienic** — a fragment body sees only its own params
+(caller args evaluate in caller scope, then bind). Inside `at`, the
+names `x` and `y` are bound to the anchor's screen coordinates.
 
 ## 6. Inheritance and axes
 
-Single `extends` chain. Params merge child-over-parent and references
-are late-bound against the final set. Parts merge by name: new names
-append; `replace` swaps in place preserving the inherited z-slot;
-`remove` deletes; redeclaring an inherited name without `replace` is an
-error. Axes expand deterministic cartesian products into
-`name-<variant>` slugs. *(normative text lands with the implementing
-change)*
+Single `extends` chain, walked root-first, merged child-over-parent:
 
-## 7. Shape IR
+1. **Params** override in place, keeping the original declaration slot;
+   references are late-bound against the final merged set — a parent's
+   geometry sees the child's values.
+2. **Parts** merge by name. New names append (render after inherited
+   parts). `replace` swaps the body in the inherited z-slot. `remove`
+   deletes. Redeclaring an inherited name with `part` is an error;
+   replacing or removing an unknown name is an error with a
+   nearest-name suggestion.
+3. `category`/`footprint`/`canvas`: child wins. `describe` concatenates.
+   `axes` and `grant`s union (first-seen order).
 
-JSON; schema and the normative coordinate formatting rule (fixed
-two-decimal formatting; identical across implementations) land with the
-projection stage. *(normative text lands with the implementing change)*
+Cycles are errors reporting the full chain. Only `base` and `icon` can
+be extended.
+
+An `axis` holds `variant "name" { …definition body… }` overlays and an
+optional `emit-base #false`. An icon (or ancestor) opts in with `axes`.
+The compiler expands the cartesian product in axis-declaration order ×
+variant-declaration order; each combination applies its variants as
+child merges and emits `name-<v1>[-<v2>…]`. The bare name is the
+all-absent combination; an axis with `emit-base #false` offers no
+absent option, so every emitted combination carries one of its variants.
+
+## 7. Projection and the shape IR
+
+Constants (normative, as literals — no libm variance may reach output):
+
+```
+S   = 40.0
+COS = 0.8660254037844387     (cos 30°)
+SIN = 0.5
+P(x, y, z) = ((x − y)·COS·S, (x + y)·SIN·S − z·S)
+PAD = 8.0                     (viewBox padding)
+OUTLINE_W = 1.2
+BADGE_SCALE = 0.5, BADGE_INSET = 2.0
+```
+
+The viewBox of a footprint (w, d, h) is the projected bounding box of
+the volume's eight corners, padded by PAD on every side; a canvas icon's
+viewBox is `[0, 0, w, h]`.
+
+The IR is JSON: `{ "ir_version": 1, "icons": [ … ] }`, each icon
+carrying `name`, `category`, `footprint`/`canvas`, `viewbox`
+`[minx, miny, w, h]`, `describe`, `grants`, and `shapes` — a flat,
+ordered list of primitives tagged by `kind`:
+`polygon` (points), `path` (d), `ellipse`, `circle`, `rect`, and
+`group` (tx, ty, scale, shapes — badge composition; renderers wrap the
+child shapes in a transform and never rewrite path data). Paints are
+unresolved theme tokens; positional values are raw f64 (renderers apply
+the formatting rule below); numbers **inside** path `d` strings are
+already formatted.
+
+**The formatting rule**: every number a conforming toolchain prints into
+output text (path data at compile time; coordinates at render time) is
+formatted with exactly two decimal places, round-half-to-even.
+
+Determinism: identical lexicon bytes must produce identical IR bytes.
+Runtime `cos`/`sin` in expressions use the platform libm; a 1-ulp
+cross-platform difference is possible there and, after two-decimal
+formatting, visible only on exact-tie values — conformance is defined
+per-platform.
 
 ## 8. Diagnostics
 
-Every diagnostic carries a source span (file, line, column), what was
-expected and found, and a nearest-name suggestion where one exists.
-Diagnostic text is part of the compiler's compatibility surface.
+Every diagnostic carries `file:line:col` (1-based), states what was
+expected and found, and offers a nearest-name suggestion (edit distance
+≤ 2) where one exists. Diagnostic text is part of the compiler's
+compatibility surface and is golden-tested.
 
-## 9. Conformance
+## 9. CLI
 
-A conforming compiler produces byte-identical IR for identical lexicons,
-rejects everything §5 forbids, and passes the reference test suite.
+`isolex check <dir>` parses, resolves, expands and projects, reporting
+diagnostics and counts. `isolex compile <dir> --ir <path|->` writes the
+IR JSON. `isolex docs <dir>` emits per-category markdown reference
+tables from `describe` metadata. Exit status: 0 clean, 1 diagnostics or
+I/O failure, 2 usage.
+
+## 10. Conformance
+
+A conforming compiler produces byte-identical IR for identical
+lexicons, rejects everything §5 forbids with located diagnostics, and
+passes the reference test suite (parser goldens, per-rule semantics
+tests, e2e IR golden).

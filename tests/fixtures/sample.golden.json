@@ -1535,6 +1535,432 @@
         "start": 2366,
         "len": 256
       }
+    },
+    {
+      "kind": "Fragment",
+      "name": "mini-glyph",
+      "extends": null,
+      "body": {
+        "category": null,
+        "footprint": null,
+        "canvas": null,
+        "describe": [],
+        "params": [
+          [
+            "size",
+            {
+              "Lit": 3.0
+            },
+            {
+              "file": 0,
+              "start": 2650,
+              "len": 12
+            }
+          ]
+        ],
+        "axes": [],
+        "grants": [],
+        "parts": [
+          {
+            "op": "Add",
+            "name": "dot",
+            "nodes": [
+              {
+                "Circle": {
+                  "args": [
+                    {
+                      "Lit": 0.0
+                    },
+                    {
+                      "Lit": 0.0
+                    },
+                    {
+                      "Expr": {
+                        "src": "size",
+                        "ast": {
+                          "Var": "size"
+                        }
+                      }
+                    }
+                  ],
+                  "style": {
+                    "fill": "ink",
+                    "stroke": null,
+                    "width": null,
+                    "dash": null,
+                    "opacity": null
+                  },
+                  "when": null,
+                  "span": {
+                    "file": 0,
+                    "start": 2682,
+                    "len": 28
+                  }
+                }
+              }
+            ],
+            "span": {
+              "file": 0,
+              "start": 2665,
+              "len": 49
+            }
+          }
+        ]
+      },
+      "variants": [],
+      "emit_base": true,
+      "span": {
+        "file": 0,
+        "start": 2624,
+        "len": 92
+      }
+    },
+    {
+      "kind": "Icon",
+      "name": "state-down",
+      "extends": null,
+      "body": {
+        "category": "state",
+        "footprint": null,
+        "canvas": [
+          {
+            "Lit": 24.0
+          },
+          {
+            "Lit": 24.0
+          }
+        ],
+        "describe": [
+          "Red octagon with an X."
+        ],
+        "params": [],
+        "axes": [],
+        "grants": [],
+        "parts": [
+          {
+            "op": "Add",
+            "name": "octagon",
+            "nodes": [
+              {
+                "At": {
+                  "args": [
+                    {
+                      "Lit": 0.0
+                    },
+                    {
+                      "Lit": 0.0
+                    },
+                    {
+                      "Lit": 0.0
+                    }
+                  ],
+                  "children": [
+                    {
+                      "Poly2d": {
+                        "style": {
+                          "fill": "accent",
+                          "stroke": null,
+                          "width": null,
+                          "dash": null,
+                          "opacity": null
+                        },
+                        "children": [
+                          {
+                            "Pt2": {
+                              "args": [
+                                {
+                                  "Lit": 7.0
+                                },
+                                {
+                                  "Lit": 2.0
+                                }
+                              ],
+                              "span": {
+                                "file": 0,
+                                "start": 2877,
+                                "len": 6
+                              }
+                            }
+                          },
+                          {
+                            "Pt2": {
+                              "args": [
+                                {
+                                  "Lit": 17.0
+                                },
+                                {
+                                  "Lit": 2.0
+                                }
+                              ],
+                              "span": {
+                                "file": 0,
+                                "start": 2892,
+                                "len": 7
+                              }
+                            }
+                          },
+                          {
+                            "Pt2": {
+                              "args": [
+                                {
+                                  "Lit": 22.0
+                                },
+                                {
+                                  "Lit": 7.0
+                                }
+                              ],
+                              "span": {
+                                "file": 0,
+                                "start": 2908,
+                                "len": 7
+                              }
+                            }
+                          },
+                          {
+                            "Pt2": {
+                              "args": [
+                                {
+                                  "Lit": 22.0
+                                },
+                                {
+                                  "Lit": 17.0
+                                }
+                              ],
+                              "span": {
+                                "file": 0,
+                                "start": 2924,
+                                "len": 8
+                              }
+                            }
+                          },
+                          {
+                            "Pt2": {
+                              "args": [
+                                {
+                                  "Lit": 17.0
+                                },
+                                {
+                                  "Lit": 22.0
+                                }
+                              ],
+                              "span": {
+                                "file": 0,
+                                "start": 2941,
+                                "len": 8
+                              }
+                            }
+                          },
+                          {
+                            "Pt2": {
+                              "args": [
+                                {
+                                  "Lit": 7.0
+                                },
+                                {
+                                  "Lit": 22.0
+                                }
+                              ],
+                              "span": {
+                                "file": 0,
+                                "start": 2958,
+                                "len": 7
+                              }
+                            }
+                          },
+                          {
+                            "Pt2": {
+                              "args": [
+                                {
+                                  "Lit": 2.0
+                                },
+                                {
+                                  "Lit": 17.0
+                                }
+                              ],
+                              "span": {
+                                "file": 0,
+                                "start": 2974,
+                                "len": 7
+                              }
+                            }
+                          },
+                          {
+                            "Pt2": {
+                              "args": [
+                                {
+                                  "Lit": 2.0
+                                },
+                                {
+                                  "Lit": 7.0
+                                }
+                              ],
+                              "span": {
+                                "file": 0,
+                                "start": 2990,
+                                "len": 6
+                              }
+                            }
+                          }
+                        ],
+                        "when": null,
+                        "span": {
+                          "file": 0,
+                          "start": 2848,
+                          "len": 156
+                        }
+                      }
+                    },
+                    {
+                      "Path": {
+                        "template": [
+                          {
+                            "Lit": "M8,8 L16,16 M16,8 L8,16"
+                          }
+                        ],
+                        "style": {
+                          "fill": null,
+                          "stroke": "ink",
+                          "width": {
+                            "Lit": 2.2
+                          },
+                          "dash": null,
+                          "opacity": null
+                        },
+                        "when": null,
+                        "span": {
+                          "file": 0,
+                          "start": 3011,
+                          "len": 55
+                        }
+                      }
+                    }
+                  ],
+                  "when": null,
+                  "span": {
+                    "file": 0,
+                    "start": 2831,
+                    "len": 241
+                  }
+                }
+              }
+            ],
+            "span": {
+              "file": 0,
+              "start": 2810,
+              "len": 266
+            }
+          }
+        ]
+      },
+      "variants": [],
+      "emit_base": true,
+      "span": {
+        "file": 0,
+        "start": 2718,
+        "len": 360
+      }
+    },
+    {
+      "kind": "Icon",
+      "name": "state-planned",
+      "extends": null,
+      "body": {
+        "category": "state",
+        "footprint": null,
+        "canvas": [
+          {
+            "Lit": 24.0
+          },
+          {
+            "Lit": 24.0
+          }
+        ],
+        "describe": [
+          "Dashed placeholder square."
+        ],
+        "params": [],
+        "axes": [],
+        "grants": [],
+        "parts": [
+          {
+            "op": "Add",
+            "name": "outline",
+            "nodes": [
+              {
+                "At": {
+                  "args": [
+                    {
+                      "Lit": 0.0
+                    },
+                    {
+                      "Lit": 0.0
+                    },
+                    {
+                      "Lit": 0.0
+                    }
+                  ],
+                  "children": [
+                    {
+                      "Rect2d": {
+                        "args": [
+                          {
+                            "Lit": 3.0
+                          },
+                          {
+                            "Lit": 3.0
+                          },
+                          {
+                            "Lit": 18.0
+                          },
+                          {
+                            "Lit": 18.0
+                          }
+                        ],
+                        "rx": {
+                          "Lit": 3.0
+                        },
+                        "style": {
+                          "fill": null,
+                          "stroke": "ink-muted",
+                          "width": {
+                            "Lit": 1.5
+                          },
+                          "dash": "3 2.5",
+                          "opacity": null
+                        },
+                        "when": null,
+                        "span": {
+                          "file": 0,
+                          "start": 3217,
+                          "len": 61
+                        }
+                      }
+                    }
+                  ],
+                  "when": null,
+                  "span": {
+                    "file": 0,
+                    "start": 3200,
+                    "len": 84
+                  }
+                }
+              }
+            ],
+            "span": {
+              "file": 0,
+              "start": 3179,
+              "len": 109
+            }
+          }
+        ]
+      },
+      "variants": [],
+      "emit_base": true,
+      "span": {
+        "file": 0,
+        "start": 3080,
+        "len": 210
+      }
     }
   ]
 }

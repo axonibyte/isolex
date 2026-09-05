@@ -4,5 +4,7 @@
 pub mod ast;
 pub mod expand;
 pub mod expr;
+pub mod ir;
 pub mod parser;
+pub mod project;
 pub mod resolve;
