@@ -1,0 +1,155 @@
+//! Parser contract tests: one rich fixture whose serialized AST is the
+//! golden, plus table-driven diagnostics whose text and positions are
+//! part of the compiler's compatibility surface.
+//!
+//! Regenerate the golden deliberately with UPDATE_GOLDENS=1 after a
+//! reviewed change; the diff is the review artifact.
+
+use isolex::parser::parse_lexicon;
+
+fn parse_one(name: &str, text: &str) -> isolex::parser::ParseOutcome {
+    parse_lexicon(&[(name.to_string(), text.to_string())])
+}
+
+#[test]
+fn sample_lexicon_matches_golden() {
+    let src = include_str!("fixtures/sample.ilx");
+    let outcome = parse_one("sample.ilx", src);
+    assert_eq!(outcome.diags, vec![], "the sample fixture must parse clean");
+    let got = serde_json::to_string_pretty(&outcome.lexicon).unwrap();
+    let golden_path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/sample.golden.json"
+    );
+    if std::env::var("UPDATE_GOLDENS").is_ok() {
+        std::fs::write(golden_path, &got).unwrap();
+    }
+    let want = std::fs::read_to_string(golden_path)
+        .expect("golden missing: run with UPDATE_GOLDENS=1 once, then review the diff");
+    assert_eq!(got, want, "parser AST drifted from the golden");
+}
+
+#[test]
+fn double_parse_is_identical() {
+    let src = include_str!("fixtures/sample.ilx");
+    let a = serde_json::to_string(&parse_one("sample.ilx", src).lexicon).unwrap();
+    let b = serde_json::to_string(&parse_one("sample.ilx", src).lexicon).unwrap();
+    assert_eq!(a, b);
+}
+
+/// Each case: source, expected line, expected message fragments.
+#[test]
+fn diagnostics_name_the_problem_and_the_place() {
+    let cases: &[(&str, usize, &[&str])] = &[
+        (
+            "icom \"x\" { }",
+            1,
+            &["unknown top-level node 'icom'", "did you mean 'icon'?"],
+        ),
+        (
+            "icon \"x\" {\n  patr \"p\" { }\n}",
+            2,
+            &["unknown node 'patr'", "did you mean 'part'?"],
+        ),
+        (
+            "icon \"x\" {\n  part \"p\" {\n    circle 0 0 4\n  }\n}",
+            3,
+            &["'circle' is a 2-D node", "'at' anchor group"],
+        ),
+        (
+            "icon \"x\" {\n  part \"p\" {\n    at 0 0 0 {\n      box 0 0 0 1 1 1\n    }\n  }\n}",
+            4,
+            &["'box' is a 3-D node", "cannot appear inside 'at'"],
+        ),
+        (
+            "icon \"x\" {\n  part \"p\" {\n    pt 1 2 3\n  }\n}",
+            3,
+            &["'pt' is only valid inside poly"],
+        ),
+        (
+            "icon \"x\" {\n  part \"p\" {\n    box 0 0 0 1 1 \"u ** 2\"\n  }\n}",
+            3,
+            &["in expression 'u ** 2'", "expected a value"],
+        ),
+        (
+            "icon \"x\" {\n  part \"p\" {\n    box 0 0 0 1 1 \"h = 2\"\n  }\n}",
+            3,
+            &["assignment does not exist"],
+        ),
+        (
+            "icon \"x\" {\n  part \"p\" {\n    box 0 0 0 1 1\n  }\n}",
+            3,
+            &["box takes 6 positional argument(s), found 5"],
+        ),
+        (
+            "icon \"x\" {\n  part \"p\" {\n    tile 0 0 0 1 1 when=\"i + 1\"\n  }\n}",
+            3,
+            &["in when guard 'i + 1'", "requires a Bool"],
+        ),
+        (
+            "icon \"x\" {\n  part \"p\" {\n    at 0 0 0 {\n      path d=\"M{x,{y}\"\n    }\n  }\n}",
+            4,
+            &["in path template expression"],
+        ),
+        (
+            "icon \"x\" {\n  param bays\n}",
+            2,
+            &["param takes a name and a default"],
+        ),
+        (
+            "axis \"a\" {\n  emit-base \"yes\"\n}",
+            2,
+            &["emit-base takes #true or #false"],
+        ),
+        (
+            "icon \"x\" extendz=\"y\" { }",
+            1,
+            &["unknown property 'extendz'", "did you mean 'extends'?"],
+        ),
+        ("icon { }", 1, &["needs a name"]),
+        (
+            "icon \"x\" {\n  grant \"accent\"\n}",
+            2,
+            &["grant takes a token and a reason"],
+        ),
+    ];
+
+    for (src, line, fragments) in cases {
+        let outcome = parse_one("t.ilx", src);
+        assert!(
+            !outcome.diags.is_empty(),
+            "expected a diagnostic for: {src}"
+        );
+        let d = &outcome.diags[0];
+        assert_eq!(
+            d.line, *line,
+            "wrong line for {src:?}: got {d} (wanted line {line})"
+        );
+        for frag in *fragments {
+            assert!(
+                d.message.contains(frag),
+                "diagnostic for {src:?} should contain {frag:?}, got: {}",
+                d.message
+            );
+        }
+    }
+}
+
+#[test]
+fn kdl_syntax_errors_are_located() {
+    let outcome = parse_one("t.ilx", "icon \"x\" {\n  part \"p\" {\n");
+    assert!(!outcome.diags.is_empty());
+    assert!(outcome.diags[0].message.contains("KDL syntax error"));
+}
+
+#[test]
+fn files_parse_in_given_order_and_spans_index_files() {
+    let outcome = parse_lexicon(&[
+        ("a.ilx".into(), "icon \"one\" { }".into()),
+        ("b.ilx".into(), "icon \"two\" { }".into()),
+    ]);
+    assert_eq!(outcome.lexicon.defs.len(), 2);
+    assert_eq!(outcome.lexicon.defs[0].name, "one");
+    assert_eq!(outcome.lexicon.defs[0].span.file, 0);
+    assert_eq!(outcome.lexicon.defs[1].span.file, 1);
+}

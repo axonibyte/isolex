@@ -1,0 +1,1540 @@
+{
+  "files": [
+    "sample.ilx"
+  ],
+  "config": {
+    "tokens": [
+      "ink",
+      "ink-muted",
+      "outline",
+      "body-top",
+      "accent"
+    ],
+    "stroke_widths": [
+      1.2,
+      1.4,
+      1.5,
+      2.2
+    ]
+  },
+  "defs": [
+    {
+      "kind": "Base",
+      "name": "rack-unit",
+      "extends": null,
+      "body": {
+        "category": "net",
+        "footprint": [
+          {
+            "Lit": 2.0
+          },
+          {
+            "Lit": 1.0
+          },
+          {
+            "Expr": {
+              "src": "u * 0.28",
+              "ast": {
+                "Bin": [
+                  "Mul",
+                  {
+                    "Var": "u"
+                  },
+                  {
+                    "Num": 0.28
+                  }
+                ]
+              }
+            }
+          }
+        ],
+        "canvas": null,
+        "describe": [
+          "Rack-mount slab; the chassis every 19-inch device shares."
+        ],
+        "params": [
+          [
+            "u",
+            {
+              "Lit": 1.0
+            },
+            {
+              "file": 0,
+              "start": 253,
+              "len": 9
+            }
+          ]
+        ],
+        "axes": [],
+        "grants": [],
+        "parts": [
+          {
+            "op": "Add",
+            "name": "chassis",
+            "nodes": [
+              {
+                "Box3": {
+                  "args": [
+                    {
+                      "Lit": 0.0
+                    },
+                    {
+                      "Lit": 0.0
+                    },
+                    {
+                      "Lit": 0.0
+                    },
+                    {
+                      "Lit": 2.0
+                    },
+                    {
+                      "Lit": 1.0
+                    },
+                    {
+                      "Expr": {
+                        "src": "u * 0.28",
+                        "ast": {
+                          "Bin": [
+                            "Mul",
+                            {
+                              "Var": "u"
+                            },
+                            {
+                              "Num": 0.28
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ],
+                  "fills": null,
+                  "opacity": null,
+                  "when": null,
+                  "span": {
+                    "file": 0,
+                    "start": 384,
+                    "len": 24
+                  }
+                }
+              }
+            ],
+            "span": {
+              "file": 0,
+              "start": 363,
+              "len": 49
+            }
+          }
+        ]
+      },
+      "variants": [],
+      "emit_base": true,
+      "span": {
+        "file": 0,
+        "start": 215,
+        "len": 199
+      }
+    },
+    {
+      "kind": "Base",
+      "name": "switch",
+      "extends": "rack-unit",
+      "body": {
+        "category": null,
+        "footprint": null,
+        "canvas": null,
+        "describe": [
+          "Port row along the front face."
+        ],
+        "params": [
+          [
+            "ports",
+            {
+              "Lit": 12.0
+            },
+            {
+              "file": 0,
+              "start": 456,
+              "len": 14
+            }
+          ]
+        ],
+        "axes": [],
+        "grants": [],
+        "parts": [
+          {
+            "op": "Add",
+            "name": "ports",
+            "nodes": [
+              {
+                "Repeat": {
+                  "count": {
+                    "Expr": {
+                      "src": "ports",
+                      "ast": {
+                        "Var": "ports"
+                      }
+                    }
+                  },
+                  "var": "i",
+                  "children": [
+                    {
+                      "FaceRect": {
+                        "face": "Front",
+                        "args": [
+                          {
+                            "Expr": {
+                              "src": "0.1 + i * (1.8 / ports)",
+                              "ast": {
+                                "Bin": [
+                                  "Add",
+                                  {
+                                    "Num": 0.1
+                                  },
+                                  {
+                                    "Bin": [
+                                      "Mul",
+                                      {
+                                        "Var": "i"
+                                      },
+                                      {
+                                        "Bin": [
+                                          "Div",
+                                          {
+                                            "Num": 1.8
+                                          },
+                                          {
+                                            "Var": "ports"
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            }
+                          },
+                          {
+                            "Lit": 1.0
+                          },
+                          {
+                            "Lit": 0.09
+                          },
+                          {
+                            "Lit": 0.11
+                          },
+                          {
+                            "Lit": 0.11
+                          }
+                        ],
+                        "fill": "ink",
+                        "opacity": {
+                          "Lit": 0.55
+                        },
+                        "when": null,
+                        "span": {
+                          "file": 0,
+                          "start": 563,
+                          "len": 100
+                        }
+                      }
+                    }
+                  ],
+                  "when": null,
+                  "span": {
+                    "file": 0,
+                    "start": 536,
+                    "len": 133
+                  }
+                }
+              }
+            ],
+            "span": {
+              "file": 0,
+              "start": 517,
+              "len": 156
+            }
+          }
+        ]
+      },
+      "variants": [],
+      "emit_base": true,
+      "span": {
+        "file": 0,
+        "start": 416,
+        "len": 259
+      }
+    },
+    {
+      "kind": "Icon",
+      "name": "switch-l2",
+      "extends": "switch",
+      "body": {
+        "category": null,
+        "footprint": null,
+        "canvas": null,
+        "describe": [
+          "Layer-2 access switch."
+        ],
+        "params": [],
+        "axes": [],
+        "grants": [],
+        "parts": []
+      },
+      "variants": [],
+      "emit_base": true,
+      "span": {
+        "file": 0,
+        "start": 677,
+        "len": 75
+      }
+    },
+    {
+      "kind": "Icon",
+      "name": "switch-l3",
+      "extends": "switch-l2",
+      "body": {
+        "category": null,
+        "footprint": null,
+        "canvas": null,
+        "describe": [
+          "Adds the routing-arrows badge on the top face."
+        ],
+        "params": [],
+        "axes": [],
+        "grants": [],
+        "parts": [
+          {
+            "op": "Add",
+            "name": "routing-badge",
+            "nodes": [
+              {
+                "At": {
+                  "args": [
+                    {
+                      "Lit": 1.0
+                    },
+                    {
+                      "Lit": 0.5
+                    },
+                    {
+                      "Lit": 0.28
+                    }
+                  ],
+                  "children": [
+                    {
+                      "Path": {
+                        "template": [
+                          {
+                            "Lit": "M"
+                          },
+                          {
+                            "Expr": {
+                              "src": "x-10",
+                              "ast": {
+                                "Bin": [
+                                  "Sub",
+                                  {
+                                    "Var": "x"
+                                  },
+                                  {
+                                    "Num": 10.0
+                                  }
+                                ]
+                              }
+                            }
+                          },
+                          {
+                            "Lit": ","
+                          },
+                          {
+                            "Expr": {
+                              "src": "y",
+                              "ast": {
+                                "Var": "y"
+                              }
+                            }
+                          },
+                          {
+                            "Lit": " h20 M"
+                          },
+                          {
+                            "Expr": {
+                              "src": "x+14",
+                              "ast": {
+                                "Bin": [
+                                  "Add",
+                                  {
+                                    "Var": "x"
+                                  },
+                                  {
+                                    "Num": 14.0
+                                  }
+                                ]
+                              }
+                            }
+                          },
+                          {
+                            "Lit": ","
+                          },
+                          {
+                            "Expr": {
+                              "src": "y-3",
+                              "ast": {
+                                "Bin": [
+                                  "Sub",
+                                  {
+                                    "Var": "y"
+                                  },
+                                  {
+                                    "Num": 3.0
+                                  }
+                                ]
+                              }
+                            }
+                          },
+                          {
+                            "Lit": " l6,3 -6,3"
+                          }
+                        ],
+                        "style": {
+                          "fill": null,
+                          "stroke": "ink",
+                          "width": {
+                            "Lit": 1.5
+                          },
+                          "dash": null,
+                          "opacity": null
+                        },
+                        "when": null,
+                        "span": {
+                          "file": 0,
+                          "start": 906,
+                          "len": 71
+                        }
+                      }
+                    }
+                  ],
+                  "when": null,
+                  "span": {
+                    "file": 0,
+                    "start": 884,
+                    "len": 99
+                  }
+                }
+              }
+            ],
+            "span": {
+              "file": 0,
+              "start": 857,
+              "len": 130
+            }
+          }
+        ]
+      },
+      "variants": [],
+      "emit_base": true,
+      "span": {
+        "file": 0,
+        "start": 754,
+        "len": 235
+      }
+    },
+    {
+      "kind": "Icon",
+      "name": "switch-poe",
+      "extends": "switch-l2",
+      "body": {
+        "category": null,
+        "footprint": null,
+        "canvas": null,
+        "describe": [],
+        "params": [],
+        "axes": [
+          "state"
+        ],
+        "grants": [
+          {
+            "token": "accent",
+            "reason": "wrong-or-hostile: demo grant for the parser",
+            "span": {
+              "file": 0,
+              "start": 2102,
+              "len": 67
+            }
+          }
+        ],
+        "parts": [
+          {
+            "op": "Replace",
+            "name": "ports",
+            "nodes": [
+              {
+                "Repeat": {
+                  "count": {
+                    "Lit": 8.0
+                  },
+                  "var": "i",
+                  "children": [
+                    {
+                      "FaceRect": {
+                        "face": "Front",
+                        "args": [
+                          {
+                            "Expr": {
+                              "src": "0.15 + i * 0.22",
+                              "ast": {
+                                "Bin": [
+                                  "Add",
+                                  {
+                                    "Num": 0.15
+                                  },
+                                  {
+                                    "Bin": [
+                                      "Mul",
+                                      {
+                                        "Var": "i"
+                                      },
+                                      {
+                                        "Num": 0.22
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            }
+                          },
+                          {
+                            "Lit": 1.0
+                          },
+                          {
+                            "Lit": 0.09
+                          },
+                          {
+                            "Lit": 0.14
+                          },
+                          {
+                            "Lit": 0.14
+                          }
+                        ],
+                        "fill": "ink",
+                        "opacity": {
+                          "Expr": {
+                            "src": "if(i % 2 == 0, 0.55, 0.3)",
+                            "ast": {
+                              "If": [
+                                {
+                                  "Cmp": [
+                                    "Eq",
+                                    {
+                                      "Bin": [
+                                        "Rem",
+                                        {
+                                          "Var": "i"
+                                        },
+                                        {
+                                          "Num": 2.0
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "Num": 0.0
+                                    }
+                                  ]
+                                },
+                                {
+                                  "Num": 0.55
+                                },
+                                {
+                                  "Num": 0.3
+                                }
+                              ]
+                            }
+                          }
+                        },
+                        "when": {
+                          "Expr": {
+                            "src": "i < 7",
+                            "ast": {
+                              "Cmp": [
+                                "Lt",
+                                {
+                                  "Var": "i"
+                                },
+                                {
+                                  "Num": 7.0
+                                }
+                              ]
+                            }
+                          }
+                        },
+                        "span": {
+                          "file": 0,
+                          "start": 1078,
+                          "len": 128
+                        }
+                      }
+                    }
+                  ],
+                  "when": null,
+                  "span": {
+                    "file": 0,
+                    "start": 1057,
+                    "len": 155
+                  }
+                }
+              }
+            ],
+            "span": {
+              "file": 0,
+              "start": 1035,
+              "len": 181
+            }
+          },
+          {
+            "op": "Remove",
+            "name": "chassis",
+            "nodes": [],
+            "span": {
+              "file": 0,
+              "start": 1219,
+              "len": 16
+            }
+          },
+          {
+            "op": "Add",
+            "name": "everything-else",
+            "nodes": [
+              {
+                "Tile": {
+                  "args": [
+                    {
+                      "Lit": 0.0
+                    },
+                    {
+                      "Lit": 0.0
+                    },
+                    {
+                      "Lit": 0.0
+                    },
+                    {
+                      "Lit": 2.0
+                    },
+                    {
+                      "Lit": 1.0
+                    }
+                  ],
+                  "style": {
+                    "fill": "body-top",
+                    "stroke": null,
+                    "width": null,
+                    "dash": "3 2.5",
+                    "opacity": null
+                  },
+                  "when": null,
+                  "span": {
+                    "file": 0,
+                    "start": 1267,
+                    "len": 43
+                  }
+                }
+              },
+              {
+                "Cylinder": {
+                  "args": [
+                    {
+                      "Lit": 0.5
+                    },
+                    {
+                      "Lit": 0.5
+                    },
+                    {
+                      "Lit": 0.0
+                    },
+                    {
+                      "Lit": 0.4
+                    },
+                    {
+                      "Lit": 0.12
+                    }
+                  ],
+                  "top": "body-top",
+                  "side": "body-top",
+                  "opacity": {
+                    "Lit": 0.5
+                  },
+                  "when": null,
+                  "span": {
+                    "file": 0,
+                    "start": 1315,
+                    "len": 70
+                  }
+                }
+              },
+              {
+                "Poly3d": {
+                  "style": {
+                    "fill": "body-top",
+                    "stroke": null,
+                    "width": null,
+                    "dash": null,
+                    "opacity": null
+                  },
+                  "children": [
+                    {
+                      "Pt3": {
+                        "args": [
+                          {
+                            "Lit": 0.0
+                          },
+                          {
+                            "Lit": 0.0
+                          },
+                          {
+                            "Lit": 0.0
+                          }
+                        ],
+                        "span": {
+                          "file": 0,
+                          "start": 1421,
+                          "len": 8
+                        }
+                      }
+                    },
+                    {
+                      "Pt3": {
+                        "args": [
+                          {
+                            "Lit": 2.0
+                          },
+                          {
+                            "Lit": 0.0
+                          },
+                          {
+                            "Lit": 0.0
+                          }
+                        ],
+                        "span": {
+                          "file": 0,
+                          "start": 1436,
+                          "len": 8
+                        }
+                      }
+                    },
+                    {
+                      "Pt3": {
+                        "args": [
+                          {
+                            "Lit": 1.0
+                          },
+                          {
+                            "Lit": 1.0
+                          },
+                          {
+                            "Expr": {
+                              "src": "u * 0.5",
+                              "ast": {
+                                "Bin": [
+                                  "Mul",
+                                  {
+                                    "Var": "u"
+                                  },
+                                  {
+                                    "Num": 0.5
+                                  }
+                                ]
+                              }
+                            }
+                          }
+                        ],
+                        "span": {
+                          "file": 0,
+                          "start": 1451,
+                          "len": 16
+                        }
+                      }
+                    }
+                  ],
+                  "when": null,
+                  "span": {
+                    "file": 0,
+                    "start": 1390,
+                    "len": 83
+                  }
+                }
+              },
+              {
+                "Shadow": {
+                  "args": [
+                    {
+                      "Lit": 0.5
+                    },
+                    {
+                      "Lit": 0.5
+                    },
+                    {
+                      "Lit": 0.48
+                    },
+                    {
+                      "Lit": 0.48
+                    }
+                  ],
+                  "when": null,
+                  "span": {
+                    "file": 0,
+                    "start": 1478,
+                    "len": 24
+                  }
+                }
+              },
+              {
+                "At": {
+                  "args": [
+                    {
+                      "Lit": 0.5
+                    },
+                    {
+                      "Lit": 0.5
+                    },
+                    {
+                      "Lit": 0.6
+                    }
+                  ],
+                  "children": [
+                    {
+                      "Line": {
+                        "args": [
+                          {
+                            "Lit": -3.0
+                          },
+                          {
+                            "Lit": 0.0
+                          },
+                          {
+                            "Lit": 3.0
+                          },
+                          {
+                            "Lit": 0.0
+                          }
+                        ],
+                        "style": {
+                          "fill": null,
+                          "stroke": "ink",
+                          "width": {
+                            "Lit": 1.4
+                          },
+                          "dash": null,
+                          "opacity": null
+                        },
+                        "when": null,
+                        "span": {
+                          "file": 0,
+                          "start": 1530,
+                          "len": 36
+                        }
+                      }
+                    },
+                    {
+                      "Circle": {
+                        "args": [
+                          {
+                            "Lit": 0.0
+                          },
+                          {
+                            "Lit": 0.0
+                          },
+                          {
+                            "Lit": 8.0
+                          }
+                        ],
+                        "style": {
+                          "fill": null,
+                          "stroke": "ink",
+                          "width": {
+                            "Lit": 1.4
+                          },
+                          "dash": null,
+                          "opacity": null
+                        },
+                        "when": null,
+                        "span": {
+                          "file": 0,
+                          "start": 1573,
+                          "len": 35
+                        }
+                      }
+                    },
+                    {
+                      "Ellipse": {
+                        "args": [
+                          {
+                            "Lit": 0.0
+                          },
+                          {
+                            "Lit": 0.0
+                          },
+                          {
+                            "Lit": 4.5
+                          },
+                          {
+                            "Lit": 8.0
+                          }
+                        ],
+                        "style": {
+                          "fill": null,
+                          "stroke": "ink-muted",
+                          "width": {
+                            "Lit": 1.2
+                          },
+                          "dash": null,
+                          "opacity": null
+                        },
+                        "when": null,
+                        "span": {
+                          "file": 0,
+                          "start": 1615,
+                          "len": 46
+                        }
+                      }
+                    },
+                    {
+                      "Rect2d": {
+                        "args": [
+                          {
+                            "Lit": -9.0
+                          },
+                          {
+                            "Lit": -8.0
+                          },
+                          {
+                            "Lit": 18.0
+                          },
+                          {
+                            "Lit": 12.0
+                          }
+                        ],
+                        "rx": {
+                          "Lit": 1.5
+                        },
+                        "style": {
+                          "fill": null,
+                          "stroke": "ink",
+                          "width": {
+                            "Lit": 1.4
+                          },
+                          "dash": null,
+                          "opacity": null
+                        },
+                        "when": null,
+                        "span": {
+                          "file": 0,
+                          "start": 1668,
+                          "len": 46
+                        }
+                      }
+                    },
+                    {
+                      "Arc": {
+                        "args": [
+                          {
+                            "Lit": 0.0
+                          },
+                          {
+                            "Lit": 0.0
+                          },
+                          {
+                            "Lit": 11.0
+                          },
+                          {
+                            "Lit": 300.0
+                          },
+                          {
+                            "Lit": 60.0
+                          }
+                        ],
+                        "style": {
+                          "fill": null,
+                          "stroke": "ink",
+                          "width": {
+                            "Lit": 1.2
+                          },
+                          "dash": null,
+                          "opacity": null
+                        },
+                        "when": null,
+                        "span": {
+                          "file": 0,
+                          "start": 1721,
+                          "len": 40
+                        }
+                      }
+                    },
+                    {
+                      "Poly2d": {
+                        "style": {
+                          "fill": "ink",
+                          "stroke": null,
+                          "width": null,
+                          "dash": null,
+                          "opacity": null
+                        },
+                        "children": [
+                          {
+                            "Repeat": {
+                              "count": {
+                                "Lit": 10.0
+                              },
+                              "var": "k",
+                              "children": [
+                                {
+                                  "Pt2": {
+                                    "args": [
+                                      {
+                                        "Expr": {
+                                          "src": "if(k % 2 == 0, 10, 4) * cos(90 + k * 36)",
+                                          "ast": {
+                                            "Bin": [
+                                              "Mul",
+                                              {
+                                                "If": [
+                                                  {
+                                                    "Cmp": [
+                                                      "Eq",
+                                                      {
+                                                        "Bin": [
+                                                          "Rem",
+                                                          {
+                                                            "Var": "k"
+                                                          },
+                                                          {
+                                                            "Num": 2.0
+                                                          }
+                                                        ]
+                                                      },
+                                                      {
+                                                        "Num": 0.0
+                                                      }
+                                                    ]
+                                                  },
+                                                  {
+                                                    "Num": 10.0
+                                                  },
+                                                  {
+                                                    "Num": 4.0
+                                                  }
+                                                ]
+                                              },
+                                              {
+                                                "Call": [
+                                                  "Cos",
+                                                  [
+                                                    {
+                                                      "Bin": [
+                                                        "Add",
+                                                        {
+                                                          "Num": 90.0
+                                                        },
+                                                        {
+                                                          "Bin": [
+                                                            "Mul",
+                                                            {
+                                                              "Var": "k"
+                                                            },
+                                                            {
+                                                              "Num": 36.0
+                                                            }
+                                                          ]
+                                                        }
+                                                      ]
+                                                    }
+                                                  ]
+                                                ]
+                                              }
+                                            ]
+                                          }
+                                        }
+                                      },
+                                      {
+                                        "Expr": {
+                                          "src": "0 - if(k % 2 == 0, 10, 4) * sin(90 + k * 36)",
+                                          "ast": {
+                                            "Bin": [
+                                              "Sub",
+                                              {
+                                                "Num": 0.0
+                                              },
+                                              {
+                                                "Bin": [
+                                                  "Mul",
+                                                  {
+                                                    "If": [
+                                                      {
+                                                        "Cmp": [
+                                                          "Eq",
+                                                          {
+                                                            "Bin": [
+                                                              "Rem",
+                                                              {
+                                                                "Var": "k"
+                                                              },
+                                                              {
+                                                                "Num": 2.0
+                                                              }
+                                                            ]
+                                                          },
+                                                          {
+                                                            "Num": 0.0
+                                                          }
+                                                        ]
+                                                      },
+                                                      {
+                                                        "Num": 10.0
+                                                      },
+                                                      {
+                                                        "Num": 4.0
+                                                      }
+                                                    ]
+                                                  },
+                                                  {
+                                                    "Call": [
+                                                      "Sin",
+                                                      [
+                                                        {
+                                                          "Bin": [
+                                                            "Add",
+                                                            {
+                                                              "Num": 90.0
+                                                            },
+                                                            {
+                                                              "Bin": [
+                                                                "Mul",
+                                                                {
+                                                                  "Var": "k"
+                                                                },
+                                                                {
+                                                                  "Num": 36.0
+                                                                }
+                                                              ]
+                                                            }
+                                                          ]
+                                                        }
+                                                      ]
+                                                    ]
+                                                  }
+                                                ]
+                                              }
+                                            ]
+                                          }
+                                        }
+                                      }
+                                    ],
+                                    "span": {
+                                      "file": 0,
+                                      "start": 1820,
+                                      "len": 107
+                                    }
+                                  }
+                                }
+                              ],
+                              "when": null,
+                              "span": {
+                                "file": 0,
+                                "start": 1794,
+                                "len": 143
+                              }
+                            }
+                          }
+                        ],
+                        "when": null,
+                        "span": {
+                          "file": 0,
+                          "start": 1768,
+                          "len": 177
+                        }
+                      }
+                    },
+                    {
+                      "Insert": {
+                        "fragment": "mini-glyph",
+                        "args": [
+                          [
+                            "size",
+                            {
+                              "Lit": 4.0
+                            }
+                          ]
+                        ],
+                        "when": null,
+                        "span": {
+                          "file": 0,
+                          "start": 1952,
+                          "len": 26
+                        }
+                      }
+                    }
+                  ],
+                  "when": null,
+                  "span": {
+                    "file": 0,
+                    "start": 1507,
+                    "len": 477
+                  }
+                }
+              },
+              {
+                "Insert": {
+                  "fragment": "disk-stack",
+                  "args": [
+                    [
+                      "cx",
+                      {
+                        "Lit": 0.5
+                      }
+                    ],
+                    [
+                      "cy",
+                      {
+                        "Lit": 0.5
+                      }
+                    ],
+                    [
+                      "z",
+                      {
+                        "Lit": 0.12
+                      }
+                    ],
+                    [
+                      "n",
+                      {
+                        "Lit": 2.0
+                      }
+                    ]
+                  ],
+                  "when": {
+                    "Expr": {
+                      "src": "ports > 4",
+                      "ast": {
+                        "Cmp": [
+                          "Gt",
+                          {
+                            "Var": "ports"
+                          },
+                          {
+                            "Num": 4.0
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "span": {
+                    "file": 0,
+                    "start": 1989,
+                    "len": 61
+                  }
+                }
+              },
+              {
+                "Badge": {
+                  "icon": "state-down",
+                  "corner": "ne",
+                  "scale": {
+                    "Lit": 0.5
+                  },
+                  "when": null,
+                  "span": {
+                    "file": 0,
+                    "start": 2055,
+                    "len": 40
+                  }
+                }
+              }
+            ],
+            "span": {
+              "file": 0,
+              "start": 1238,
+              "len": 861
+            }
+          }
+        ]
+      },
+      "variants": [],
+      "emit_base": true,
+      "span": {
+        "file": 0,
+        "start": 991,
+        "len": 1195
+      }
+    },
+    {
+      "kind": "Fragment",
+      "name": "disk-stack",
+      "extends": null,
+      "body": {
+        "category": null,
+        "footprint": null,
+        "canvas": null,
+        "describe": [],
+        "params": [
+          [
+            "cx",
+            {
+              "Lit": 0.5
+            },
+            {
+              "file": 0,
+              "start": 2214,
+              "len": 12
+            }
+          ],
+          [
+            "cy",
+            {
+              "Lit": 0.5
+            },
+            {
+              "file": 0,
+              "start": 2229,
+              "len": 12
+            }
+          ],
+          [
+            "z",
+            {
+              "Lit": 0.0
+            },
+            {
+              "file": 0,
+              "start": 2244,
+              "len": 9
+            }
+          ],
+          [
+            "n",
+            {
+              "Lit": 3.0
+            },
+            {
+              "file": 0,
+              "start": 2256,
+              "len": 9
+            }
+          ]
+        ],
+        "axes": [],
+        "grants": [],
+        "parts": [
+          {
+            "op": "Add",
+            "name": "stack",
+            "nodes": [
+              {
+                "Repeat": {
+                  "count": {
+                    "Expr": {
+                      "src": "n",
+                      "ast": {
+                        "Var": "n"
+                      }
+                    }
+                  },
+                  "var": "k",
+                  "children": [
+                    {
+                      "Cylinder": {
+                        "args": [
+                          {
+                            "Expr": {
+                              "src": "cx",
+                              "ast": {
+                                "Var": "cx"
+                              }
+                            }
+                          },
+                          {
+                            "Expr": {
+                              "src": "cy",
+                              "ast": {
+                                "Var": "cy"
+                              }
+                            }
+                          },
+                          {
+                            "Expr": {
+                              "src": "z + k * 0.25",
+                              "ast": {
+                                "Bin": [
+                                  "Add",
+                                  {
+                                    "Var": "z"
+                                  },
+                                  {
+                                    "Bin": [
+                                      "Mul",
+                                      {
+                                        "Var": "k"
+                                      },
+                                      {
+                                        "Num": 0.25
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            }
+                          },
+                          {
+                            "Lit": 0.26
+                          },
+                          {
+                            "Lit": 0.2
+                          }
+                        ],
+                        "top": null,
+                        "side": null,
+                        "opacity": null,
+                        "when": null,
+                        "span": {
+                          "file": 0,
+                          "start": 2310,
+                          "len": 42
+                        }
+                      }
+                    }
+                  ],
+                  "when": null,
+                  "span": {
+                    "file": 0,
+                    "start": 2287,
+                    "len": 71
+                  }
+                }
+              }
+            ],
+            "span": {
+              "file": 0,
+              "start": 2268,
+              "len": 94
+            }
+          }
+        ]
+      },
+      "variants": [],
+      "emit_base": true,
+      "span": {
+        "file": 0,
+        "start": 2188,
+        "len": 176
+      }
+    },
+    {
+      "kind": "Axis",
+      "name": "state",
+      "extends": null,
+      "body": {
+        "category": null,
+        "footprint": null,
+        "canvas": null,
+        "describe": [],
+        "params": [],
+        "axes": [],
+        "grants": [],
+        "parts": []
+      },
+      "variants": [
+        {
+          "name": "down",
+          "body": {
+            "category": null,
+            "footprint": null,
+            "canvas": null,
+            "describe": [],
+            "params": [],
+            "axes": [],
+            "grants": [],
+            "parts": [
+              {
+                "op": "Add",
+                "name": "state-badge",
+                "nodes": [
+                  {
+                    "Badge": {
+                      "icon": "state-down",
+                      "corner": "ne",
+                      "scale": null,
+                      "when": null,
+                      "span": {
+                        "file": 0,
+                        "start": 2449,
+                        "len": 30
+                      }
+                    }
+                  }
+                ],
+                "span": {
+                  "file": 0,
+                  "start": 2422,
+                  "len": 63
+                }
+              }
+            ]
+          },
+          "span": {
+            "file": 0,
+            "start": 2401,
+            "len": 88
+          }
+        },
+        {
+          "name": "planned",
+          "body": {
+            "category": null,
+            "footprint": null,
+            "canvas": null,
+            "describe": [
+              "dashed placeholder"
+            ],
+            "params": [],
+            "axes": [],
+            "grants": [],
+            "parts": [
+              {
+                "op": "Add",
+                "name": "state-badge",
+                "nodes": [
+                  {
+                    "Badge": {
+                      "icon": "state-planned",
+                      "corner": "ne",
+                      "scale": null,
+                      "when": null,
+                      "span": {
+                        "file": 0,
+                        "start": 2577,
+                        "len": 33
+                      }
+                    }
+                  }
+                ],
+                "span": {
+                  "file": 0,
+                  "start": 2550,
+                  "len": 66
+                }
+              }
+            ]
+          },
+          "span": {
+            "file": 0,
+            "start": 2492,
+            "len": 128
+          }
+        }
+      ],
+      "emit_base": true,
+      "span": {
+        "file": 0,
+        "start": 2366,
+        "len": 256
+      }
+    }
+  ]
+}
