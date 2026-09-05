@@ -1,0 +1,21 @@
+[package]
+name = "isolex"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.97"
+description = "A declarative language for icon systems — define glyph families with parameters and prototype inheritance, compile deterministically to vector output."
+license = "Apache-2.0"
+repository = "https://github.com/axonibyte/isolex"
+
+[dependencies]
+kdl = "6.7"
+miette = "7"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+
+[dev-dependencies]
+# goldens are plain file comparisons; no snapshot framework needed
+
+[profile.release]
+lto = true
+strip = true
