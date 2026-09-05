@@ -59,6 +59,11 @@ pub enum Func {
     Cos,
     /// sine of an angle in degrees
     Sin,
+    /// cosine of an angle in radians — the radian-native glyph helpers
+    /// (gear teeth, star points, rosettes) use these
+    Cosr,
+    /// sine of an angle in radians
+    Sinr,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -303,7 +308,8 @@ impl<'a> Parser<'a> {
                     self.expect(&Tok::RParen, "')' closing if")?;
                     Ok(Expr::If(cond.into(), then.into(), alt.into()))
                 }
-                "min" | "max" | "abs" | "round" | "floor" | "ceil" | "cos" | "sin" => {
+                "min" | "max" | "abs" | "round" | "floor" | "ceil" | "cos" | "sin" | "cosr"
+                | "sinr" => {
                     let func = match name.as_str() {
                         "min" => Func::Min,
                         "max" => Func::Max,
@@ -312,7 +318,9 @@ impl<'a> Parser<'a> {
                         "floor" => Func::Floor,
                         "ceil" => Func::Ceil,
                         "cos" => Func::Cos,
-                        _ => Func::Sin,
+                        "sin" => Func::Sin,
+                        "cosr" => Func::Cosr,
+                        _ => Func::Sinr,
                     };
                     self.expect(&Tok::LParen, &format!("'(' after {name}"))?;
                     let mut args = vec![self.parse_expr(0)?];
@@ -339,7 +347,8 @@ impl<'a> Parser<'a> {
                             o,
                             format!(
                                 "unknown function '{name}' (Isolex has min, max, abs, \
-                                 round, floor, ceil, cos, sin, if — user-defined functions do not exist)"
+                                 round, floor, ceil, cos, sin, cosr, sinr, if — \
+                                 user-defined functions do not exist)"
                             ),
                         );
                     }
@@ -525,6 +534,8 @@ pub fn eval(e: &Expr, env: &BTreeMap<String, f64>) -> Result<f64, ExprError> {
                 // exact IEEE-754 and therefore already portable.
                 Func::Cos => quantize(v[0].to_radians().cos()),
                 Func::Sin => quantize(v[0].to_radians().sin()),
+                Func::Cosr => quantize(v[0].cos()),
+                Func::Sinr => quantize(v[0].sin()),
             }
         }
         Expr::If(c, t, a) => {
@@ -620,6 +631,17 @@ mod tests {
         assert_eq!(num("cos(0)", &[]), 1.0);
         assert!((num("sin(90)", &[]) - 1.0).abs() < 1e-12);
         assert!((num("cos(60)", &[]) - 0.5).abs() < 1e-12);
+        // cosr/sinr are radian-native: cosr(pi) == -1, where the degree
+        // cos(pi) would be ~+1.
+        assert_eq!(num("cosr(0)", &[]), 1.0);
+        assert!((num("sinr(1.5707963267948966)", &[]) - 1.0).abs() < 1e-12);
+        assert!((num("cosr(3.141592653589793)", &[]) + 1.0).abs() < 1e-12);
+        // Transcendentals are quantized to 1e-9 (SPEC §7), so a value that
+        // is ~6e-17 in raw IEEE lands on exactly 0.0 — the property that
+        // makes the shape-IR byte-identical across platforms. If quantize
+        // were dropped these would be tiny nonzero and this would fail.
+        assert_eq!(num("cosr(1.5707963267948966)", &[]), 0.0);
+        assert_eq!(num("sinr(3.141592653589793)", &[]), 0.0);
     }
 
     #[test]

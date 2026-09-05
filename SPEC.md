@@ -111,13 +111,15 @@ mul   := unary (("*"|"/"|"%") unary)*
 unary := "-" unary | atom
 atom  := NUMBER | NAME | call | "(" or ")"
 call  := ("min"|"max") "(" or "," or ")"
-       | ("abs"|"round"|"floor"|"ceil"|"cos"|"sin") "(" or ")"
+       | ("abs"|"round"|"floor"|"ceil"|"cos"|"sin"|"cosr"|"sinr") "(" or ")"
        | "if" "(" or "," or "," or ")"
 ```
 
 Two types exist. Comparisons and boolean operators produce `Bool`,
 legal only as an `if` condition or as the root of a `when` guard; every
-other position requires a `Num` root. `cos`/`sin` take degrees. `%` is
+other position requires a `Num` root. `cos`/`sin` take degrees;
+`cosr`/`sinr` take radians (the radian-native form the star, gear, and
+rosette helpers are written in). `%` is
 IEEE-754 remainder with the dividend's sign (Rust/C `fmod`). Division
 and remainder by zero are compile-time errors when reached. `repeat`
 counts must evaluate to non-negative integers and are capped at 10 000.
@@ -191,8 +193,8 @@ output text (path data at compile time; coordinates at render time) is
 formatted with exactly two decimal places, round-half-to-even.
 
 Determinism: identical lexicon bytes must produce identical IR bytes.
-Runtime `cos`/`sin` (in expressions and `arc` endpoints) are quantized
-to 1e-9 before use, which erases cross-platform libm last-ulp
+Runtime `cos`/`sin`/`cosr`/`sinr` (in expressions and `arc` endpoints)
+are quantized to 1e-9 before use, which erases cross-platform libm last-ulp
 divergence; every other arithmetic operation is exact IEEE-754. Identical
 lexicon bytes therefore produce identical IR bytes on any platform.
 
