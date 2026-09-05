@@ -128,6 +128,11 @@ pub enum Shape {
         rx: f64,
         ry: f64,
     },
+    Seg {
+        a: [f64; 3],
+        b: [f64; 3],
+        style: EvStyle,
+    },
     At {
         x: f64,
         y: f64,
@@ -573,6 +578,25 @@ fn expand_node_3d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
                 cy: v[1],
                 rx: v[2],
                 ry: v[3],
+            });
+        }
+        Node::Seg {
+            args,
+            style,
+            when,
+            span,
+        } => {
+            if !when_passes(ctx, when, env, *span) {
+                return;
+            }
+            let v = evs!(args, *span, 6);
+            let Some(style) = eval_style(ctx, style, env, *span) else {
+                return;
+            };
+            out.push(Shape::Seg {
+                a: [v[0], v[1], v[2]],
+                b: [v[3], v[4], v[5]],
+                style,
             });
         }
         Node::At {
@@ -1038,6 +1062,7 @@ fn node_span(node: &Node) -> Span {
         | Node::FaceRect { span, .. }
         | Node::Poly3d { span, .. }
         | Node::Shadow { span, .. }
+        | Node::Seg { span, .. }
         | Node::At { span, .. }
         | Node::Line { span, .. }
         | Node::Circle { span, .. }

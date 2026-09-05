@@ -61,6 +61,7 @@ icon "switch-poe" {
       pt 1 1 "u * 0.5"
     }
     shadow 0.5 0.5 0.48 0.48
+    seg 0 0 0 2 0 0 stroke="outline" width=1.2
     at 0.5 0.5 0.6 {
       line -3 0 3 0 stroke="ink" width=1.4
       circle 0 0 8 stroke="ink" width=1.4

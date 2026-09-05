@@ -435,7 +435,8 @@ fn parse_geometry_children(ctx: &mut FileCtx, node: &kdl::KdlNode, gctx: Ctx) ->
 }
 
 const NODES_3D: &[&str] = &[
-    "box", "tile", "cylinder", "facerect", "poly3d", "shadow", "at", "repeat", "insert", "badge",
+    "box", "tile", "cylinder", "facerect", "poly3d", "shadow", "seg", "at", "repeat", "insert",
+    "badge",
 ];
 const NODES_2D: &[&str] = &[
     "line", "circle", "ellipse", "rect", "arc", "path", "poly", "repeat", "insert",
@@ -605,6 +606,12 @@ fn parse_geometry(ctx: &mut FileCtx, ch: &kdl::KdlNode, gctx: Ctx) -> Option<Nod
         }),
         "shadow" => Some(Node::Shadow {
             args: num_args::<4>(ctx, ch)?,
+            when,
+            span,
+        }),
+        "seg" => Some(Node::Seg {
+            args: num_args::<6>(ctx, ch)?,
+            style,
             when,
             span,
         }),

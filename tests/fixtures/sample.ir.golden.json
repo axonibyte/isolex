@@ -1086,6 +1086,14 @@
         },
         {
           "kind": "path",
+          "d": "M0.00,0.00 L69.28,40.00",
+          "fill": "none",
+          "fill_opacity": 1.0,
+          "stroke": "outline",
+          "stroke_width": 1.2
+        },
+        {
+          "kind": "path",
           "d": "M-3.00,0.00 L3.00,0.00",
           "fill": "none",
           "fill_opacity": 1.0,
@@ -1566,6 +1574,14 @@
           "fill_opacity": 0.35,
           "stroke": "none",
           "stroke_width": 0.0
+        },
+        {
+          "kind": "path",
+          "d": "M0.00,0.00 L69.28,40.00",
+          "fill": "none",
+          "fill_opacity": 1.0,
+          "stroke": "outline",
+          "stroke_width": 1.2
         },
         {
           "kind": "path",
@@ -2107,6 +2123,14 @@
           "fill_opacity": 0.35,
           "stroke": "none",
           "stroke_width": 0.0
+        },
+        {
+          "kind": "path",
+          "d": "M0.00,0.00 L69.28,40.00",
+          "fill": "none",
+          "fill_opacity": 1.0,
+          "stroke": "outline",
+          "stroke_width": 1.2
         },
         {
           "kind": "path",

@@ -398,6 +398,19 @@ fn project_shape(ctx: &mut Ctx, shape: &Shape, out: &mut Vec<IrShape>) {
                 dash: None,
             });
         }
+        Shape::Seg { a, b, style } => {
+            let (x0, y0) = p(a[0], a[1], a[2]);
+            let (x1, y1) = p(b[0], b[1], b[2]);
+            let (fill, op, stroke, width, dash) = style_or(style, "none", "ink", 1.4);
+            out.push(IrShape::Path {
+                d: format!("M{},{} L{},{}", fmt(x0), fmt(y0), fmt(x1), fmt(y1)),
+                fill,
+                fill_opacity: op,
+                stroke,
+                stroke_width: width,
+                dash,
+            });
+        }
         Shape::At { x, y, z, children } => {
             let (sx, sy) = p(*x, *y, *z);
             let mut env = BTreeMap::new();

@@ -71,6 +71,7 @@ nodes. Painter order is document order after resolution.
 | `facerect "front"\|"right" a b z extent h` | `fill` (default `ink`), `opacity` | wall-mounted rectangle, stroke `none` |
 | `poly3d { pt x y z … }` | style | projected polygon; `pt` and `repeat` children only |
 | `shadow cx cy rx ry` | | ground ellipse, fill token `shadow`, opacity 0.35, stroke none |
+| `seg ax ay az bx by bz` | style | two-point tile-space segment; both endpoints project via P, emitted as one path |
 | `at x y z { …2-D… }` | | anchor group: binds `x`,`y` to the projected screen point for children |
 
 2-D nodes (inside `at`; coordinates are screen-absolute — the anchor

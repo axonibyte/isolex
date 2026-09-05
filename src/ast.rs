@@ -78,6 +78,13 @@ pub enum Node {
         when: Option<Num>,
         span: Span,
     },
+    /// Two-point segment in tile space; both endpoints project via P.
+    Seg {
+        args: [Num; 6], // ax ay az bx by bz
+        style: Style,
+        when: Option<Num>,
+        span: Span,
+    },
     At {
         args: [Num; 3],      // x y z — binds anchor names `x`,`y` in children
         children: Vec<Node>, // 2-D nodes
