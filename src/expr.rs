@@ -532,6 +532,31 @@ pub fn eval(e: &Expr, env: &BTreeMap<String, f64>) -> Result<f64, ExprError> {
     })
 }
 
+/// Collect the free variable names of an expression.
+pub fn free_vars(e: &Expr, out: &mut std::collections::BTreeSet<String>) {
+    match e {
+        Expr::Num(_) => {}
+        Expr::Var(name) => {
+            out.insert(name.clone());
+        }
+        Expr::Neg(a) | Expr::Not(a) => free_vars(a, out),
+        Expr::Bin(_, a, b) | Expr::Cmp(_, a, b) | Expr::And(a, b) | Expr::Or(a, b) => {
+            free_vars(a, out);
+            free_vars(b, out);
+        }
+        Expr::Call(_, args) => {
+            for a in args {
+                free_vars(a, out);
+            }
+        }
+        Expr::If(c, t, alt) => {
+            free_vars(c, out);
+            free_vars(t, out);
+            free_vars(alt, out);
+        }
+    }
+}
+
 fn bool_num(b: bool) -> f64 {
     if b {
         1.0
