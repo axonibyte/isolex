@@ -57,14 +57,19 @@ jobs:
       - name: fetch the tree with git, not a JS action
         run: |
           set -o pipefail
+          # The full ref the event names: refs/heads/main, refs/tags/<tag>,
+          # or refs/pull/<n>/head. A pull request's short ref name is just
+          # its number, which `clone --branch` cannot find.
+          ref="${GITHUB_REF:-refs/heads/main}"
           rc=0
-          timeout 180 git clone --quiet --depth 1 \
-            --branch "${GITHUB_REF_NAME:-main}" \
-            "${GITHUB_SERVER_URL:-https://forge.axonibyte.com}/${GITHUB_REPOSITORY}.git" \
-            src > clone.log 2>&1 || rc=$?
-          if [ "$rc" = 124 ]; then echo "clone did not answer in 180s"; exit 1; fi
-          if [ "$rc" != 0 ]; then echo "clone failed rc=$rc"; tail -5 clone.log; exit 1; fi
-          echo "HEAD: $(git -C src rev-parse --short HEAD)"
+          git init --quiet src &&
+            timeout 180 git -C src fetch --quiet --depth 1 \
+              "${GITHUB_SERVER_URL:-https://forge.axonibyte.com}/${GITHUB_REPOSITORY}.git" \
+              "$ref" > clone.log 2>&1 &&
+            git -C src checkout --quiet --detach FETCH_HEAD >> clone.log 2>&1 || rc=$?
+          if [ "$rc" = 124 ]; then echo "fetching $ref did not answer in 180s"; exit 1; fi
+          if [ "$rc" != 0 ]; then echo "fetching $ref failed rc=$rc"; tail -5 clone.log; exit 1; fi
+          echo "ref: $ref HEAD: $(git -C src rev-parse --short HEAD)"
           crate=$(sed -n 's/^name *= *"\(.*\)"/\1/p' src/Cargo.toml | head -1)
           ver=$(sed -n 's/^version *= *"\(.*\)"/\1/p' src/Cargo.toml | head -1)
           echo "crate: $crate version: $ver"
