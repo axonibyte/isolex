@@ -21,6 +21,10 @@ it after (`-` is 0x2D, `/` is 0x2F). Definitions are processed in file
 order; every downstream ordering (emission, axis expansion, diagnostics)
 derives from these, which is what makes compilation byte-deterministic.
 
+Each file is a KDL 2.0 document, read in full (§11): a syntax error is
+reported where it is, with what is wrong, as `KDL syntax error: …`. Its
+blocks may nest to any depth.
+
 **Defaults.** Isolex has two kinds of default, and the test that tells
 them apart is whether the default reaches the IR.
 
@@ -368,4 +372,9 @@ I/O failure, 2 usage.
 A conforming compiler produces byte-identical IR for identical
 lexicons, rejects everything §5 forbids with located diagnostics, and
 passes the reference test suite (parser goldens, per-rule semantics
-tests, e2e IR golden).
+tests, e2e IR golden). It reads source as the whole of KDL 2.0: every
+input of the official KDL test suite (vendored in `tests/kdl-suite`)
+parses exactly when that suite says it should, to the document it
+says. And it takes nesting of any depth, of blocks and of expressions,
+without exhausting a call stack: how deeply a lexicon nests costs
+memory, and past `insert-depth` and `expression-depth` (§9), an error.
