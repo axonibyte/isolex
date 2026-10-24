@@ -124,6 +124,12 @@ IEEE-754 remainder with the dividend's sign (Rust/C `fmod`). Division
 and remainder by zero are compile-time errors when reached. `repeat`
 counts must evaluate to non-negative integers and are capped at 10 000.
 
+Every number is finite. An expression whose value is not (an overflow
+to infinity, or NaN) is a compile-time error when reached; only the
+value counts, so an overflow along the way that comes back to a finite
+result is not one. The KDL literals `#inf`, `#-inf` and `#nan` are
+errors wherever a number is expected.
+
 Deliberately absent: user-defined functions, recursion, assignment,
 strings-as-values, I/O, randomness. Evaluation is total and pure;
 compilation always terminates.
@@ -176,6 +182,11 @@ BADGE_SCALE = 0.5, BADGE_INSET = 2.0
 The viewBox of a footprint (w, d, h) is the projected bounding box of
 the volume's eight corners, padded by PAD on every side; a canvas icon's
 viewBox is `[0, 0, w, h]`.
+
+Projection keeps every number finite too: an icon whose geometry
+overflows once projected to output units (its viewBox, a point, a
+radius, a number in path data) is a compile-time error naming the icon.
+No value in the IR is ever infinite or NaN.
 
 The IR is JSON: `{ "ir_version": 1, "icons": [ … ] }`, each icon
 carrying `name`, `category`, `footprint`/`canvas`, `viewbox`

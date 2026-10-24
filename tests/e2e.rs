@@ -127,6 +127,88 @@ fn docs_emits_reference_tables() {
     );
 }
 
+/// `isolex check` on a lexicon of the given files: (succeeded, stderr).
+fn check_files(tag: &str, files: &[(&str, &str)]) -> (bool, String) {
+    let dir = std::env::temp_dir().join(format!("isolex-e2e-{tag}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    for (name, text) in files {
+        std::fs::write(dir.join(name), text).unwrap();
+    }
+    let out = bin().arg("check").arg(&dir).output().unwrap();
+    (out.status.success(), String::from_utf8(out.stderr).unwrap())
+}
+
+#[test]
+fn an_expression_that_overflows_is_a_located_error() {
+    // serde_json writes a non-finite f64 as null: this compiled, exit 0,
+    // with eight nulls where the box's top corners belong
+    let (ok, stderr) = check_files(
+        "overflow",
+        &[(
+            "huge.ilx",
+            "icon \"huge\" {\n  category \"c\"\n  param a 1e300\n  footprint 1 1 1\n  part \"p\" { box 0 0 0 1 1 \"a * a\" }\n}\n",
+        )],
+    );
+    assert!(!ok, "{stderr}");
+    assert!(
+        stderr.contains("huge.ilx:5:14: in 'a * a': the result is inf, not a finite number"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn geometry_that_overflows_when_projected_names_its_icon() {
+    // every value finite, but 1e307 tile units are past f64's range once
+    // projected to output units
+    let (ok, stderr) = check_files(
+        "projected",
+        &[(
+            "wide.ilx",
+            "icon \"ok\" { category \"c\"; footprint 1 1 1; part \"p\" { box 0 0 0 1 1 1 } }\nicon \"wide\" {\n  category \"c\"\n  footprint 1 1 1\n  part \"p\" { box 0 0 0 1e307 1 1 }\n}\n",
+        )],
+    );
+    assert!(!ok, "{stderr}");
+    assert!(
+        stderr.contains(
+            "wide.ilx:2:1: icon 'wide' projects to inf, not a finite number: its geometry is too large to draw"
+        ),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("'ok'"), "{stderr}");
+
+    // path data is formatted at projection, where an overflow is text
+    let (ok, stderr) = check_files(
+        "projected-path",
+        &[(
+            "seg.ilx",
+            "icon \"far\" { category \"c\"; footprint 1 1 1; part \"p\" { seg 0 0 0 1e307 0 0 } }\n",
+        )],
+    );
+    assert!(!ok, "{stderr}");
+    assert!(
+        stderr.contains("seg.ilx:1:1: icon 'far' projects to inf, not a finite number"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn an_anchor_expression_that_overflows_is_an_error() {
+    // x is only known at projection, so this one is evaluated there
+    let (ok, stderr) = check_files(
+        "anchor",
+        &[(
+            "at.ilx",
+            "icon \"a\" { category \"c\"; footprint 1 1 1; param big 1e307\n  part \"p\" { at 1 0 0 { circle \"x * big\" 0 1 } } }\n",
+        )],
+    );
+    assert!(!ok, "{stderr}");
+    assert!(
+        stderr.contains("in 'x * big': the result is inf, not a finite number"),
+        "{stderr}"
+    );
+}
+
 #[test]
 fn check_failures_render_file_line_col_and_exit_nonzero() {
     let dir = std::env::temp_dir().join(format!("isolex-e2e-bad-{}", std::process::id()));

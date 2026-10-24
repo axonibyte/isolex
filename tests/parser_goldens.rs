@@ -131,6 +131,21 @@ fn diagnostics_name_the_problem_and_the_place() {
         ),
         ("icon { }", 1, &["needs a name"]),
         (
+            "icon \"x\" {\n  part \"p\" {\n    box 0 0 0 1 1 #inf\n  }\n}",
+            3,
+            &["#inf is not a finite number"],
+        ),
+        (
+            "icon \"x\" {\n  param a #-inf\n}",
+            2,
+            &["#-inf is not a finite number"],
+        ),
+        (
+            "icon \"x\" {\n  part \"p\" {\n    tile 0 0 0 1 1 opacity=#nan\n  }\n}",
+            3,
+            &["#nan is not a finite number"],
+        ),
+        (
             "icon \"x\" {\n  grant \"accent\"\n}",
             2,
             &["grant takes a token and a reason"],

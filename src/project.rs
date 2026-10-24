@@ -105,6 +105,20 @@ pub fn project(icons: &[ExpandedIcon]) -> (IrDocument, Vec<SpanDiag>) {
         }
     }
 
+    // Finite inputs can still overflow once projected to output units,
+    // and JSON would write the result as null (SPEC §7).
+    for (ir, icon) in projected.iter().zip(icons) {
+        if let Some(v) = first_non_finite(ir) {
+            ctx.diags.push(SpanDiag {
+                span: icon.span,
+                message: format!(
+                    "icon '{}' projects to {v}, not a finite number: its geometry is too large to draw",
+                    ir.name
+                ),
+            });
+        }
+    }
+
     (
         IrDocument {
             ir_version: IR_VERSION,
@@ -112,6 +126,79 @@ pub fn project(icons: &[ExpandedIcon]) -> (IrDocument, Vec<SpanDiag>) {
         },
         ctx.diags,
     )
+}
+
+/// The first value in an icon's IR that is not finite, if any. Path data
+/// holds numbers already formatted, where Rust writes them as `inf`,
+/// `-inf` and `NaN`: none of their letters is an SVG path command, so
+/// finding them there is unambiguous.
+fn first_non_finite(icon: &IrIcon) -> Option<f64> {
+    fn in_d(d: &str) -> Option<f64> {
+        if d.contains("NaN") {
+            Some(f64::NAN)
+        } else if d.contains("-inf") {
+            Some(f64::NEG_INFINITY)
+        } else if d.contains("inf") {
+            Some(f64::INFINITY)
+        } else {
+            None
+        }
+    }
+    fn in_shapes(shapes: &[IrShape]) -> Option<f64> {
+        let bad = |vs: &[f64]| vs.iter().copied().find(|v| !v.is_finite());
+        shapes.iter().find_map(|s| match s {
+            IrShape::Polygon {
+                points,
+                fill_opacity,
+                stroke_width,
+                ..
+            } => bad(&points.concat()).or_else(|| bad(&[*fill_opacity, *stroke_width])),
+            IrShape::Path {
+                d,
+                fill_opacity,
+                stroke_width,
+                ..
+            } => in_d(d).or_else(|| bad(&[*fill_opacity, *stroke_width])),
+            IrShape::Ellipse {
+                cx,
+                cy,
+                rx,
+                ry,
+                fill_opacity,
+                stroke_width,
+                ..
+            } => bad(&[*cx, *cy, *rx, *ry, *fill_opacity, *stroke_width]),
+            IrShape::Circle {
+                cx,
+                cy,
+                r,
+                fill_opacity,
+                stroke_width,
+                ..
+            } => bad(&[*cx, *cy, *r, *fill_opacity, *stroke_width]),
+            IrShape::Rect {
+                x,
+                y,
+                w,
+                h,
+                rx,
+                fill_opacity,
+                stroke_width,
+                ..
+            } => bad(&[*x, *y, *w, *h, *rx, *fill_opacity, *stroke_width]),
+            IrShape::Group {
+                tx,
+                ty,
+                scale,
+                shapes,
+            } => bad(&[*tx, *ty, *scale]).or_else(|| in_shapes(shapes)),
+        })
+    }
+    let bad = |vs: &[f64]| vs.iter().copied().find(|v| !v.is_finite());
+    bad(&icon.viewbox)
+        .or_else(|| icon.footprint.and_then(|f| bad(&f)))
+        .or_else(|| icon.canvas.and_then(|c| bad(&c)))
+        .or_else(|| in_shapes(&icon.shapes))
 }
 
 #[allow(clippy::too_many_arguments)]

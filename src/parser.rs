@@ -745,6 +745,21 @@ fn kdl_num(v: &kdl::KdlValue) -> Option<f64> {
 
 fn parse_num_entry(ctx: &mut FileCtx, e: &kdl::KdlEntry) -> Option<Num> {
     if let Some(n) = kdl_num(e.value()) {
+        // KDL 2.0 spells these #inf, #-inf and #nan; JSON has none of them
+        if !n.is_finite() {
+            let kdl = if n.is_nan() {
+                "#nan"
+            } else if n > 0.0 {
+                "#inf"
+            } else {
+                "#-inf"
+            };
+            ctx.diag(
+                e.span().offset(),
+                format!("{kdl} is not a finite number; every number must be"),
+            );
+            return None;
+        }
         return Some(Num::Lit(n));
     }
     if let Some(s) = e.value().as_string() {

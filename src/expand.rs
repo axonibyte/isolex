@@ -155,6 +155,8 @@ pub struct ExpandedIcon {
     pub describe: Vec<String>,
     pub grants: Vec<(String, String)>,
     pub shapes: Vec<Shape>,
+    /// The icon's definition, for errors projection finds.
+    pub span: Span,
 }
 
 struct Ctx<'a> {
@@ -284,6 +286,7 @@ fn expand_one(ctx: &mut Ctx, def: &ResolvedDef, name: String) -> Option<Expanded
             .map(|g| (g.token.clone(), g.reason.clone()))
             .collect(),
         shapes,
+        span: def.span,
     })
 }
 

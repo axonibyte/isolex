@@ -237,8 +237,9 @@ small, total, pure language — no user functions, no recursion, no I/O:
   `if` condition or as the root of a `when` guard.
 
 `cos`/`sin`/`cosr`/`sinr` are quantized to 1e-9 so the IR is byte-identical
-across platforms. Division or `%` by zero, a negative `repeat` count, and
-a boolean where a number is required are all compile-time errors.
+across platforms. Division or `%` by zero, a result too large to be a
+number (or NaN), a negative `repeat` count, and a boolean where a number
+is required are all compile-time errors.
 
 ## Colours, stroke widths, and governance
 

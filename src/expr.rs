@@ -458,7 +458,20 @@ fn parse_typed(src: &str, want: Ty) -> Result<Expr, ExprError> {
 
 /// Evaluate with the given variable environment. BTreeMap so that any
 /// iteration a future change introduces is deterministic by construction.
+///
+/// The value must be finite (SPEC §5): JSON has no infinity or NaN, so
+/// one would reach the IR as null. Only the value counts; an overflow
+/// along the way that comes back to a finite result (`1 / (a * a)`) is
+/// not an error.
 pub fn eval(e: &Expr, env: &BTreeMap<String, f64>) -> Result<f64, ExprError> {
+    let v = value(e, env)?;
+    if !v.is_finite() {
+        return err(0, format!("the result is {v}, not a finite number"));
+    }
+    Ok(v)
+}
+
+fn value(e: &Expr, env: &BTreeMap<String, f64>) -> Result<f64, ExprError> {
     Ok(match e {
         Expr::Num(n) => *n,
         Expr::Var(name) => match env.get(name) {
@@ -479,9 +492,9 @@ pub fn eval(e: &Expr, env: &BTreeMap<String, f64>) -> Result<f64, ExprError> {
                 );
             }
         },
-        Expr::Neg(a) => -eval(a, env)?,
+        Expr::Neg(a) => -value(a, env)?,
         Expr::Bin(op, a, b) => {
-            let (a, b) = (eval(a, env)?, eval(b, env)?);
+            let (a, b) = (value(a, env)?, value(b, env)?);
             match op {
                 BinOp::Add => a + b,
                 BinOp::Sub => a - b,
@@ -501,7 +514,7 @@ pub fn eval(e: &Expr, env: &BTreeMap<String, f64>) -> Result<f64, ExprError> {
             }
         }
         Expr::Cmp(op, a, b) => {
-            let (a, b) = (eval(a, env)?, eval(b, env)?);
+            let (a, b) = (value(a, env)?, value(b, env)?);
             let r = match op {
                 CmpOp::Lt => a < b,
                 CmpOp::Le => a <= b,
@@ -512,13 +525,13 @@ pub fn eval(e: &Expr, env: &BTreeMap<String, f64>) -> Result<f64, ExprError> {
             };
             bool_num(r)
         }
-        Expr::And(a, b) => bool_num(num_bool(eval(a, env)?) && num_bool(eval(b, env)?)),
-        Expr::Or(a, b) => bool_num(num_bool(eval(a, env)?) || num_bool(eval(b, env)?)),
-        Expr::Not(a) => bool_num(!num_bool(eval(a, env)?)),
+        Expr::And(a, b) => bool_num(num_bool(value(a, env)?) && num_bool(value(b, env)?)),
+        Expr::Or(a, b) => bool_num(num_bool(value(a, env)?) || num_bool(value(b, env)?)),
+        Expr::Not(a) => bool_num(!num_bool(value(a, env)?)),
         Expr::Call(f, args) => {
             let v: Vec<f64> = args
                 .iter()
-                .map(|a| eval(a, env))
+                .map(|a| value(a, env))
                 .collect::<Result<_, _>>()?;
             match f {
                 Func::Min => v[0].min(v[1]),
@@ -539,10 +552,10 @@ pub fn eval(e: &Expr, env: &BTreeMap<String, f64>) -> Result<f64, ExprError> {
             }
         }
         Expr::If(c, t, a) => {
-            if num_bool(eval(c, env)?) {
-                eval(t, env)?
+            if num_bool(value(c, env)?) {
+                value(t, env)?
             } else {
-                eval(a, env)?
+                value(a, env)?
             }
         }
     })
@@ -704,5 +717,20 @@ mod tests {
         let e = eval(&parse_num("ghost + 1").unwrap(), &env(&[("i", 1.0)])).unwrap_err();
         assert!(e.message.contains("unknown name 'ghost'"), "{e:?}");
         assert!(e.message.contains("in scope here: i"), "{e:?}");
+    }
+
+    #[test]
+    fn a_value_that_is_not_finite_is_an_error() {
+        let big = env(&[("a", 1e300)]);
+        let e = eval(&parse_num("a * a").unwrap(), &big).unwrap_err();
+        assert_eq!(e.message, "the result is inf, not a finite number");
+        let e = eval(&parse_num("0 - a * a").unwrap(), &big).unwrap_err();
+        assert_eq!(e.message, "the result is -inf, not a finite number");
+        let e = eval(&parse_num("a * a - a * a").unwrap(), &big).unwrap_err();
+        assert_eq!(e.message, "the result is NaN, not a finite number");
+        // Only the value counts: an overflow along the way that comes back
+        // to a finite result is not one.
+        assert_eq!(eval(&parse_num("1 / (a * a)").unwrap(), &big), Ok(0.0));
+        assert_eq!(eval(&parse_num("min(a * a, 2)").unwrap(), &big), Ok(2.0));
     }
 }
