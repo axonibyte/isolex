@@ -37,7 +37,12 @@ pub struct Style {
     pub opacity: Option<Num>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+/// A geometry node. Repeats, `at`, polygons and poly3d hold children,
+/// and a lexicon may nest them to any depth (#28), so its `Clone` and
+/// `Drop` are written out without recursion; the derived `Debug`,
+/// `PartialEq` and `Serialize` recurse, and are for tests and goldens
+/// only, which nest shallowly.
+#[derive(Debug, PartialEq, Serialize)]
 pub enum Node {
     /// 3-D — legal outside `at`
     Box3 {
@@ -168,6 +173,108 @@ pub enum Node {
         when: Option<Num>,
         span: Span,
     },
+}
+
+impl Node {
+    /// Its children: those of a repeat, `at`, polygon or poly3d, and
+    /// none for the rest.
+    pub fn children(&self) -> &[Node] {
+        match self {
+            Node::Poly3d { children, .. }
+            | Node::At { children, .. }
+            | Node::Poly2d { children, .. }
+            | Node::Repeat { children, .. } => children,
+            _ => &[],
+        }
+    }
+
+    pub fn children_mut(&mut self) -> Option<&mut Vec<Node>> {
+        match self {
+            Node::Poly3d { children, .. }
+            | Node::At { children, .. }
+            | Node::Poly2d { children, .. }
+            | Node::Repeat { children, .. } => Some(children),
+            _ => None,
+        }
+    }
+
+    /// A copy of everything but its children.
+    fn shallow_clone(&self) -> Node {
+        macro_rules! copy {
+            ($($v:ident { $($f:ident),* })* ; $($cv:ident { $($cf:ident),* })*) => {
+                match self {
+                    $(Node::$v { $($f),* } => Node::$v { $($f: $f.clone()),* },)*
+                    $(Node::$cv { $($cf,)* .. } => Node::$cv { children: Vec::new(), $($cf: $cf.clone()),* },)*
+                }
+            };
+        }
+        copy!(
+            Box3 { args, fills, opacity, when, span }
+            Tile { args, style, when, span }
+            Cylinder { args, top, side, opacity, when, span }
+            FaceRect { face, args, fill, opacity, when, span }
+            Shadow { args, when, span }
+            Seg { args, style, when, span }
+            Line { args, style, when, span }
+            Circle { args, style, when, span }
+            Ellipse { args, style, when, span }
+            Rect2d { args, rx, style, when, span }
+            Arc { args, style, when, span }
+            Path { template, style, when, span }
+            Pt3 { args, span }
+            Pt2 { args, span }
+            Insert { fragment, args, when, span }
+            Badge { icon, corner, scale, when, span }
+            ;
+            Poly3d { style, when, span }
+            At { args, when, span }
+            Poly2d { style, when, span }
+            Repeat { count, var, when, span }
+        )
+    }
+}
+
+impl Clone for Node {
+    /// Without recursion: the nodes in post-order, each rebuilt once its
+    /// children have been.
+    fn clone(&self) -> Node {
+        let mut order: Vec<&Node> = Vec::new();
+        let mut todo: Vec<(&Node, bool)> = vec![(self, false)];
+        while let Some((node, children_done)) = todo.pop() {
+            if children_done {
+                order.push(node);
+            } else {
+                todo.push((node, true));
+                todo.extend(node.children().iter().rev().map(|c| (c, false)));
+            }
+        }
+        let mut built: Vec<Node> = Vec::new();
+        for node in order {
+            let children = built.split_off(built.len() - node.children().len());
+            let mut copy = node.shallow_clone();
+            if let Some(slot) = copy.children_mut() {
+                *slot = children;
+            }
+            built.push(copy);
+        }
+        built.pop().expect("the node itself")
+    }
+}
+
+impl Drop for Node {
+    /// Without recursion: every descendant moved onto one list and
+    /// dropped from there, childless.
+    fn drop(&mut self) {
+        let Some(children) = self.children_mut() else {
+            return;
+        };
+        let mut todo = std::mem::take(children);
+        while let Some(mut node) = todo.pop() {
+            if let Some(children) = node.children_mut() {
+                todo.append(children);
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]

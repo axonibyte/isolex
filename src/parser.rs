@@ -553,16 +553,73 @@ enum Ctx {
     PolyPts2,
 }
 
+/// The geometry in `node`'s children block, built with an explicit stack
+/// rather than recursion, since a lexicon may nest blocks to any depth
+/// (#28). Nodes are read in document order, so diagnostics come in the
+/// order a recursive reading gave them: a node's own, then its
+/// children's, then (for a repeat) its `when`.
 fn parse_geometry_children(ctx: &mut FileCtx, node: kdl::NodeRef, gctx: Ctx) -> Vec<Node> {
-    let mut out = Vec::new();
-    if let Some(children) = node.children() {
-        for ch in children.nodes() {
-            if let Some(n) = parse_geometry(ctx, ch, gctx) {
-                out.push(n);
+    /// A block being read: its nodes, how far through, in which context,
+    /// what has been built, and the node it belongs to, waiting for it.
+    struct Frame<'d> {
+        kids: Vec<kdl::NodeRef<'d>>,
+        next: usize,
+        gctx: Ctx,
+        built: Vec<Node>,
+        owner: Option<(Node, kdl::NodeRef<'d>)>,
+    }
+    fn kids(node: kdl::NodeRef<'_>) -> Vec<kdl::NodeRef<'_>> {
+        node.children()
+            .map(|c| c.nodes().collect())
+            .unwrap_or_default()
+    }
+    let mut stack = vec![Frame {
+        kids: kids(node),
+        next: 0,
+        gctx,
+        built: Vec::new(),
+        owner: None,
+    }];
+    loop {
+        let top = stack.last_mut().expect("the outermost block");
+        if let Some(&ch) = top.kids.get(top.next) {
+            top.next += 1;
+            let gctx = top.gctx;
+            let Some(n) = parse_geometry(ctx, ch, gctx) else {
+                continue;
+            };
+            // the context its own children are read in, if it has any
+            let inner = match n {
+                Node::Repeat { .. } => Some(gctx),
+                Node::Poly3d { .. } => Some(Ctx::PolyPts3),
+                Node::At { .. } => Some(Ctx::TwoD),
+                Node::Poly2d { .. } => Some(Ctx::PolyPts2),
+                _ => None,
+            };
+            match inner {
+                Some(inner) => stack.push(Frame {
+                    kids: kids(ch),
+                    next: 0,
+                    gctx: inner,
+                    built: Vec::new(),
+                    owner: Some((n, ch)),
+                }),
+                None => stack.last_mut().expect("a block").built.push(n),
             }
+        } else {
+            let frame = stack.pop().expect("a block");
+            let Some((mut n, ch)) = frame.owner else {
+                return frame.built;
+            };
+            if let Some(children) = n.children_mut() {
+                *children = frame.built;
+            }
+            if let Node::Repeat { when, .. } = &mut n {
+                *when = when_prop(ctx, ch);
+            }
+            stack.last_mut().expect("its parent's block").built.push(n);
         }
     }
-    out
 }
 
 const NODES_3D: &[&str] = &[
@@ -615,8 +672,9 @@ fn parse_geometry(ctx: &mut FileCtx, ch: kdl::NodeRef, gctx: Ctx) -> Option<Node
         return Some(Node::Repeat {
             count,
             var: var.to_string(),
-            children: parse_geometry_children(ctx, ch, gctx),
-            when: when_prop(ctx, ch),
+            // children, and then its `when`, are read by parse_geometry_children
+            children: Vec::new(),
+            when: None,
             span,
         });
     }
@@ -735,7 +793,7 @@ fn parse_geometry(ctx: &mut FileCtx, ch: kdl::NodeRef, gctx: Ctx) -> Option<Node
         }
         "poly3d" => Some(Node::Poly3d {
             style,
-            children: parse_geometry_children(ctx, ch, Ctx::PolyPts3),
+            children: Vec::new(),
             when,
             span,
         }),
@@ -752,7 +810,7 @@ fn parse_geometry(ctx: &mut FileCtx, ch: kdl::NodeRef, gctx: Ctx) -> Option<Node
         }),
         "at" => Some(Node::At {
             args: num_args::<3>(ctx, ch)?,
-            children: parse_geometry_children(ctx, ch, Ctx::TwoD),
+            children: Vec::new(),
             when,
             span,
         }),
@@ -807,7 +865,7 @@ fn parse_geometry(ctx: &mut FileCtx, ch: kdl::NodeRef, gctx: Ctx) -> Option<Node
         }
         "poly" => Some(Node::Poly2d {
             style,
-            children: parse_geometry_children(ctx, ch, Ctx::PolyPts2),
+            children: Vec::new(),
             when,
             span,
         }),

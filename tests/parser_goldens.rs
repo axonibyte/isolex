@@ -278,6 +278,44 @@ fn kdl_syntax_errors_are_located() {
     let outcome = parse_one("t.ilx", "icon \"x\" {\n  part \"p\" {\n");
     assert!(!outcome.diags.is_empty());
     assert!(outcome.diags[0].message.contains("KDL syntax error"));
+    // the innermost block left open, and what is wrong with it
+    assert_eq!(
+        (outcome.diags[0].line, outcome.diags[0].col),
+        (2, 12),
+        "{}",
+        outcome.diags[0]
+    );
+    assert_eq!(
+        outcome.diags[0].message,
+        "KDL syntax error: a { block is never closed with }"
+    );
+}
+
+/// Blocks nested far past what the call stack could take are read,
+/// built, cloned and dropped (#28): the kdl crate overflowed parsing a
+/// few thousand.
+#[test]
+fn nesting_of_any_depth_is_parsed_cloned_and_dropped() {
+    use isolex::ast::Node;
+    const N: usize = 100_000;
+    let src = format!(
+        "icon \"deep\" {{ category \"c\"; footprint 1 1 1; part \"p\" {{\n{}tile 0 0 0 1 1\n{} }} }}\n",
+        "repeat 1 \"i\" {\n".repeat(N),
+        "}\n".repeat(N)
+    );
+    let outcome = parse_one("deep.ilx", &src);
+    assert_eq!(outcome.diags, vec![]);
+    let mut node = &outcome.lexicon.defs[0].body.parts[0].nodes[0];
+    let mut depth = 1;
+    while let Some(child) = node.children().first() {
+        node = child;
+        depth += 1;
+    }
+    assert_eq!(depth, N + 1, "N repeats and the tile in the last");
+    assert!(matches!(node, Node::Tile { .. }));
+    let copy = outcome.lexicon.clone();
+    assert_eq!(copy.defs[0].body.parts[0].nodes.len(), 1);
+    drop(copy);
 }
 
 #[test]
