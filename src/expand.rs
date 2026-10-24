@@ -5,10 +5,11 @@
 //! snapshot so scoping is decided here, once.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::rc::Rc;
 
 use serde::Serialize;
 
-use crate::ast::{Face, Limit, LimitKind, Limits, Node, Num, PathPiece, Span, Style};
+use crate::ast::{Face, Limit, LimitKind, Limits, Node, Num, PartDecl, PathPiece, Span, Style};
 use crate::expr::{self, Expr};
 use crate::resolve::{apply_variant, Resolved, ResolvedDef, SpanDiag};
 
@@ -461,8 +462,9 @@ fn expand_one(ctx: &mut Ctx, def: &ResolvedDef, name: String) -> Option<Expanded
     };
 
     let mut shapes = Vec::new();
+    let env: Env = Rc::new(env);
     for (_pname, nodes) in &def.parts {
-        expand_nodes_3d(ctx, nodes, &env, &mut shapes);
+        run(ctx, nodes, env.clone(), &mut shapes);
     }
 
     Some(ExpandedIcon {
@@ -644,21 +646,14 @@ fn repeat_count(
 
 // --- 3-D expansion -------------------------------------------------------
 
-fn expand_nodes_3d(
-    ctx: &mut Ctx,
-    nodes: &[Node],
+/// One node into 3-D shapes. A node with children is not expanded here:
+/// what it opens comes back, for [`run`] to expand without recursion.
+fn expand_node_3d<'a: 'n, 'n>(
+    ctx: &mut Ctx<'a>,
+    node: &'n Node,
     env: &BTreeMap<String, f64>,
     out: &mut Vec<Shape>,
-) {
-    for node in nodes {
-        if ctx.exhausted {
-            return;
-        }
-        expand_node_3d(ctx, node, env, out);
-    }
-}
-
-fn expand_node_3d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: &mut Vec<Shape>) {
+) -> Option<Open<'n>> {
     macro_rules! evs {
         ($args:expr, $span:expr, $n:literal) => {{
             let mut vals = [0.0; $n];
@@ -670,7 +665,7 @@ fn expand_node_3d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
                 }
             }
             if !ok {
-                return;
+                return None;
             }
             vals
         }};
@@ -685,12 +680,12 @@ fn expand_node_3d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
             span,
         } => {
             if !when_passes(ctx, when, env, *span) {
-                return;
+                return None;
             }
             let v = evs!(args, *span, 6);
             let opacity = opacity.as_ref().and_then(|o| eval_full(ctx, o, env, *span));
             if !ctx.spend(LimitKind::Shapes, *span) {
-                return;
+                return None;
             }
             out.push(Shape::Box3 {
                 x: v[0],
@@ -711,14 +706,12 @@ fn expand_node_3d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
             span,
         } => {
             if !when_passes(ctx, when, env, *span) {
-                return;
+                return None;
             }
             let v = evs!(args, *span, 5);
-            let Some(style) = eval_style(ctx, style, env, *span) else {
-                return;
-            };
+            let style = eval_style(ctx, style, env, *span)?;
             if !ctx.spend(LimitKind::Shapes, *span) {
-                return;
+                return None;
             }
             out.push(Shape::Tile {
                 x: v[0],
@@ -739,12 +732,12 @@ fn expand_node_3d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
             span,
         } => {
             if !when_passes(ctx, when, env, *span) {
-                return;
+                return None;
             }
             let v = evs!(args, *span, 5);
             let opacity = opacity.as_ref().and_then(|o| eval_full(ctx, o, env, *span));
             if !ctx.spend(LimitKind::Shapes, *span) {
-                return;
+                return None;
             }
             out.push(Shape::Cylinder {
                 cx: v[0],
@@ -767,12 +760,12 @@ fn expand_node_3d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
             span,
         } => {
             if !when_passes(ctx, when, env, *span) {
-                return;
+                return None;
             }
             let v = evs!(args, *span, 5);
             let opacity = opacity.as_ref().and_then(|o| eval_full(ctx, o, env, *span));
             if !ctx.spend(LimitKind::Shapes, *span) {
-                return;
+                return None;
             }
             out.push(Shape::FaceRect {
                 face: *face,
@@ -793,29 +786,22 @@ fn expand_node_3d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
             span,
         } => {
             if !when_passes(ctx, when, env, *span) {
-                return;
+                return None;
             }
-            let Some(style) = eval_style(ctx, style, env, *span) else {
-                return;
-            };
-            let mut pts = Vec::new();
-            collect_pts3(ctx, children, env, &mut pts);
-            if !ctx.spend(LimitKind::Shapes, *span) {
-                return;
-            }
-            out.push(Shape::Poly3d {
-                pts,
+            let style = eval_style(ctx, style, env, *span)?;
+            return Some(Open::Poly3d {
                 style,
+                children,
                 span: *span,
             });
         }
         Node::Shadow { args, when, span } => {
             if !when_passes(ctx, when, env, *span) {
-                return;
+                return None;
             }
             let v = evs!(args, *span, 4);
             if !ctx.spend(LimitKind::Shapes, *span) {
-                return;
+                return None;
             }
             out.push(Shape::Shadow {
                 cx: v[0],
@@ -832,14 +818,12 @@ fn expand_node_3d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
             span,
         } => {
             if !when_passes(ctx, when, env, *span) {
-                return;
+                return None;
             }
             let v = evs!(args, *span, 6);
-            let Some(style) = eval_style(ctx, style, env, *span) else {
-                return;
-            };
+            let style = eval_style(ctx, style, env, *span)?;
             if !ctx.spend(LimitKind::Shapes, *span) {
-                return;
+                return None;
             }
             out.push(Shape::Seg {
                 a: [v[0], v[1], v[2]],
@@ -855,19 +839,12 @@ fn expand_node_3d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
             span,
         } => {
             if !when_passes(ctx, when, env, *span) {
-                return;
+                return None;
             }
             let v = evs!(args, *span, 3);
-            let mut kids = Vec::new();
-            expand_nodes_2d(ctx, children, env, &mut kids);
-            if !ctx.spend(LimitKind::Shapes, *span) {
-                return;
-            }
-            out.push(Shape::At {
-                x: v[0],
-                y: v[1],
-                z: v[2],
-                children: kids,
+            return Some(Open::At {
+                at: v,
+                children,
                 span: *span,
             });
         }
@@ -879,19 +856,15 @@ fn expand_node_3d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
             span,
         } => {
             if !when_passes(ctx, when, env, *span) {
-                return;
+                return None;
             }
-            let Some(n) = repeat_count(ctx, count, env, *span) else {
-                return;
-            };
-            for i in 0..n {
-                if !ctx.spend(LimitKind::Repeats, *span) {
-                    break;
-                }
-                let mut env2 = env.clone();
-                env2.insert(var.clone(), i as f64);
-                expand_nodes_3d(ctx, children, &env2, out);
-            }
+            let n = repeat_count(ctx, count, env, *span)?;
+            return Some(Open::Repeat {
+                var,
+                children,
+                n,
+                span: *span,
+            });
         }
         Node::Insert {
             fragment,
@@ -900,9 +873,9 @@ fn expand_node_3d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
             span,
         } => {
             if !when_passes(ctx, when, env, *span) {
-                return;
+                return None;
             }
-            expand_insert(ctx, fragment, args, env, *span, InsertCtx::ThreeD(out));
+            return open_insert(ctx, fragment, args, env, *span);
         }
         Node::Badge {
             icon,
@@ -912,18 +885,18 @@ fn expand_node_3d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
             span,
         } => {
             if !when_passes(ctx, when, env, *span) {
-                return;
+                return None;
             }
             if !["ne", "nw", "se", "sw"].contains(&corner.as_str()) {
                 ctx.diag(
                     *span,
                     format!("badge corner must be ne, nw, se or sw, got '{corner}'"),
                 );
-                return;
+                return None;
             }
             let scale = scale.as_ref().and_then(|s| eval_full(ctx, s, env, *span));
             if !ctx.spend(LimitKind::Shapes, *span) {
-                return;
+                return None;
             }
             out.push(Shape::Badge {
                 icon: icon.clone(),
@@ -940,73 +913,65 @@ fn expand_node_3d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
             );
         }
     }
+    None
 }
 
-fn collect_pts3(
-    ctx: &mut Ctx,
-    children: &[Node],
+/// One node inside a poly3d: a point, or a repeat of more.
+fn collect_pt3<'a: 'n, 'n>(
+    ctx: &mut Ctx<'a>,
+    node: &'n Node,
     env: &BTreeMap<String, f64>,
     out: &mut Vec<[f64; 3]>,
-) {
-    for ch in children {
-        match ch {
-            Node::Pt3 { args, span } => {
-                let mut v = [0.0; 3];
-                let mut ok = true;
-                for (i, a) in args.iter().enumerate() {
-                    match eval_full(ctx, a, env, *span) {
-                        Some(val) => v[i] = val,
-                        None => ok = false,
-                    }
-                }
-                if ok && ctx.spend(LimitKind::Shapes, *span) {
-                    out.push(v);
+) -> Option<Open<'n>> {
+    match node {
+        Node::Pt3 { args, span } => {
+            let mut v = [0.0; 3];
+            let mut ok = true;
+            for (i, a) in args.iter().enumerate() {
+                match eval_full(ctx, a, env, *span) {
+                    Some(val) => v[i] = val,
+                    None => ok = false,
                 }
             }
-            Node::Repeat {
-                count,
+            if ok && ctx.spend(LimitKind::Shapes, *span) {
+                out.push(v);
+            }
+            None
+        }
+        Node::Repeat {
+            count,
+            var,
+            children,
+            when,
+            span,
+        } => {
+            if !when_passes(ctx, when, env, *span) {
+                return None;
+            }
+            let n = repeat_count(ctx, count, env, *span)?;
+            Some(Open::Repeat {
                 var,
                 children,
-                when,
-                span,
-            } => {
-                if !when_passes(ctx, when, env, *span) {
-                    continue;
-                }
-                let Some(n) = repeat_count(ctx, count, env, *span) else {
-                    continue;
-                };
-                for i in 0..n {
-                    if !ctx.spend(LimitKind::Repeats, *span) {
-                        break;
-                    }
-                    let mut env2 = env.clone();
-                    env2.insert(var.clone(), i as f64);
-                    collect_pts3(ctx, children, &env2, out);
-                }
-            }
-            other => ctx.diag(node_span(other), "only pt and repeat belong inside poly3d"),
+                n,
+                span: *span,
+            })
+        }
+        other => {
+            ctx.diag(node_span(other), "only pt and repeat belong inside poly3d");
+            None
         }
     }
 }
 
 // --- 2-D expansion -------------------------------------------------------
 
-fn expand_nodes_2d(
-    ctx: &mut Ctx,
-    nodes: &[Node],
+/// One node into 2-D shapes; see [`expand_node_3d`].
+fn expand_node_2d<'a: 'n, 'n>(
+    ctx: &mut Ctx<'a>,
+    node: &'n Node,
     env: &BTreeMap<String, f64>,
     out: &mut Vec<Shape2>,
-) {
-    for node in nodes {
-        if ctx.exhausted {
-            return;
-        }
-        expand_node_2d(ctx, node, env, out);
-    }
-}
-
-fn expand_node_2d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: &mut Vec<Shape2>) {
+) -> Option<Open<'n>> {
     macro_rules! evs2 {
         ($args:expr, $span:expr, $n:literal) => {{
             let mut vals: [EvNum; $n] = core::array::from_fn(|_| EvNum::Lit(0.0));
@@ -1018,7 +983,7 @@ fn expand_node_2d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
                 }
             }
             if !ok {
-                return;
+                return None;
             }
             vals
         }};
@@ -1032,14 +997,12 @@ fn expand_node_2d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
             span,
         } => {
             if !when_passes(ctx, when, env, *span) {
-                return;
+                return None;
             }
             let a = evs2!(args, *span, 4);
-            let Some(style) = eval_style(ctx, style, env, *span) else {
-                return;
-            };
+            let style = eval_style(ctx, style, env, *span)?;
             if !ctx.spend(LimitKind::Shapes, *span) {
-                return;
+                return None;
             }
             out.push(Shape2::Line {
                 args: a, style,
@@ -1053,14 +1016,12 @@ fn expand_node_2d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
             span,
         } => {
             if !when_passes(ctx, when, env, *span) {
-                return;
+                return None;
             }
             let a = evs2!(args, *span, 3);
-            let Some(style) = eval_style(ctx, style, env, *span) else {
-                return;
-            };
+            let style = eval_style(ctx, style, env, *span)?;
             if !ctx.spend(LimitKind::Shapes, *span) {
-                return;
+                return None;
             }
             out.push(Shape2::Circle {
                 args: a, style,
@@ -1074,14 +1035,12 @@ fn expand_node_2d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
             span,
         } => {
             if !when_passes(ctx, when, env, *span) {
-                return;
+                return None;
             }
             let a = evs2!(args, *span, 4);
-            let Some(style) = eval_style(ctx, style, env, *span) else {
-                return;
-            };
+            let style = eval_style(ctx, style, env, *span)?;
             if !ctx.spend(LimitKind::Shapes, *span) {
-                return;
+                return None;
             }
             out.push(Shape2::Ellipse {
                 args: a, style,
@@ -1096,21 +1055,19 @@ fn expand_node_2d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
             span,
         } => {
             if !when_passes(ctx, when, env, *span) {
-                return;
+                return None;
             }
             let a = evs2!(args, *span, 4);
             let rx = match rx {
-                Some(r) => match eval_2d(ctx, r, env, *span) {
-                    Some(v) => Some(v),
-                    None => return,
+                Some(r) => {
+                    let v = eval_2d(ctx, r, env, *span)?;
+                    Some(v)
                 },
                 None => None,
             };
-            let Some(style) = eval_style(ctx, style, env, *span) else {
-                return;
-            };
+            let style = eval_style(ctx, style, env, *span)?;
             if !ctx.spend(LimitKind::Shapes, *span) {
-                return;
+                return None;
             }
             out.push(Shape2::Rect {
                 args: a, rx, style,
@@ -1124,14 +1081,12 @@ fn expand_node_2d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
             span,
         } => {
             if !when_passes(ctx, when, env, *span) {
-                return;
+                return None;
             }
             let a = evs2!(args, *span, 5);
-            let Some(style) = eval_style(ctx, style, env, *span) else {
-                return;
-            };
+            let style = eval_style(ctx, style, env, *span)?;
             if !ctx.spend(LimitKind::Shapes, *span) {
-                return;
+                return None;
             }
             out.push(Shape2::Arc {
                 args: a, style,
@@ -1145,7 +1100,7 @@ fn expand_node_2d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
             span,
         } => {
             if !when_passes(ctx, when, env, *span) {
-                return;
+                return None;
             }
             let mut pieces = Vec::new();
             for piece in template {
@@ -1171,16 +1126,14 @@ fn expand_node_2d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
                                 span,
                             })
                             }
-                            None => return,
+                            None => return None,
                         }
                     }
                 }
             }
-            let Some(style) = eval_style(ctx, style, env, *span) else {
-                return;
-            };
+            let style = eval_style(ctx, style, env, *span)?;
             if !ctx.spend(LimitKind::Shapes, *span) {
-                return;
+                return None;
             }
             out.push(Shape2::Path {
                 template: pieces,
@@ -1195,18 +1148,12 @@ fn expand_node_2d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
             span,
         } => {
             if !when_passes(ctx, when, env, *span) {
-                return;
+                return None;
             }
-            let Some(style) = eval_style(ctx, style, env, *span) else {
-                return;
-            };
-            let mut pts = Vec::new();
-            collect_pts2(ctx, children, env, &mut pts);
-            if !ctx.spend(LimitKind::Shapes, *span) {
-                return;
-            }
-            out.push(Shape2::Poly {
-                pts, style,
+            let style = eval_style(ctx, style, env, *span)?;
+            return Some(Open::Poly2d {
+                style,
+                children,
                 span: *span,
             });
         }
@@ -1218,19 +1165,15 @@ fn expand_node_2d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
             span,
         } => {
             if !when_passes(ctx, when, env, *span) {
-                return;
+                return None;
             }
-            let Some(n) = repeat_count(ctx, count, env, *span) else {
-                return;
-            };
-            for i in 0..n {
-                if !ctx.spend(LimitKind::Repeats, *span) {
-                    break;
-                }
-                let mut env2 = env.clone();
-                env2.insert(var.clone(), i as f64);
-                expand_nodes_2d(ctx, children, &env2, out);
-            }
+            let n = repeat_count(ctx, count, env, *span)?;
+            return Some(Open::Repeat {
+                var,
+                children,
+                n,
+                span: *span,
+            });
         }
         Node::Insert {
             fragment,
@@ -1239,79 +1182,75 @@ fn expand_node_2d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
             span,
         } => {
             if !when_passes(ctx, when, env, *span) {
-                return;
+                return None;
             }
-            expand_insert(ctx, fragment, args, env, *span, InsertCtx::TwoD(out));
+            return open_insert(ctx, fragment, args, env, *span);
         }
         other => ctx.diag(
             node_span(other),
             "3-D node reached 2-D expansion (parser context bug or a fragment inserted in the wrong context)",
         ),
     }
+    None
 }
 
-fn collect_pts2(
-    ctx: &mut Ctx,
-    children: &[Node],
+/// One node inside a 2-D poly: a point, or a repeat of more.
+fn collect_pt2<'a: 'n, 'n>(
+    ctx: &mut Ctx<'a>,
+    node: &'n Node,
     env: &BTreeMap<String, f64>,
     out: &mut Vec<[EvNum; 2]>,
-) {
-    for ch in children {
-        match ch {
-            Node::Pt2 { args, span } => {
-                let a = eval_2d(ctx, &args[0], env, *span);
-                let b = eval_2d(ctx, &args[1], env, *span);
-                if let (Some(a), Some(b)) = (a, b) {
-                    if !ctx.spend(LimitKind::Shapes, *span) {
-                        continue;
-                    }
+) -> Option<Open<'n>> {
+    match node {
+        Node::Pt2 { args, span } => {
+            let a = eval_2d(ctx, &args[0], env, *span);
+            let b = eval_2d(ctx, &args[1], env, *span);
+            if let (Some(a), Some(b)) = (a, b) {
+                if ctx.spend(LimitKind::Shapes, *span) {
                     out.push([a, b]);
                 }
             }
-            Node::Repeat {
-                count,
+            None
+        }
+        Node::Repeat {
+            count,
+            var,
+            children,
+            when,
+            span,
+        } => {
+            if !when_passes(ctx, when, env, *span) {
+                return None;
+            }
+            let n = repeat_count(ctx, count, env, *span)?;
+            Some(Open::Repeat {
                 var,
                 children,
-                when,
-                span,
-            } => {
-                if !when_passes(ctx, when, env, *span) {
-                    continue;
-                }
-                let Some(n) = repeat_count(ctx, count, env, *span) else {
-                    continue;
-                };
-                for i in 0..n {
-                    if !ctx.spend(LimitKind::Repeats, *span) {
-                        break;
-                    }
-                    let mut env2 = env.clone();
-                    env2.insert(var.clone(), i as f64);
-                    collect_pts2(ctx, children, &env2, out);
-                }
-            }
-            other => ctx.diag(node_span(other), "only pt and repeat belong inside poly"),
+                n,
+                span: *span,
+            })
+        }
+        other => {
+            ctx.diag(node_span(other), "only pt and repeat belong inside poly");
+            None
         }
     }
 }
 
 // --- fragments -----------------------------------------------------------
 
-enum InsertCtx<'v, 'o> {
-    ThreeD(&'v mut Vec<Shape>),
-    TwoD(&'o mut Vec<Shape2>),
-}
-
-fn expand_insert(
-    ctx: &mut Ctx,
+/// An insert, checked and its environment built; its parts are expanded
+/// by [`run`], in whichever dimension the insert stands in.
+fn open_insert<'a: 'n, 'n>(
+    ctx: &mut Ctx<'a>,
     fragment: &str,
     args: &[(String, Num)],
     env: &BTreeMap<String, f64>,
     span: Span,
-    target: InsertCtx,
-) {
-    let Some(frag) = ctx.resolved.fragments.get(fragment).cloned() else {
-        let names: Vec<String> = ctx.resolved.fragments.keys().cloned().collect();
+) -> Option<Open<'n>> {
+    let resolved: &'a Resolved = ctx.resolved;
+    let Some(frag) = resolved.fragments.get(fragment) else {
+        let names: Vec<String> = resolved.fragments.keys().cloned().collect();
         ctx.diag(
             span,
             format!(
@@ -1319,7 +1258,7 @@ fn expand_insert(
                 crate::resolve::suggest(fragment, names.iter().map(|s| s.as_str()))
             ),
         );
-        return;
+        return None;
     };
     if ctx.insert_stack.iter().any(|f| f == fragment) {
         let mut chain = ctx.insert_stack.clone();
@@ -1328,7 +1267,7 @@ fn expand_insert(
             span,
             format!("fragment insertion cycle: {}", chain.join(" -> ")),
         );
-        return;
+        return None;
     }
     if let Some(limit) = ctx.insert_depth.limit {
         if ctx.insert_stack.len() as u64 >= limit {
@@ -1339,7 +1278,7 @@ fn expand_insert(
                 &format!("levels, {}", ctx.insert_depth.from),
             );
             ctx.diag(span, message);
-            return;
+            return None;
         }
     }
 
@@ -1361,27 +1300,260 @@ fn expand_insert(
                     crate::resolve::suggest(aname, known.into_iter())
                 ),
             );
-            return;
+            return None;
         }
         if let Some(v) = eval_full(ctx, aval, env, span) {
             frag_env.insert(aname.clone(), v);
         }
     }
+    Some(Open::Insert {
+        fragment: &frag.name,
+        parts: &frag.body.parts,
+        env: Rc::new(frag_env),
+    })
+}
 
-    ctx.insert_stack.push(fragment.to_string());
-    match target {
-        InsertCtx::ThreeD(out) => {
-            for part in &frag.body.parts {
-                expand_nodes_3d(ctx, &part.nodes, &frag_env, out);
+// --- the expansion loop ----------------------------------------------------
+
+/// The parameters and loop variables a node sees, shared by the tasks
+/// that see them.
+type Env = Rc<BTreeMap<String, f64>>;
+
+/// What a node with children opens, for [`run`] to expand.
+enum Open<'n> {
+    At {
+        at: [f64; 3],
+        children: &'n [Node],
+        span: Span,
+    },
+    Poly3d {
+        style: EvStyle,
+        children: &'n [Node],
+        span: Span,
+    },
+    Poly2d {
+        style: EvStyle,
+        children: &'n [Node],
+        span: Span,
+    },
+    Repeat {
+        var: &'n str,
+        children: &'n [Node],
+        n: usize,
+        span: Span,
+    },
+    Insert {
+        fragment: &'n str,
+        parts: &'n [PartDecl],
+        env: Env,
+    },
+}
+
+/// Where what is expanded goes: shapes in 3-D or 2-D, or a polygon's
+/// points.
+enum Sink {
+    Shapes(Vec<Shape>),
+    Shapes2(Vec<Shape2>),
+    Pts3(Vec<[f64; 3]>),
+    Pts2(Vec<[EvNum; 2]>),
+}
+
+/// A step of expansion.
+enum Task<'n> {
+    /// Expand a node, into whatever sink is on top.
+    Node(&'n Node, Env),
+    /// Iteration `i` of a repeat's `n`.
+    Repeat {
+        var: &'n str,
+        children: &'n [Node],
+        i: usize,
+        n: usize,
+        env: Env,
+        span: Span,
+    },
+    /// The children of an `at` are done: its shape, from the sink on top.
+    CloseAt {
+        at: [f64; 3],
+        span: Span,
+    },
+    /// A polygon's points are done: its shape, from the sink on top.
+    ClosePoly3d {
+        style: EvStyle,
+        span: Span,
+    },
+    ClosePoly2d {
+        style: EvStyle,
+        span: Span,
+    },
+    /// A fragment's parts are done.
+    PopInsert,
+}
+
+/// Expand `nodes` into `out` with an explicit stack of tasks and sinks
+/// rather than recursion, since repeats, `at`, polygons and fragment
+/// inserts may nest to any depth (#28). Tasks run in the order a
+/// recursive expansion visited nodes, so diagnostics, limits and the
+/// shapes themselves come out in the same order; a node with children is
+/// counted toward the shape-limit after them, as it was.
+fn run<'a: 'n, 'n>(ctx: &mut Ctx<'a>, nodes: &'n [Node], env: Env, out: &mut Vec<Shape>) {
+    let mut tasks: Vec<Task<'n>> = nodes
+        .iter()
+        .rev()
+        .map(|node| Task::Node(node, env.clone()))
+        .collect();
+    let mut sinks = vec![Sink::Shapes(std::mem::take(out))];
+    while let Some(task) = tasks.pop() {
+        match task {
+            Task::Node(node, env) => {
+                let opened = match sinks.last_mut().expect("a sink") {
+                    // once a limit is passed, no more shapes are expanded
+                    Sink::Shapes(_) | Sink::Shapes2(_) if ctx.exhausted => None,
+                    Sink::Shapes(out) => expand_node_3d(ctx, node, &env, out),
+                    Sink::Shapes2(out) => expand_node_2d(ctx, node, &env, out),
+                    Sink::Pts3(out) => collect_pt3(ctx, node, &env, out),
+                    Sink::Pts2(out) => collect_pt2(ctx, node, &env, out),
+                };
+                if let Some(open) = opened {
+                    open_children(ctx, open, env, &mut tasks, &mut sinks);
+                }
             }
-        }
-        InsertCtx::TwoD(out) => {
-            for part in &frag.body.parts {
-                expand_nodes_2d(ctx, &part.nodes, &frag_env, out);
+            Task::Repeat {
+                var,
+                children,
+                i,
+                n,
+                env,
+                span,
+            } => {
+                if i >= n || !ctx.spend(LimitKind::Repeats, span) {
+                    continue;
+                }
+                tasks.push(Task::Repeat {
+                    var,
+                    children,
+                    i: i + 1,
+                    n,
+                    env: env.clone(),
+                    span,
+                });
+                let mut env2 = (*env).clone();
+                env2.insert(var.to_string(), i as f64);
+                push_nodes(&mut tasks, children, Rc::new(env2));
+            }
+            Task::CloseAt { at, span } => {
+                let Some(Sink::Shapes2(children)) = sinks.pop() else {
+                    unreachable!("an at's children are 2-D shapes");
+                };
+                if ctx.spend(LimitKind::Shapes, span) {
+                    let Some(Sink::Shapes(out)) = sinks.last_mut() else {
+                        unreachable!("an at stands among 3-D shapes");
+                    };
+                    out.push(Shape::At {
+                        x: at[0],
+                        y: at[1],
+                        z: at[2],
+                        children,
+                        span,
+                    });
+                }
+            }
+            Task::ClosePoly3d { style, span } => {
+                let Some(Sink::Pts3(pts)) = sinks.pop() else {
+                    unreachable!("a poly3d's children are 3-D points");
+                };
+                if ctx.spend(LimitKind::Shapes, span) {
+                    let Some(Sink::Shapes(out)) = sinks.last_mut() else {
+                        unreachable!("a poly3d stands among 3-D shapes");
+                    };
+                    out.push(Shape::Poly3d { pts, style, span });
+                }
+            }
+            Task::ClosePoly2d { style, span } => {
+                let Some(Sink::Pts2(pts)) = sinks.pop() else {
+                    unreachable!("a poly's children are 2-D points");
+                };
+                if ctx.spend(LimitKind::Shapes, span) {
+                    let Some(Sink::Shapes2(out)) = sinks.last_mut() else {
+                        unreachable!("a poly stands among 2-D shapes");
+                    };
+                    out.push(Shape2::Poly { pts, style, span });
+                }
+            }
+            Task::PopInsert => {
+                ctx.insert_stack.pop();
             }
         }
     }
-    ctx.insert_stack.pop();
+    let Some(Sink::Shapes(shapes)) = sinks.pop() else {
+        unreachable!("the icon's own shapes, at the bottom");
+    };
+    *out = shapes;
+}
+
+fn push_nodes<'n>(tasks: &mut Vec<Task<'n>>, nodes: &'n [Node], env: Env) {
+    tasks.extend(nodes.iter().rev().map(|node| Task::Node(node, env.clone())));
+}
+
+/// Set up what a node opened: a sink for its children where they are
+/// collected apart, and the tasks that expand them and then close it.
+fn open_children<'n>(
+    ctx: &mut Ctx,
+    open: Open<'n>,
+    env: Env,
+    tasks: &mut Vec<Task<'n>>,
+    sinks: &mut Vec<Sink>,
+) {
+    match open {
+        Open::At { at, children, span } => {
+            tasks.push(Task::CloseAt { at, span });
+            sinks.push(Sink::Shapes2(Vec::new()));
+            push_nodes(tasks, children, env);
+        }
+        Open::Poly3d {
+            style,
+            children,
+            span,
+        } => {
+            tasks.push(Task::ClosePoly3d { style, span });
+            sinks.push(Sink::Pts3(Vec::new()));
+            push_nodes(tasks, children, env);
+        }
+        Open::Poly2d {
+            style,
+            children,
+            span,
+        } => {
+            tasks.push(Task::ClosePoly2d { style, span });
+            sinks.push(Sink::Pts2(Vec::new()));
+            push_nodes(tasks, children, env);
+        }
+        Open::Repeat {
+            var,
+            children,
+            n,
+            span,
+        } => tasks.push(Task::Repeat {
+            var,
+            children,
+            i: 0,
+            n,
+            env,
+            span,
+        }),
+        Open::Insert {
+            fragment,
+            parts,
+            env,
+        } => {
+            // on the stack exactly while its parts expand, in the
+            // dimension the insert stands in
+            ctx.insert_stack.push(fragment.to_string());
+            tasks.push(Task::PopInsert);
+            for part in parts.iter().rev() {
+                push_nodes(tasks, &part.nodes, env.clone());
+            }
+        }
+    }
 }
 
 fn node_span(node: &Node) -> Span {

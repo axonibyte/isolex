@@ -593,6 +593,81 @@ fn a_grant_of_a_token_that_is_not_reserved() {
     );
 }
 
+/// Compile `src` to IR on the command line: (succeeded, stderr, IR).
+fn compile_src(tag: &str, src: &str) -> (bool, String, serde_json::Value) {
+    let dir = std::env::temp_dir().join(format!("isolex-e2e-{tag}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("n.ilx"), src).unwrap();
+    let out = bin()
+        .arg("compile")
+        .arg(&dir)
+        .arg("--ir")
+        .arg("-")
+        .output()
+        .unwrap();
+    let ir = serde_json::from_slice(&out.stdout).unwrap_or(serde_json::Value::Null);
+    (
+        out.status.success(),
+        String::from_utf8(out.stderr).unwrap(),
+        ir,
+    )
+}
+
+#[test]
+fn deep_node_nesting_never_overflows_the_stack() {
+    // #28: nested blocks overflowed the stack in the kdl crate at a few
+    // thousand, and then in the parser, the AST and the expander
+    const N: usize = 100_000;
+    let deep = |open: &str, inner: &str| format!("{}{inner}\n{}", open.repeat(N), "}\n".repeat(N));
+
+    // repeats among 3-D shapes
+    let src = format!(
+        "icon \"deep\" {{ category \"c\"; footprint 1 1 1; part \"p\" {{\n{} }} }}\n",
+        deep("repeat 1 \"i\" {\n", "tile 0 0 0 1 1")
+    );
+    let (ok, stderr, ir) = compile_src("deep3d", &src);
+    assert!(ok, "{}", &stderr[..stderr.len().min(300)]);
+    assert_eq!(ir["icons"][0]["shapes"].as_array().unwrap().len(), 1);
+
+    // and among 2-D ones, inside an at
+    let src = format!(
+        "icon \"deep\" {{ category \"c\"; canvas 9 9; part \"p\" {{ at 0 0 0 {{\n{} }} }} }}\n",
+        deep("repeat 1 \"i\" {\n", "circle 4 4 2")
+    );
+    let (ok, stderr, ir) = compile_src("deep2d", &src);
+    assert!(ok, "{}", &stderr[..stderr.len().min(300)]);
+    assert_eq!(ir["icons"][0]["shapes"][0]["kind"], "circle");
+
+    // a chain of fragments, each inserting the next: past the default
+    // insert-depth a located error, and with none, all the way down
+    const F: usize = 10_000;
+    let mut chain = String::new();
+    for f in 0..F {
+        chain.push_str(&format!(
+            "fragment \"f{f}\" {{ part \"p\" {{ insert \"f{}\" }} }}\n",
+            f + 1
+        ));
+    }
+    chain.push_str(&format!(
+        "fragment \"f{F}\" {{ part \"p\" {{ tile 0 0 0 1 1 }} }}\n"
+    ));
+    let icon = "icon \"chain\" { category \"c\"; footprint 1 1 1; part \"p\" { insert \"f0\" } }\n";
+    let (ok, stderr, _) = compile_src("chain", &format!("{chain}{icon}"));
+    assert!(!ok);
+    assert!(
+        stderr.contains("icon 'chain' nests fragment insertions here past its insert-depth of 32"),
+        "{}",
+        &stderr[..stderr.len().min(300)]
+    );
+    let (ok, stderr, ir) = compile_src(
+        "chain-unlimited",
+        &format!("lexicon {{ insert-depth #null }}\n{chain}{icon}"),
+    );
+    assert!(ok, "{}", &stderr[..stderr.len().min(300)]);
+    assert_eq!(ir["icons"][0]["shapes"].as_array().unwrap().len(), 1);
+}
+
 #[test]
 fn deep_expressions_never_overflow_the_stack() {
     // #18: 100 000 parentheses around a 1 aborted the compiler (exit 134,
