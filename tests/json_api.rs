@@ -1,0 +1,133 @@
+//! The compiler as one JSON-to-JSON function (`isolex::json`), which the
+//! WebAssembly module exports as it is: same IR as the CLI, diagnostics
+//! as data, and never a panic on input it cannot read.
+
+use isolex::json::compile_json;
+use serde_json::{json, Value};
+
+fn run(input: &Value) -> Value {
+    let out = compile_json(input.to_string().as_bytes());
+    serde_json::from_str(&out).expect("the output is JSON")
+}
+
+fn files(files: &[(&str, &str)]) -> Value {
+    json!({ "files": files.iter().map(|(n, t)| json!({"name": n, "text": t})).collect::<Vec<_>>() })
+}
+
+#[test]
+fn the_sample_compiles_to_the_cli_golden() {
+    let out = run(&files(&[(
+        "sample.ilx",
+        include_str!("fixtures/sample.ilx"),
+    )]));
+    assert_eq!(out["isolex"], env!("CARGO_PKG_VERSION"));
+    assert_eq!(out["ok"], true, "{out}");
+    assert_eq!(out["errors"], json!([]));
+    // the sample grants accent and reserves nothing, as the CLI warns
+    let warnings = out["warnings"].as_array().unwrap();
+    assert_eq!(warnings.len(), 1, "{out}");
+    assert_eq!(
+        (
+            &warnings[0]["file"],
+            &warnings[0]["line"],
+            &warnings[0]["col"]
+        ),
+        (&json!("sample.ilx"), &json!(82), &json!(3))
+    );
+    assert!(out.get("input_error").is_none());
+    let golden: Value =
+        serde_json::from_str(include_str!("fixtures/sample.ir.golden.json")).unwrap();
+    assert_eq!(
+        out["ir"], golden,
+        "the IR differs from what `isolex compile` writes"
+    );
+}
+
+#[test]
+fn errors_are_located_data_and_there_is_no_ir() {
+    let out = run(&files(&[
+        ("a.ilx", "icon \"one\" { category \"c\"; canvas 9 9 }\n"),
+        ("b.ilx", "icon \"two\" {\n  patr \"p\" { }\n}\n"),
+    ]));
+    assert_eq!(out["ok"], false);
+    assert_eq!(out["ir"], Value::Null);
+    let errors = out["errors"].as_array().unwrap();
+    assert_eq!(errors.len(), 2, "{out}");
+    assert_eq!(errors[0]["file"], "b.ilx");
+    assert_eq!(
+        (&errors[0]["line"], &errors[0]["col"]),
+        (&json!(2), &json!(3))
+    );
+    let message = errors[0]["message"].as_str().unwrap();
+    assert!(message.contains("unknown node 'patr'"), "{message}");
+    assert!(message.contains("did you mean 'part'?"), "{message}");
+    // the other: "two" never got its category
+    assert_eq!(errors[1]["file"], "b.ilx");
+}
+
+#[test]
+fn warnings_come_apart_from_errors_and_keep_the_ir() {
+    let src = "axis \"state\" { variant \"down\" { grant \"accent\" reason=\"danger\" } }\nicon \"i\" { category \"c\"; canvas 9 9; axes \"state\" }\n";
+    let out = run(&files(&[("w.ilx", src)]));
+    assert_eq!(out["ok"], true, "{out}");
+    assert_eq!(out["errors"], json!([]));
+    assert_eq!(
+        out["warnings"],
+        json!([{
+            "file": "w.ilx",
+            "line": 1,
+            "col": 33,
+            "message": "variant 'down' of axis 'state' grants 'accent', but the lexicon reserves \
+                        no tokens, so the grant has no effect; reserve it with `reserved \"accent\"` \
+                        in the lexicon block, or remove the grant"
+        }])
+    );
+    let names: Vec<&str> = out["ir"]["icons"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| i["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(names, ["i", "i-down"]);
+}
+
+#[test]
+fn files_compile_in_the_order_given() {
+    let a = ("a.ilx", "icon \"one\" { category \"c\"; canvas 9 9 }\n");
+    let b = ("b.ilx", "icon \"two\" { category \"c\"; canvas 9 9 }\n");
+    let names = |out: Value| -> Vec<String> {
+        out["ir"]["icons"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|i| i["name"].as_str().unwrap().to_string())
+            .collect()
+    };
+    assert_eq!(names(run(&files(&[a, b]))), ["one", "two"]);
+    assert_eq!(names(run(&files(&[b, a]))), ["two", "one"]);
+}
+
+#[test]
+fn input_it_cannot_read_is_an_input_error_not_a_panic() {
+    for input in [
+        &b"not json"[..],
+        &b"{\"files\": [{\"name\": \"a.ilx\"}]}"[..],
+        &b"{\"files\": \"a.ilx\"}"[..],
+        &[0xff, 0xfe, 0x00][..],
+        &b""[..],
+    ] {
+        let out: Value = serde_json::from_str(&compile_json(input)).unwrap();
+        assert_eq!(out["ok"], false, "{out}");
+        assert_eq!(out["ir"], Value::Null);
+        assert_eq!(out["errors"], json!([]));
+        let e = out["input_error"].as_str().unwrap();
+        assert!(e.starts_with("expected {\"files\""), "{e}");
+    }
+}
+
+#[test]
+fn an_empty_lexicon_is_fine_and_empty() {
+    let out = run(&json!({ "files": [] }));
+    assert_eq!(out["ok"], true, "{out}");
+    assert_eq!(out["ir"]["icons"], json!([]));
+}

@@ -3,13 +3,8 @@
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use isolex::ast::Span;
-use isolex::expand::expand;
 use isolex::ir::IrDocument;
-use isolex::parser::{parse_lexicon, Diag};
-use isolex::project::{project, Vocabulary};
 use isolex::render::{missing_colors, render_icon, safe_file_name, Palette};
-use isolex::resolve::{resolve, SpanDiag};
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -80,24 +75,6 @@ fn collect_ilx(dir: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<()> {
     Ok(())
 }
 
-fn locate(files: &[(String, String)], d: &SpanDiag) -> Diag {
-    let Span { file, start, .. } = d.span;
-    let (name, text) = files
-        .get(file)
-        .map(|(n, t)| (n.clone(), t.as_str()))
-        .unwrap_or_else(|| (String::from("<unknown>"), ""));
-    let clamped = start.min(text.len());
-    let before = &text[..clamped];
-    let line = before.matches('\n').count() + 1;
-    let col = before.chars().rev().take_while(|&c| c != '\n').count() + 1;
-    Diag {
-        file: name,
-        line,
-        col,
-        message: d.message.clone(),
-    }
-}
-
 fn run(dir: &str, mode: Mode) -> ExitCode {
     let root = Path::new(dir);
     let mut paths = Vec::new();
@@ -120,23 +97,16 @@ fn run(dir: &str, mode: Mode) -> ExitCode {
         }
     }
 
-    let outcome = parse_lexicon(&files);
-    let mut diags: Vec<Diag> = outcome.diags.clone();
-    let resolved = resolve(&outcome.lexicon);
-    diags.extend(resolved.diags.iter().map(|d| locate(&files, d)));
-    let (expanded, ediags) = expand(&resolved);
-    diags.extend(ediags.iter().map(|d| locate(&files, d)));
-    let (doc, pdiags) = project(&expanded, &Vocabulary::of(outcome.lexicon.config.as_ref()));
-    diags.extend(pdiags.iter().map(|d| locate(&files, d)));
+    let c = isolex::compile(&files);
+    let doc = &c.doc;
+    let diags = &c.errors;
 
     // Warnings say something has no effect; they never change the exit
     // status or the output (SPEC §8).
-    for w in &resolved.warnings {
-        let mut w = locate(&files, w);
-        w.message = format!("warning: {}", w.message);
-        eprintln!("{w}");
+    for w in &c.warnings {
+        eprintln!("{}:{}:{}: warning: {}", w.file, w.line, w.col, w.message);
     }
-    for d in &diags {
+    for d in diags {
         eprintln!("{d}");
     }
     if !diags.is_empty() {
@@ -152,13 +122,13 @@ fn run(dir: &str, mode: Mode) -> ExitCode {
         Mode::Check => {
             println!(
                 "ok: {} definition(s), {} icon(s) emitted",
-                outcome.lexicon.defs.len(),
+                c.definitions,
                 doc.icons.len()
             );
             ExitCode::SUCCESS
         }
         Mode::CompileTo(out) => {
-            let json = to_json(&doc);
+            let json = to_json(doc);
             if out == "-" {
                 println!("{json}");
                 ExitCode::SUCCESS
@@ -173,10 +143,10 @@ fn run(dir: &str, mode: Mode) -> ExitCode {
             }
         }
         Mode::Docs => {
-            print!("{}", docs_markdown(&doc));
+            print!("{}", docs_markdown(doc));
             ExitCode::SUCCESS
         }
-        Mode::Render { out, palette } => render_svg(&doc, &out, palette.as_deref()),
+        Mode::Render { out, palette } => render_svg(doc, &out, palette.as_deref()),
     }
 }
 

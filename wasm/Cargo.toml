@@ -1,0 +1,15 @@
+[package]
+name = "isolex-wasm"
+version = "0.2.0"
+edition = "2021"
+rust-version = "1.97"
+description = "The isolex compiler as a WebAssembly module: JSON in, JSON out, nothing imported."
+license = "Apache-2.0"
+repository = "https://github.com/axonibyte/isolex"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+isolex = { path = ".." }

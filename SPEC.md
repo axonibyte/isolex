@@ -367,6 +367,12 @@ that fails writes nothing. Diagnostics go to standard error,
 warnings first. Exit status: 0 clean (warnings included), 1 errors or
 I/O failure, 2 usage.
 
+The same compilation is available without a file system: as the
+library function `isolex::compile`, and as a WebAssembly module that
+imports nothing and takes and returns JSON (`isolex::json`), whose IR is
+the IR `compile` writes (compact rather than indented) and whose
+diagnostics are the CLI's as data.
+
 ## 11. Conformance
 
 A conforming compiler produces byte-identical IR for identical

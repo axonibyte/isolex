@@ -23,6 +23,11 @@
 # yet"), so this file builds the ONE target this runner can, says so, and leaves
 # ci/build-target.sh in the tree for whoever answers that question.
 #
+# THE OTHER STDLIB IS wasm32-unknown-unknown, and the compiler is built for it
+# too: wasm/ is the library as a module that imports nothing, for hosts that
+# embed it (bam runs it under wazero). It is target-independent, so it is
+# published beside the FreeBSD binaries as isolex-<version>.wasm.
+#
 # THE PIN IS 1.97 AND THE JAIL HAS 1.98.1, which is why the probe step prints
 # what it actually got: a toolchain drift shows up as a changed value rather
 # than as a mysterious new clippy failure. `--locked` everywhere keeps
@@ -91,9 +96,9 @@ jobs:
           set -o pipefail
           cd src
           rc=0
-          timeout 120 cargo fmt --check > ../fmt.log 2>&1 || rc=$?
+          timeout 120 cargo fmt --all --check > ../fmt.log 2>&1 || rc=$?
           if [ "$rc" = 124 ]; then echo "cargo fmt did not answer in 120s"; exit 1; fi
-          [ "$rc" = 0 ] || { echo "cargo fmt --check rc=$rc"; head -40 ../fmt.log; exit 1; }
+          [ "$rc" = 0 ] || { echo "cargo fmt --all --check rc=$rc"; head -40 ../fmt.log; exit 1; }
           echo "rustfmt had nothing to say about $(find . -name '*.rs' -not -path './target/*' | wc -l | tr -d ' ') files"
 
       - name: clippy, warnings are errors
@@ -101,7 +106,8 @@ jobs:
           set -o pipefail
           cd src
           rc=0
-          timeout 900 cargo clippy --all-targets --locked -- -D warnings > ../clippy.log 2>&1 || rc=$?
+          timeout 900 cargo clippy --workspace --all-targets --locked -- -D warnings > ../clippy.log 2>&1 &&
+            timeout 900 cargo clippy -p isolex-wasm --target wasm32-unknown-unknown --locked -- -D warnings >> ../clippy.log 2>&1 || rc=$?
           if [ "$rc" = 124 ]; then echo "clippy did not answer in 900s"; exit 1; fi
           [ "$rc" = 0 ] || { echo "clippy rc=$rc"; grep -E '^(error|warning)' ../clippy.log | head -20; exit 1; }
           echo "clippy checked $(grep -c 'Checking\|Compiling' ../clippy.log) crate compilations with no warning left"
@@ -111,7 +117,7 @@ jobs:
           set -o pipefail
           cd src
           rc=0
-          timeout 1800 cargo test --release --locked > ../test.log 2>&1 || rc=$?
+          timeout 1800 cargo test --workspace --release --locked > ../test.log 2>&1 || rc=$?
           if [ "$rc" = 124 ]; then echo "cargo test did not answer in 1800s"; exit 1; fi
           [ "$rc" = 0 ] || { echo "cargo test rc=$rc"; grep -E '^(test result|failures:|error)' ../test.log | head -20; exit 1; }
           grep -E '^test result' ../test.log | head -10
@@ -136,6 +142,23 @@ jobs:
           done
           echo "executables built: $n (target x86_64-unknown-freebsd, the only stdlib on this runner)"
           [ "$n" -ge 1 ] || { echo "the release build produced no executable"; exit 1; }
+
+      - name: the WebAssembly module, which imports nothing
+        run: |
+          set -o pipefail
+          cd src
+          rc=0
+          timeout 1800 cargo build --release --locked -p isolex-wasm --target wasm32-unknown-unknown > ../wasm.log 2>&1 || rc=$?
+          if [ "$rc" = 124 ]; then echo "the wasm build did not answer in 1800s"; exit 1; fi
+          [ "$rc" = 0 ] || { echo "the wasm build rc=$rc"; grep -E '^error' ../wasm.log | head -20; exit 1; }
+          f=target/wasm32-unknown-unknown/release/isolex_wasm.wasm
+          [ -f "$f" ] || { echo "the wasm build produced no module"; exit 1; }
+          echo "isolex_wasm.wasm $(wc -c < "$f" | tr -d ' ') bytes sha256=$(sha256 -q "$f")"
+          rc=0
+          ISOLEX_WASM="$PWD/$f" timeout 600 cargo test --release --locked -p isolex-wasm --test module -- --ignored > ../module.log 2>&1 || rc=$?
+          [ "$rc" = 0 ] || { echo "the module check rc=$rc"; grep -E 'panicked|left|right|error' ../module.log | head -20; exit 1; }
+          grep -q '^test result: ok. 1 passed' ../module.log || { echo "the module check did not run"; tail -5 ../module.log; exit 1; }
+          echo "imports: none; exports: isolex_alloc isolex_compile isolex_free isolex_version memory"
 
       - name: on a tag, the tag and Cargo.toml must agree
         if: startsWith(github.ref, 'refs/tags/')
@@ -188,6 +211,21 @@ jobs:
             echo "  read back anonymously -> $got, byte-identical"
             published=$((published + 1))
           done
+          # The module is the same file on every platform, so its name
+          # carries no target.
+          f=target/wasm32-unknown-unknown/release/isolex_wasm.wasm
+          name="$crate-$ver.wasm"
+          code=$(timeout 300 curl --config "$cfg" -s -o ../put.log -w '%{http_code}'                  -X PUT --upload-file "$f" "$base/$name") || rc=$?
+          echo "PUT $name -> ${code:-no response}"
+          case "$code" in
+            201) : ;;
+            409) rm -f "$cfg"; echo "REFUSED: $crate $ver already has $name; a published version is immutable"; exit 1 ;;
+            *) rm -f "$cfg"; echo "upload failed"; head -c 300 ../put.log; exit 1 ;;
+          esac
+          got=$(timeout 120 curl -sS -o "../got-$name" -w '%{http_code}' "$base/$name")
+          cmp -s "$f" "../got-$name" || { rm -f "$cfg"; echo "the served file is not the file we built"; exit 1; }
+          echo "  read back anonymously -> $got, byte-identical"
+          published=$((published + 1))
           rm -f "$cfg"
           echo "published $published file(s) under $base"
           [ "$published" -ge 1 ] || { echo "nothing was published"; exit 1; }

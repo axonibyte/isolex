@@ -41,6 +41,21 @@ isolex docs src/           # generate the lexicon's reference tables
 isolex render src/ --svg out/ [--palette palette.json]   # one SVG per icon
 ```
 
+## Embedding
+
+The compiler is also a library (`isolex::compile`, from source text to
+IR and diagnostics, with no file system involved) and, through it, a
+WebAssembly module that imports nothing:
+
+```sh
+cargo build --release --locked -p isolex-wasm --target wasm32-unknown-unknown
+```
+
+The module takes `{"files": [{"name", "text"}, …]}` as JSON and returns
+the IR with the errors and warnings as data; [wasm/src/lib.rs](wasm/src/lib.rs)
+documents its four exports, and `isolex::json` the shapes. Each release
+publishes it as `isolex-<version>.wasm`.
+
 ## Documentation
 
 - [docs/guide.md](docs/guide.md) — a task-oriented walk through authoring

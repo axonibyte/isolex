@@ -11,7 +11,7 @@ use crate::kdl;
 /// A diagnostic with a resolved location. Rendering is intentionally
 /// plain (`file:line:col: message`) so error output is stable enough to
 /// golden-test.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct Diag {
     pub file: String,
     pub line: usize,
