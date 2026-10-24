@@ -29,6 +29,29 @@ fn sample_lexicon_matches_golden() {
     assert_eq!(got, want, "parser AST drifted from the golden");
 }
 
+/// The goldens compare bytes and count span offsets, so a checkout that
+/// turned the fixtures into CRLF fails them all with an unhelpful diff;
+/// .gitattributes pins LF, and this says so plainly if it ever stops.
+#[test]
+fn fixtures_are_checked_out_with_lf() {
+    for (name, text) in [
+        ("sample.ilx", include_str!("fixtures/sample.ilx")),
+        (
+            "sample.golden.json",
+            include_str!("fixtures/sample.golden.json"),
+        ),
+        (
+            "sample.ir.golden.json",
+            include_str!("fixtures/sample.ir.golden.json"),
+        ),
+    ] {
+        assert!(
+            !text.contains('\r'),
+            "tests/fixtures/{name} has CRLF line endings; check .gitattributes"
+        );
+    }
+}
+
 #[test]
 fn double_parse_is_identical() {
     let src = include_str!("fixtures/sample.ilx");
