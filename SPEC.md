@@ -49,7 +49,10 @@ New defaults follow the same rule.
   no paint rather than a token and needs no declaring, and a width with
   no stroke is not checked. A violation is reported at the node, with a
   nearest-name suggestion for a token. A lexicon that declares neither
-  is not checked. The limits of §9 can be set here for every icon.
+  is not checked. `reserved "a" …` marks tokens (each also in `tokens`,
+  when that is declared) that an icon may paint with, written or
+  defaulted, only if its definition chain grants them (§3). The limits
+  of §9 can be set here for every icon.
 - `base "name" { … }` — an abstract definition. Never emitted; may be
   incomplete.
 - `icon "name" { … }` — a concrete definition. After resolution it must
@@ -78,6 +81,13 @@ child node (`extends "y"`); declaring both is an error.
 - `axes "a" "b"` — opt into variant axes; unions down the chain.
 - `grant "token" reason="…"` — declares this definition's right to use a
   reserved color token; carried into the IR for governance tooling.
+  Painting with a reserved token needs a grant somewhere in the icon's
+  definition chain, or the variant that paints it; a badge's shapes are
+  granted by its target. Granting a token the lexicon does not reserve
+  is an error when it reserves any, with a nearest-name suggestion, and
+  a warning when it reserves none (the grant then has no effect).
+  Fragments cannot grant: their shapes belong to the icon they are
+  inserted into, which grants for them.
 - `badge "icon-name" corner="ne" scale=0.5` — places another icon's
   compiled shapes at a viewBox corner (`ne` default; `nw`/`se`/`sw`;
   scale default 0.5). A badge target must not itself contain a badge.
@@ -271,6 +281,12 @@ expected and found, and offers a nearest-name suggestion (edit distance
 ≤ 2) where one exists. Diagnostic text is part of the compiler's
 compatibility surface and is golden-tested.
 
+A diagnostic is an error unless this specification calls it a warning.
+An error fails compilation. A warning reports something that has no
+effect (such as a grant in a lexicon that reserves nothing), is written
+as `file:line:col: warning: …`, and never changes the exit status or the
+IR.
+
 ## 9. Limits
 
 Nothing in the language is Turing-shaped, but a few constructs multiply:
@@ -312,7 +328,8 @@ say so with a directive.
 `isolex check <dir>` parses, resolves, expands and projects, reporting
 diagnostics and counts. `isolex compile <dir> --ir <path|->` writes the
 IR JSON. `isolex docs <dir>` emits per-category markdown reference
-tables from `describe` metadata. Exit status: 0 clean, 1 diagnostics or
+tables from `describe` metadata. Diagnostics go to standard error,
+warnings first. Exit status: 0 clean (warnings included), 1 errors or
 I/O failure, 2 usage.
 
 ## 11. Conformance

@@ -357,6 +357,9 @@ pub struct Definition {
 pub struct LexiconConfig {
     pub tokens: Vec<String>,
     pub stroke_widths: Vec<f64>,
+    /// Tokens a definition may paint with only under a `grant`.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub reserved: Vec<String>,
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub limits: Limits,
 }

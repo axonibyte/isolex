@@ -55,6 +55,8 @@ struct Ctx<'v> {
     vocabulary: &'v Vocabulary,
     /// The icon being projected, for errors.
     icon: String,
+    /// The tokens it grants, through its definition chain.
+    granted: Vec<String>,
 }
 
 /// What a lexicon block declares the lexicon paints with (SPEC §2): its
@@ -64,6 +66,8 @@ pub struct Vocabulary {
     tokens: Option<Vec<String>>,
     /// As formatted for output (SPEC §7), the precision a renderer sees.
     widths: Option<Vec<String>>,
+    /// Tokens painted only under a grant.
+    reserved: Vec<String>,
 }
 
 impl Vocabulary {
@@ -75,6 +79,7 @@ impl Vocabulary {
             tokens: (!config.tokens.is_empty()).then(|| config.tokens.clone()),
             widths: (!config.stroke_widths.is_empty())
                 .then(|| config.stroke_widths.iter().map(|w| fmt(*w)).collect()),
+            reserved: config.reserved.clone(),
         }
     }
 }
@@ -135,6 +140,20 @@ fn check_vocabulary(ctx: &mut Ctx, shapes: &[IrShape], span: Span) {
     }
 
     let icon = ctx.icon.clone();
+    // a reserved token, defaulted or written, needs a grant in the icon's
+    // definition chain; a badge's shapes are its target's, granted there
+    for token in &tokens {
+        if ctx.vocabulary.reserved.iter().any(|r| r == token)
+            && !ctx.granted.iter().any(|g| g == token)
+        {
+            let message = format!(
+                "icon '{icon}' paints with '{token}', which the lexicon reserves; grant it in \
+                 this icon's definition chain with `grant \"{token}\" reason=\"…\"`, or paint \
+                 this node with another token"
+            );
+            report_once(ctx, span, message);
+        }
+    }
     if let Some(declared) = &ctx.vocabulary.tokens {
         for token in tokens {
             if !declared.iter().any(|d| d == token) {
@@ -176,6 +195,7 @@ pub fn project(icons: &[ExpandedIcon], vocabulary: &Vocabulary) -> (IrDocument, 
         diags: Vec::new(),
         vocabulary,
         icon: String::new(),
+        granted: Vec::new(),
     };
 
     // First pass: project every icon, with badges left as empty groups.
@@ -345,6 +365,7 @@ fn resolve_badge(
 
 fn project_icon(ctx: &mut Ctx, icon: &ExpandedIcon) -> (IrIcon, Vec<PendingBadge>) {
     ctx.icon = icon.name.clone();
+    ctx.granted = icon.grants.iter().map(|(token, _)| token.clone()).collect();
     let viewbox = match (&icon.footprint, &icon.canvas) {
         (Some([w, d, h]), _) => volume_viewbox(*w, *d, *h),
         (_, Some([w, h])) => [0.0, 0.0, *w, *h],

@@ -137,11 +137,22 @@ fn parse_top(ctx: &mut FileCtx, node: &kdl::KdlNode, out: &mut Lexicon) {
     match name {
         "lexicon" => {
             let mut cfg = LexiconConfig::default();
+            // each reserved token with where it was written, checked against
+            // the tokens once the whole block is read (either may come first)
+            let mut reserved_at: Vec<(String, usize)> = Vec::new();
             if let Some(children) = node.children() {
                 for ch in children.nodes() {
                     match ch.name().value() {
                         "tokens" => {
                             cfg.tokens = string_args(ctx, ch);
+                        }
+                        "reserved" => {
+                            for e in ch.entries().iter().filter(|e| e.name().is_none()) {
+                                match e.value().as_string() {
+                                    Some(s) => reserved_at.push((s.to_string(), e.span().offset())),
+                                    None => ctx.diag(e.span().offset(), "expected a string here"),
+                                }
+                            }
                         }
                         "stroke-widths" => {
                             // checked against every stroke (SPEC §2), so an entry
@@ -166,13 +177,29 @@ fn parse_top(ctx: &mut FileCtx, node: &kdl::KdlNode, out: &mut Lexicon) {
                                 "unknown lexicon setting '{other}'{}",
                                 suggest(
                                     other,
-                                    ["tokens", "stroke-widths"]
+                                    ["tokens", "stroke-widths", "reserved"]
                                         .into_iter()
                                         .chain(LimitKind::ALL.iter().map(|k| k.directive()))
                                 )
                             ),
                         ),
                     }
+                }
+            }
+            for (token, at) in reserved_at {
+                // a reserved token outside a declared vocabulary could never
+                // be painted at all
+                if !cfg.tokens.is_empty() && !cfg.tokens.contains(&token) {
+                    ctx.diag(
+                        at,
+                        format!(
+                            "'{token}' is reserved but is not one of the lexicon's tokens{}; \
+                             declare it in tokens too",
+                            suggest(&token, cfg.tokens.iter().map(|t| t.as_str()))
+                        ),
+                    );
+                } else if !cfg.reserved.contains(&token) {
+                    cfg.reserved.push(token);
                 }
             }
             if out.config.is_some() {
@@ -392,6 +419,11 @@ fn parse_body_child(ctx: &mut FileCtx, ch: &kdl::KdlNode, kind: DefKind, def: &m
         "axes" => {
             def.body.axes = string_args(ctx, ch);
         }
+        "grant" if kind == DefKind::Fragment => ctx.diag(
+            off,
+            "a fragment cannot grant: its shapes are painted as part of the icon it is \
+             inserted into, so grant on that icon",
+        ),
         "grant" => {
             let token = first_string_arg(ctx, ch);
             let reason = ch

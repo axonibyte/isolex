@@ -469,6 +469,130 @@ fn without_a_declared_vocabulary_nothing_is_checked() {
     assert!(ok, "{stderr}");
 }
 
+const RESERVING: &str = "lexicon {\n  tokens \"ink\" \"outline\" \"accent\" \"body-left\" \"body-right\" \"body-top\"\n  reserved \"accent\"\n}\n";
+
+#[test]
+fn a_reserved_token_needs_a_grant() {
+    let red = "part \"p\" { at 0 0 0 { circle 4 4 3 fill=\"accent\" stroke=\"none\" } }";
+    let (ok, stderr) = check_files(
+        "reserved",
+        &[(
+            "r.ilx",
+            &format!("{RESERVING}icon \"down\" {{ category \"c\"; canvas 9 9\n  {red} }}\n"),
+        )],
+    );
+    assert!(!ok, "{stderr}");
+    assert!(
+        stderr.contains(
+            "r.ilx:6:25: icon 'down' paints with 'accent', which the lexicon reserves; grant it \
+             in this icon's definition chain with `grant \"accent\" reason=\"…\"`"
+        ),
+        "{stderr}"
+    );
+
+    // granted directly, or by an ancestor
+    let (ok, stderr) = check_files(
+        "reserved-granted",
+        &[(
+            "r.ilx",
+            &format!(
+                "{RESERVING}icon \"down\" {{ category \"c\"; canvas 9 9; grant \"accent\" reason=\"danger\"\n  {red} }}\n"
+            ),
+        )],
+    );
+    assert!(ok, "{stderr}");
+    let (ok, stderr) = check_files(
+        "reserved-inherited",
+        &[(
+            "r.ilx",
+            &format!(
+                "{RESERVING}base \"alarm\" {{ category \"c\"; canvas 9 9; grant \"accent\" reason=\"danger\" }}\nicon \"down\" {{ extends \"alarm\"\n  {red} }}\n"
+            ),
+        )],
+    );
+    assert!(ok, "{stderr}");
+}
+
+#[test]
+fn a_reserved_default_needs_a_grant_too() {
+    // SPEC §1, Defaults: a box's outline reaches the IR as if written
+    let lexicon = RESERVING.replace("reserved \"accent\"", "reserved \"outline\"");
+    let boxed = "part \"p\" { box 0 0 0 1 1 1 }";
+    let (ok, stderr) = check_files(
+        "reserved-default",
+        &[(
+            "r.ilx",
+            &format!("{lexicon}icon \"b\" {{ category \"c\"; footprint 1 1 1; {boxed} }}\n"),
+        )],
+    );
+    assert!(
+        !ok && stderr.contains("icon 'b' paints with 'outline', which the lexicon reserves"),
+        "{stderr}"
+    );
+    let (ok, stderr) = check_files(
+        "reserved-default-granted",
+        &[(
+            "r.ilx",
+            &format!(
+                "{lexicon}icon \"b\" {{ category \"c\"; footprint 1 1 1; grant \"outline\" reason=\"edges\"; {boxed} }}\n"
+            ),
+        )],
+    );
+    assert!(ok, "{stderr}");
+}
+
+#[test]
+fn a_badge_is_granted_by_its_target() {
+    // the badge's red is the target's, which grants it; the icon wearing
+    // the badge paints no red of its own
+    let (ok, stderr) = check_files(
+        "reserved-badge",
+        &[(
+            "r.ilx",
+            &format!(
+                "{RESERVING}icon \"dot\" {{ category \"c\"; canvas 9 9; grant \"accent\" reason=\"danger\"\n  part \"p\" {{ at 0 0 0 {{ circle 4 4 3 fill=\"accent\" stroke=\"none\" }} }} }}\nicon \"srv\" {{ category \"c\"; footprint 1 1 1; part \"p\" {{ badge \"dot\" }} }}\n"
+            ),
+        )],
+    );
+    assert!(ok, "{stderr}");
+}
+
+#[test]
+fn a_grant_of_a_token_that_is_not_reserved() {
+    // with tokens reserved, it is an error
+    let (ok, stderr) = check_files(
+        "stray-grant",
+        &[(
+            "g.ilx",
+            &format!(
+                "{RESERVING}icon \"i\" {{ category \"c\"; canvas 9 9\n  grant \"acent\" reason=\"typo\" }}\n"
+            ),
+        )],
+    );
+    assert!(!ok, "{stderr}");
+    assert!(
+        stderr.contains(
+            "g.ilx:6:3: 'i' grants 'acent', which the lexicon does not reserve (did you mean \
+             'accent'?); reserve it in the lexicon block, or remove the grant"
+        ),
+        "{stderr}"
+    );
+
+    // with none reserved, it has no effect: a warning, and nothing else
+    // changes, the exit status included
+    let src = "axis \"state\" { variant \"down\" { grant \"accent\" reason=\"danger\" } }\nicon \"i\" { category \"c\"; canvas 9 9; axes \"state\" }\n";
+    let (ok, stderr) = check_files("stray-warning", &[("w.ilx", src)]);
+    assert!(ok, "{stderr}");
+    assert!(
+        stderr.contains(
+            "w.ilx:1:33: warning: variant 'down' of axis 'state' grants 'accent', but the lexicon \
+             reserves no tokens, so the grant has no effect; reserve it with `reserved \"accent\"` \
+             in the lexicon block, or remove the grant"
+        ),
+        "{stderr}"
+    );
+}
+
 #[test]
 fn check_failures_render_file_line_col_and_exit_nonzero() {
     let dir = std::env::temp_dir().join(format!("isolex-e2e-bad-{}", std::process::id()));

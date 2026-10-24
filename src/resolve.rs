@@ -58,6 +58,8 @@ pub struct Resolved {
     /// Limits the lexicon block sets for every icon.
     pub lexicon_limits: Limits,
     pub diags: Vec<SpanDiag>,
+    /// Diagnostics that do not fail the build (SPEC §8).
+    pub warnings: Vec<SpanDiag>,
 }
 
 struct Ctx {
@@ -146,6 +148,8 @@ pub fn resolve(lexicon: &Lexicon) -> Resolved {
             _ => {}
         }
     }
+
+    check_grants(&mut ctx, lexicon, &mut out.warnings);
 
     // --- resolve each base/icon ---------------------------------------
     for def in &lexicon.defs {
@@ -359,4 +363,49 @@ pub fn apply_variant(r: &mut ResolvedDef, variant: &Variant, diags: &mut Vec<Spa
         &format!("variant {}", variant.name),
     );
     diags.append(&mut ctx.diags);
+}
+
+/// Each `grant`, once, where it is written (SPEC §2): with tokens reserved,
+/// granting one that is not is an error; with none reserved, a grant has
+/// no effect, which is a warning.
+fn check_grants(ctx: &mut Ctx, lexicon: &Lexicon, warnings: &mut Vec<SpanDiag>) {
+    let reserved: &[String] = lexicon
+        .config
+        .as_ref()
+        .map(|c| c.reserved.as_slice())
+        .unwrap_or_default();
+    for def in &lexicon.defs {
+        let bodies = std::iter::once((format!("'{}'", def.name), &def.body)).chain(
+            def.variants.iter().map(|v| {
+                (
+                    format!("variant '{}' of axis '{}'", v.name, def.name),
+                    &v.body,
+                )
+            }),
+        );
+        for (whose, body) in bodies {
+            for grant in &body.grants {
+                let token = &grant.token;
+                if reserved.is_empty() {
+                    warnings.push(SpanDiag {
+                        span: grant.span,
+                        message: format!(
+                            "{whose} grants '{token}', but the lexicon reserves no tokens, so \
+                             the grant has no effect; reserve it with `reserved \"{token}\"` \
+                             in the lexicon block, or remove the grant"
+                        ),
+                    });
+                } else if !reserved.contains(token) {
+                    ctx.diag(
+                        grant.span,
+                        format!(
+                            "{whose} grants '{token}', which the lexicon does not reserve{}; \
+                             reserve it in the lexicon block, or remove the grant",
+                            suggest(token, reserved.iter().map(|r| r.as_str()))
+                        ),
+                    );
+                }
+            }
+        }
+    }
 }

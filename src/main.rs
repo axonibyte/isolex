@@ -104,6 +104,13 @@ fn run(dir: &str, mode: Mode) -> ExitCode {
     let (doc, pdiags) = project(&expanded, &Vocabulary::of(outcome.lexicon.config.as_ref()));
     diags.extend(pdiags.iter().map(|d| locate(&files, d)));
 
+    // Warnings say something has no effect; they never change the exit
+    // status or the output (SPEC §8).
+    for w in &resolved.warnings {
+        let mut w = locate(&files, w);
+        w.message = format!("warning: {}", w.message);
+        eprintln!("{w}");
+    }
     for d in &diags {
         eprintln!("{d}");
     }

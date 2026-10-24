@@ -284,9 +284,28 @@ at 1.2, a `shadow` is `shadow` — because those reach the renderer exactly
 as if you had written them, so your declared list stays a complete
 contract for it. `none` means no paint and never needs declaring.
 
-If a token is reserved (e.g. a brand red), a definition that uses it
-declares the right with `grant "accent" reason="…"`; the grant travels
-into the IR so governance tooling can assert usage matches intent.
+Some tokens carry meaning that should not be spent casually, a brand red
+say. Reserve them, and an icon may paint with one only if it, or
+something it extends, grants it with a reason:
+
+```kdl
+lexicon {
+  tokens "ink" "outline" "accent"
+  reserved "accent"
+}
+
+icon "state-down" {
+  category "state"
+  canvas 24 24
+  grant "accent" reason="down is danger: the reserved-red failed-object signal"
+  part "g" { at 0 0 0 { circle 12 12 9 fill="accent" stroke="none" } }
+}
+```
+
+The grant travels into the IR so governance tooling can assert that
+usage matches intent. A grant for a token that is not reserved is an
+error when the lexicon reserves anything (usually a typo), and a warning
+when it reserves nothing, since the grant then has no effect.
 
 ## The workflow
 

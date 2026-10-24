@@ -136,6 +136,19 @@ fn diagnostics_name_the_problem_and_the_place() {
             &["stroke-widths takes positive numbers"],
         ),
         (
+            "lexicon {\n  tokens \"ink\" \"accent\"\n  reserved \"acent\"\n}",
+            3,
+            &[
+                "'acent' is reserved but is not one of the lexicon's tokens",
+                "did you mean 'accent'?",
+            ],
+        ),
+        (
+            "fragment \"f\" {\n  grant \"accent\" reason=\"red\"\n}",
+            2,
+            &["a fragment cannot grant", "grant on that icon"],
+        ),
+        (
             "icon \"x\" {\n  part \"p\" {\n    box 0 0 0 1 1 1 fills=\"bodie\"\n  }\n}",
             3,
             &["fills is \"body\", \"virt\" or \"none\"", "did you mean 'body'?"],
