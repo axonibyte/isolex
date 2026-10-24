@@ -153,7 +153,13 @@ atom  := NUMBER | NAME | call | "(" or ")"
 call  := ("min"|"max") "(" or "," or ")"
        | ("abs"|"round"|"floor"|"ceil"|"cos"|"sin"|"cosr"|"sinr") "(" or ")"
        | "if" "(" or "," or "," or ")"
+NUMBER := [0-9.]+ ([eE] [+-]? [0-9]+)?    (a decimal: 2, 0.5, .5, 1e300, 2.5e-3)
+NAME   := [A-Za-z_] [A-Za-z0-9_]*
 ```
+
+A `NUMBER`'s digits and dots must read as one decimal (`1.2.3` is a
+malformed number), and its value must be finite (`1e400` is an error
+where it is written).
 
 Two types exist. Comparisons and boolean operators produce `Bool`,
 legal only as an `if` condition or as the root of a `when` guard; every

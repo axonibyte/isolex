@@ -302,6 +302,14 @@ fn agrees_on_every_kind_of_malformed_input() {
         "or",
         "a and",
         "a or b",
+        // exponents (#27) changed only a number directly followed by e or
+        // E, which was always an error; these must mean what they did
+        "1 e5",
+        "e5",
+        "x1e5",
+        "1 and 2",
+        "1and 2 > 1",
+        "2 * e",
     ] {
         for boolean in [false, true] {
             assert_eq!(

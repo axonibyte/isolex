@@ -254,9 +254,23 @@ fn tokenize(src: &str) -> Result<Vec<(usize, Tok)>, ExprError> {
                 while i < bytes.len() && (bytes[i].is_ascii_digit() || bytes[i] == b'.') {
                     i += 1;
                 }
+                // an exponent, as KDL numbers take: e or E, a sign, digits.
+                // No keyword begins with e, so a number directly followed
+                // by one was always an error, and nothing that compiled
+                // before reads differently.
+                if matches!(bytes.get(i), Some(b'e' | b'E')) {
+                    i += 1;
+                    if matches!(bytes.get(i), Some(b'+' | b'-')) {
+                        i += 1;
+                    }
+                    while i < bytes.len() && bytes[i].is_ascii_digit() {
+                        i += 1;
+                    }
+                }
                 let text = &src[start..i];
                 match text.parse::<f64>() {
-                    Ok(n) => out.push((start, Tok::Num(n))),
+                    Ok(n) if n.is_finite() => out.push((start, Tok::Num(n))),
+                    Ok(_) => return err(start, format!("'{text}' is not a finite number")),
                     Err(_) => return err(start, format!("malformed number '{text}'")),
                 }
             }
@@ -1009,6 +1023,40 @@ mod tests {
         let e = env(&[("big", 1e22)]);
         assert_eq!(num("cosr(big)", &[("big", 1e22)]), 0.523214785);
         assert_eq!(eval(&parse_num("sinr(big)").unwrap(), &e), Ok(-0.85220085));
+    }
+
+    #[test]
+    fn numbers_take_an_exponent() {
+        // as KDL numbers do (#27): 1e300 was the number 1 and a name e300
+        assert_eq!(num("1e300 / 1e299", &[]), 10.0);
+        assert_eq!(num("2.5e-3 * 1000", &[]), 2.5);
+        assert_eq!(num("1E6", &[]), 1_000_000.0);
+        assert_eq!(num("1e+2", &[]), 100.0);
+        assert_eq!(num(".5e1", &[]), 5.0);
+        assert_eq!(num("2e0", &[]), 2.0);
+        // and beside the keywords, which none begins with e
+        assert_eq!(num("if(1e1 > 9 and 2e0 < 3, 1, 0)", &[]), 1.0);
+    }
+
+    #[test]
+    fn a_malformed_exponent_is_a_malformed_number() {
+        for (src, offset, text) in [
+            ("1e", 0, "1e"),
+            ("1e+", 0, "1e+"),
+            ("2 * 1ex", 4, "1e"),
+            ("1.2.3e4", 0, "1.2.3e4"),
+        ] {
+            let e = parse_num(src).unwrap_err();
+            assert_eq!(
+                (e.offset, e.message.as_str()),
+                (offset, format!("malformed number '{text}'").as_str()),
+                "{src}"
+            );
+        }
+        // past f64's range: an error where it is written, not a later inf
+        let e = parse_num("x + 1e400").unwrap_err();
+        assert_eq!(e.offset, 4);
+        assert_eq!(e.message, "'1e400' is not a finite number");
     }
 
     #[test]

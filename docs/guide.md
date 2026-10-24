@@ -249,6 +249,8 @@ as overlays.
 Wherever a number is expected, a quoted string is evaluated. It is a
 small, total, pure language — no user functions, no recursion, no I/O:
 
+- numbers as decimals, with an exponent if you like (`0.28`, `1e3`,
+  `2.5e-3`);
 - arithmetic `+ - * / %`, unary minus, parentheses;
 - names in scope: params, enclosing `repeat` variables, and `x`/`y`
   inside `at`;
