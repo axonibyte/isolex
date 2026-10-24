@@ -21,12 +21,35 @@ it after (`-` is 0x2D, `/` is 0x2F). Definitions are processed in file
 order; every downstream ordering (emission, axis expansion, diagnostics)
 derives from these, which is what makes compilation byte-deterministic.
 
+**Defaults.** Isolex has two kinds of default, and the test that tells
+them apart is whether the default reaches the IR.
+
+- A *compiler allowance* governs how compilation proceeds: the limits of
+  §9. It never appears in the IR; a lexicon compiled under a different
+  allowance compiles to the same IR or to an error, never to different
+  IR. It may therefore be implicit, and may even differ between builds.
+- A *program default* is something the compiled lexicon says: a paint
+  token or stroke width filled in for a node that sets none (§4). It
+  appears in the IR exactly as if the author had written it, so it is
+  held to everything the lexicon declares. Where a `lexicon` block
+  declares a vocabulary (§2), a program default outside it is an error,
+  as the same value written by hand would be.
+
+New defaults follow the same rule.
+
 ## 2. Top-level nodes
 
 - `lexicon { … }` — at most one per lexicon. Settings: `tokens "a" "b" …`
   (the theme token vocabulary) and `stroke-widths 1.2 …` (the permitted
-  stroke widths). v0 records these for consumers; enforcement hooks are
-  reserved. The limits of §9 can be set here for every icon.
+  stroke widths, positive numbers). Each one declared is a contract with
+  the lexicon's consumers, checked against the IR after projection has
+  filled in every default (§1, Defaults): every `fill` and `stroke` must
+  be a declared token, and every width drawn with a stroke must equal a
+  declared width as output formats them (§7: 1.401 is 1.40). `none` is
+  no paint rather than a token and needs no declaring, and a width with
+  no stroke is not checked. A violation is reported at the node, with a
+  nearest-name suggestion for a token. A lexicon that declares neither
+  is not checked. The limits of §9 can be set here for every icon.
 - `base "name" { … }` — an abstract definition. Never emitted; may be
   incomplete.
 - `icon "name" { … }` — a concrete definition. After resolution it must
@@ -54,7 +77,7 @@ child node (`extends "y"`); declaring both is an error.
   (§6).
 - `axes "a" "b"` — opt into variant axes; unions down the chain.
 - `grant "token" reason="…"` — declares this definition's right to use a
-  reserved colour token; carried into the IR for governance tooling.
+  reserved color token; carried into the IR for governance tooling.
 - `badge "icon-name" corner="ne" scale=0.5` — places another icon's
   compiled shapes at a viewBox corner (`ne` default; `nw`/`se`/`sw`;
   scale default 0.5). A badge target must not itself contain a badge.

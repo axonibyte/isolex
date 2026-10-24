@@ -147,7 +147,7 @@ and may be produced by a `repeat`.
 
 ## Tokens, not hex
 
-`fill` and `stroke` take **theme tokens**, resolved to colours by the
+`fill` and `stroke` take **theme tokens**, resolved to colors by the
 renderer — never raw hex. Common tokens: `ink`, `ink-muted`, `outline`,
 `body-top`/`body-left`/`body-right`, `bg-zone`, `virt`, `accent`,
 `accent-dim`, and any others your `lexicon { tokens … }` declares. `none`

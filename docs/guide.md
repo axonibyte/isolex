@@ -263,7 +263,7 @@ zero, a result too large to be a
 number (or NaN), a negative `repeat` count, and a boolean where a number
 is required are all compile-time errors.
 
-## Colours, stroke widths, and governance
+## Colors, stroke widths, and governance
 
 Fills and strokes are **theme tokens** (`ink`, `ink-muted`, `outline`,
 `body-top`, `accent`, …), never raw hex — the renderer maps tokens to a
@@ -271,10 +271,18 @@ palette. Declare your vocabulary once in a `lexicon` block:
 
 ```kdl
 lexicon {
-  tokens "ink" "ink-muted" "outline" "body-top" "body-left" "body-right" "accent" "accent-dim"
+  tokens "ink" "ink-muted" "outline" "body-top" "body-left" "body-right" "shadow" "accent" "accent-dim"
   stroke-widths 1.2 1.4 1.5 2.2
 }
 ```
+
+Once declared, it is checked: a token or stroke width outside it is an
+error at the node that uses it, with a did-you-mean for a near miss. That
+includes the ones the compiler fills in when a node sets none — a `box`'s
+faces are `body-left`, `body-right` and `body-top` outlined in `outline`
+at 1.2, a `shadow` is `shadow` — because those reach the renderer exactly
+as if you had written them, so your declared list stays a complete
+contract for it. `none` means no paint and never needs declaring.
 
 If a token is reserved (e.g. a brand red), a definition that uses it
 declares the right with `grant "accent" reason="…"`; the grant travels

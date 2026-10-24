@@ -144,11 +144,17 @@ fn parse_top(ctx: &mut FileCtx, node: &kdl::KdlNode, out: &mut Lexicon) {
                             cfg.tokens = string_args(ctx, ch);
                         }
                         "stroke-widths" => {
-                            cfg.stroke_widths = ch
-                                .entries()
-                                .iter()
-                                .filter_map(|e| kdl_num(e.value()))
-                                .collect();
+                            // checked against every stroke (SPEC §2), so an entry
+                            // that is not a width is an error, not skipped
+                            for e in ch.entries().iter().filter(|e| e.name().is_none()) {
+                                match kdl_num(e.value()) {
+                                    Some(w) if w.is_finite() && w > 0.0 => cfg.stroke_widths.push(w),
+                                    _ => ctx.diag(
+                                        e.span().offset(),
+                                        "stroke-widths takes positive numbers: stroke-widths 1.2 1.4",
+                                    ),
+                                }
+                            }
                         }
                         other if limit_kind(other).is_some() => {
                             let kind = limit_kind(other).expect("checked");
@@ -653,7 +659,7 @@ fn parse_geometry(ctx: &mut FileCtx, ch: &kdl::KdlNode, gctx: Ctx) -> Option<Nod
     match name {
         "box" => Some(Node::Box3 {
             args: num_args::<6>(ctx, ch)?,
-            fills: string_prop(ctx, ch, "fills"),
+            fills: fills_prop(ctx, ch)?,
             opacity: num_prop(ctx, ch, "opacity"),
             when,
             span,
@@ -1001,4 +1007,32 @@ fn reserved(name: &str, what: &str) -> String {
         "'{name}' is reserved for the anchor's screen position inside `at`; \
          give this {what} another name"
     )
+}
+
+/// A box's `fills`: body (the default), virt or none. Anything else used
+/// to fall back to the body fills without a word.
+fn fills_prop(ctx: &mut FileCtx, node: &kdl::KdlNode) -> Option<Option<String>> {
+    let Some(e) = node
+        .entries()
+        .iter()
+        .find(|e| e.name().map(|n| n.value()) == Some("fills"))
+    else {
+        return Some(None);
+    };
+    const FILLS: [&str; 3] = ["body", "virt", "none"];
+    match e.value().as_string() {
+        Some(s) if FILLS.contains(&s) => Some(Some(s.to_string())),
+        other => {
+            ctx.diag(
+                e.span().offset(),
+                format!(
+                    "fills is \"body\", \"virt\" or \"none\"{}",
+                    other
+                        .map(|s| suggest(s, FILLS.into_iter()))
+                        .unwrap_or_default()
+                ),
+            );
+            None
+        }
+    }
 }

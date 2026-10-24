@@ -102,31 +102,38 @@ pub enum Shape2 {
     Line {
         args: [EvNum; 4],
         style: EvStyle,
+        span: Span,
     },
     Circle {
         args: [EvNum; 3],
         style: EvStyle,
+        span: Span,
     },
     Ellipse {
         args: [EvNum; 4],
         style: EvStyle,
+        span: Span,
     },
     Rect {
         args: [EvNum; 4],
         rx: Option<EvNum>,
         style: EvStyle,
+        span: Span,
     },
     Arc {
         args: [EvNum; 5],
         style: EvStyle,
+        span: Span,
     },
     Path {
         template: Vec<PathEv>,
         style: EvStyle,
+        span: Span,
     },
     Poly {
         pts: Vec<[EvNum; 2]>,
         style: EvStyle,
+        span: Span,
     },
 }
 
@@ -1005,7 +1012,10 @@ fn expand_node_2d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
             if !ctx.spend(LimitKind::Shapes, *span) {
                 return;
             }
-            out.push(Shape2::Line { args: a, style });
+            out.push(Shape2::Line {
+                args: a, style,
+                span: *span,
+            });
         }
         Node::Circle {
             args,
@@ -1023,7 +1033,10 @@ fn expand_node_2d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
             if !ctx.spend(LimitKind::Shapes, *span) {
                 return;
             }
-            out.push(Shape2::Circle { args: a, style });
+            out.push(Shape2::Circle {
+                args: a, style,
+                span: *span,
+            });
         }
         Node::Ellipse {
             args,
@@ -1041,7 +1054,10 @@ fn expand_node_2d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
             if !ctx.spend(LimitKind::Shapes, *span) {
                 return;
             }
-            out.push(Shape2::Ellipse { args: a, style });
+            out.push(Shape2::Ellipse {
+                args: a, style,
+                span: *span,
+            });
         }
         Node::Rect2d {
             args,
@@ -1067,7 +1083,10 @@ fn expand_node_2d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
             if !ctx.spend(LimitKind::Shapes, *span) {
                 return;
             }
-            out.push(Shape2::Rect { args: a, rx, style });
+            out.push(Shape2::Rect {
+                args: a, rx, style,
+                span: *span,
+            });
         }
         Node::Arc {
             args,
@@ -1085,7 +1104,10 @@ fn expand_node_2d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
             if !ctx.spend(LimitKind::Shapes, *span) {
                 return;
             }
-            out.push(Shape2::Arc { args: a, style });
+            out.push(Shape2::Arc {
+                args: a, style,
+                span: *span,
+            });
         }
         Node::Path {
             template,
@@ -1134,6 +1156,7 @@ fn expand_node_2d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
             out.push(Shape2::Path {
                 template: pieces,
                 style,
+                span: *span,
             });
         }
         Node::Poly2d {
@@ -1153,7 +1176,10 @@ fn expand_node_2d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
             if !ctx.spend(LimitKind::Shapes, *span) {
                 return;
             }
-            out.push(Shape2::Poly { pts, style });
+            out.push(Shape2::Poly {
+                pts, style,
+                span: *span,
+            });
         }
         Node::Repeat {
             count,

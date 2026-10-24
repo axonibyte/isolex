@@ -124,6 +124,22 @@ fn diagnostics_name_the_problem_and_the_place() {
             2,
             &["emit-base takes #true or #false"],
         ),
+        // both used to be skipped without a word
+        (
+            "lexicon {\n  stroke-widths 1.2 \"thick\"\n}",
+            2,
+            &["stroke-widths takes positive numbers"],
+        ),
+        (
+            "lexicon {\n  stroke-widths 0\n}",
+            2,
+            &["stroke-widths takes positive numbers"],
+        ),
+        (
+            "icon \"x\" {\n  part \"p\" {\n    box 0 0 0 1 1 1 fills=\"bodie\"\n  }\n}",
+            3,
+            &["fills is \"body\", \"virt\" or \"none\"", "did you mean 'body'?"],
+        ),
         (
             "icon \"x\" extendz=\"y\" { }",
             1,

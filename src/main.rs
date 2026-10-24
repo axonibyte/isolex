@@ -7,7 +7,7 @@ use isolex::ast::Span;
 use isolex::expand::expand;
 use isolex::ir::IrDocument;
 use isolex::parser::{parse_lexicon, Diag};
-use isolex::project::project;
+use isolex::project::{project, Vocabulary};
 use isolex::resolve::{resolve, SpanDiag};
 
 fn main() -> ExitCode {
@@ -101,7 +101,7 @@ fn run(dir: &str, mode: Mode) -> ExitCode {
     diags.extend(resolved.diags.iter().map(|d| locate(&files, d)));
     let (expanded, ediags) = expand(&resolved);
     diags.extend(ediags.iter().map(|d| locate(&files, d)));
-    let (doc, pdiags) = project(&expanded);
+    let (doc, pdiags) = project(&expanded, &Vocabulary::of(outcome.lexicon.config.as_ref()));
     diags.extend(pdiags.iter().map(|d| locate(&files, d)));
 
     for d in &diags {

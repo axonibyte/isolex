@@ -347,6 +347,129 @@ fn files_are_read_directory_by_directory_in_name_order() {
 }
 
 #[test]
+fn undeclared_tokens_and_widths_are_errors() {
+    // the lexicon from #8, which compiled clean
+    let (ok, stderr) = check_files(
+        "vocab",
+        &[(
+            "v.ilx",
+            "lexicon { tokens \"ink\" \"outline\" \"body-top\"; stroke-widths 1.2 }\nicon \"t\" { category \"c\"; footprint 1 1 1\n  part \"p\" { tile 0 0 0 1 1 fill=\"inkk\" width=9.9 } }\n",
+        )],
+    );
+    assert!(!ok, "{stderr}");
+    assert!(
+        stderr.contains(
+            "v.ilx:3:14: icon 't' paints with 'inkk', which is not one of the lexicon's tokens \
+             (did you mean 'ink'?); declare it in the lexicon block, or paint this node with one \
+             that is"
+        ),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains(
+            "v.ilx:3:14: icon 't' strokes at width 9.90, which is not one of the lexicon's \
+             stroke-widths (1.20)"
+        ),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn program_defaults_are_held_to_the_vocabulary() {
+    // SPEC §2: a token or width the compiler fills in reaches the IR as if
+    // the author had written it, so it is held to the same declarations
+    let (ok, stderr) = check_files(
+        "defaults",
+        &[(
+            "d.ilx",
+            "lexicon { tokens \"ink\"; stroke-widths 1.4 }\nicon \"b\" { category \"c\"; footprint 1 1 1; part \"p\" { box 0 0 0 1 1 1 } }\n",
+        )],
+    );
+    assert!(!ok, "{stderr}");
+    for token in ["body-left", "body-right", "body-top", "outline"] {
+        assert!(
+            stderr.contains(&format!("d.ilx:2:54: icon 'b' paints with '{token}'")),
+            "{token}: {stderr}"
+        );
+    }
+    assert!(
+        stderr.contains("d.ilx:2:54: icon 'b' strokes at width 1.20"),
+        "{stderr}"
+    );
+    // each once, though the box has three faces
+    assert_eq!(stderr.matches("'outline'").count(), 1, "{stderr}");
+
+    // declared, they are fine
+    let (ok, stderr) = check_files(
+        "defaults-declared",
+        &[(
+            "d.ilx",
+            "lexicon { tokens \"body-left\" \"body-right\" \"body-top\" \"outline\"; stroke-widths 1.2 }\nicon \"b\" { category \"c\"; footprint 1 1 1; part \"p\" { box 0 0 0 1 1 1 } }\n",
+        )],
+    );
+    assert!(ok, "{stderr}");
+}
+
+#[test]
+fn none_is_no_paint_and_an_unstroked_width_is_not_checked() {
+    // a facerect fills with ink and has no stroke (width 0): neither
+    // `none` nor its 0 needs declaring
+    let (ok, stderr) = check_files(
+        "none",
+        &[(
+            "n.ilx",
+            "lexicon { tokens \"ink\"; stroke-widths 1.4 }\nicon \"f\" { category \"c\"; footprint 1 1 1; part \"p\" { facerect \"front\" 0 1 0 1 1 } }\n",
+        )],
+    );
+    assert!(ok, "{stderr}");
+}
+
+#[test]
+fn widths_compare_at_the_precision_a_renderer_sees() {
+    // 1.401 is written out as 1.40, the declared 1.4; 1.406 as 1.41
+    let lexicon = "lexicon { tokens \"ink\" \"outline\"; stroke-widths 1.4 }\n";
+    let at = |w: &str| {
+        format!(
+            "{lexicon}icon \"g\" {{ category \"c\"; canvas 9 9; part \"p\" {{ at 0 0 0 {{ circle 4 4 3 width={w} }} }} }}\n"
+        )
+    };
+    let (ok, stderr) = check_files("w1", &[("w.ilx", &at("1.401"))]);
+    assert!(ok, "{stderr}");
+    let (ok, stderr) = check_files("w2", &[("w.ilx", &at("1.406"))]);
+    assert!(!ok && stderr.contains("strokes at width 1.41"), "{stderr}");
+}
+
+#[test]
+fn a_glyph_inside_at_is_reported_at_its_own_line() {
+    let (ok, stderr) = check_files(
+        "glyph",
+        &[(
+            "g.ilx",
+            "lexicon { tokens \"ink\" \"outline\" \"body-top\" \"body-left\" \"body-right\"; stroke-widths 1.2 1.4 }\nicon \"g\" { category \"c\"; footprint 1 1 1\n  part \"p\" {\n    at 0.5 0.5 1 {\n      line 0 0 1 1\n      circle \"x\" \"y\" 3 stroke=\"inq\"\n    }\n  }\n}\n",
+        )],
+    );
+    assert!(!ok, "{stderr}");
+    assert!(
+        stderr.contains("g.ilx:6:7: icon 'g' paints with 'inq'")
+            && stderr.contains("did you mean 'ink'?"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn without_a_declared_vocabulary_nothing_is_checked() {
+    let icon = "icon \"i\" { category \"c\"; footprint 1 1 1; part \"p\" { tile 0 0 0 1 1 fill=\"anything\" width=7 } }\n";
+    let (ok, stderr) = check_files("novocab", &[("i.ilx", icon)]);
+    assert!(ok, "{stderr}");
+    // a lexicon block that declares other things declares no vocabulary
+    let (ok, stderr) = check_files(
+        "novocab2",
+        &[("i.ilx", &format!("lexicon {{ shape-limit 50 }}\n{icon}"))],
+    );
+    assert!(ok, "{stderr}");
+}
+
+#[test]
 fn check_failures_render_file_line_col_and_exit_nonzero() {
     let dir = std::env::temp_dir().join(format!("isolex-e2e-bad-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();

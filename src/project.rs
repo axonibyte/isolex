@@ -5,11 +5,11 @@
 
 use std::collections::BTreeMap;
 
-use crate::ast::{Face, Span};
+use crate::ast::{Face, LexiconConfig, Span};
 use crate::expand::{EvNum, EvStyle, ExpandedIcon, PathEv, Shape, Shape2};
 use crate::expr;
 use crate::ir::{IrDocument, IrIcon, IrShape, IR_VERSION};
-use crate::resolve::SpanDiag;
+use crate::resolve::{suggest, SpanDiag};
 
 /// One tile unit along an isometric axis, in output units.
 pub const S: f64 = 40.0;
@@ -50,8 +50,116 @@ fn style_or(
     )
 }
 
-struct Ctx {
+struct Ctx<'v> {
     diags: Vec<SpanDiag>,
+    vocabulary: &'v Vocabulary,
+    /// The icon being projected, for errors.
+    icon: String,
+}
+
+/// What a lexicon block declares the lexicon paints with (SPEC §2): its
+/// tokens and stroke widths, each checked only when declared.
+#[derive(Debug, Clone, Default)]
+pub struct Vocabulary {
+    tokens: Option<Vec<String>>,
+    /// As formatted for output (SPEC §7), the precision a renderer sees.
+    widths: Option<Vec<String>>,
+}
+
+impl Vocabulary {
+    pub fn of(config: Option<&LexiconConfig>) -> Vocabulary {
+        let Some(config) = config else {
+            return Vocabulary::default();
+        };
+        Vocabulary {
+            tokens: (!config.tokens.is_empty()).then(|| config.tokens.clone()),
+            widths: (!config.stroke_widths.is_empty())
+                .then(|| config.stroke_widths.iter().map(|w| fmt(*w)).collect()),
+        }
+    }
+}
+
+/// Hold a node's projected shapes to the declared vocabulary. This runs
+/// on the IR, after projection has filled in every default, because a
+/// program default appears in the IR exactly as if the author had written
+/// it and is held to the same declarations (SPEC §2). `none` is no paint,
+/// not a token, and a width is only checked where there is a stroke.
+fn check_vocabulary(ctx: &mut Ctx, shapes: &[IrShape], span: Span) {
+    let mut tokens: Vec<&str> = Vec::new();
+    let mut widths: Vec<String> = Vec::new();
+    for shape in shapes {
+        let (fill, stroke, width) = match shape {
+            IrShape::Polygon {
+                fill,
+                stroke,
+                stroke_width,
+                ..
+            }
+            | IrShape::Path {
+                fill,
+                stroke,
+                stroke_width,
+                ..
+            }
+            | IrShape::Ellipse {
+                fill,
+                stroke,
+                stroke_width,
+                ..
+            }
+            | IrShape::Circle {
+                fill,
+                stroke,
+                stroke_width,
+                ..
+            }
+            | IrShape::Rect {
+                fill,
+                stroke,
+                stroke_width,
+                ..
+            } => (fill, stroke, *stroke_width),
+            // a badge's shapes are its target's, held to this when it was
+            // projected as an icon of its own
+            IrShape::Group { .. } => continue,
+        };
+        for token in [fill.as_str(), stroke.as_str()] {
+            if token != "none" && !tokens.contains(&token) {
+                tokens.push(token);
+            }
+        }
+        let width = fmt(width);
+        if stroke != "none" && !widths.contains(&width) {
+            widths.push(width);
+        }
+    }
+
+    let icon = ctx.icon.clone();
+    if let Some(declared) = &ctx.vocabulary.tokens {
+        for token in tokens {
+            if !declared.iter().any(|d| d == token) {
+                let message = format!(
+                    "icon '{icon}' paints with '{token}', which is not one of the lexicon's \
+                     tokens{}; declare it in the lexicon block, or paint this node with one \
+                     that is",
+                    suggest(token, declared.iter().map(|d| d.as_str()))
+                );
+                report_once(ctx, span, message);
+            }
+        }
+    }
+    if let Some(declared) = &ctx.vocabulary.widths {
+        for width in widths {
+            if !declared.contains(&width) {
+                let message = format!(
+                    "icon '{icon}' strokes at width {width}, which is not one of the lexicon's \
+                     stroke-widths ({}); declare it in the lexicon block, or use one that is",
+                    declared.join(", ")
+                );
+                report_once(ctx, span, message);
+            }
+        }
+    }
 }
 
 /// A badge waiting for every icon to be projected: `at` indexes the empty
@@ -63,8 +171,12 @@ struct PendingBadge {
     span: Span,
 }
 
-pub fn project(icons: &[ExpandedIcon]) -> (IrDocument, Vec<SpanDiag>) {
-    let mut ctx = Ctx { diags: Vec::new() };
+pub fn project(icons: &[ExpandedIcon], vocabulary: &Vocabulary) -> (IrDocument, Vec<SpanDiag>) {
+    let mut ctx = Ctx {
+        diags: Vec::new(),
+        vocabulary,
+        icon: String::new(),
+    };
 
     // First pass: project every icon, with badges left as empty groups.
     let (mut projected, pending): (Vec<IrIcon>, Vec<Vec<PendingBadge>>) = icons
@@ -232,6 +344,7 @@ fn resolve_badge(
 }
 
 fn project_icon(ctx: &mut Ctx, icon: &ExpandedIcon) -> (IrIcon, Vec<PendingBadge>) {
+    ctx.icon = icon.name.clone();
     let viewbox = match (&icon.footprint, &icon.canvas) {
         (Some([w, d, h]), _) => volume_viewbox(*w, *d, *h),
         (_, Some([w, h])) => [0.0, 0.0, *w, *h],
@@ -275,6 +388,10 @@ fn project_icon(ctx: &mut Ctx, icon: &ExpandedIcon) -> (IrIcon, Vec<PendingBadge
                 message: too_large(&icon.name, v),
             });
         }
+        // an anchor's 2-D children are each checked at their own node
+        if !matches!(shape, Shape::At { .. }) {
+            check_vocabulary(ctx, &shapes[before..], shape_span(shape));
+        }
     }
     let ir = IrIcon {
         name: icon.name.clone(),
@@ -300,6 +417,27 @@ fn shape_span(shape: &Shape) -> Span {
         | Shape::Seg { span, .. }
         | Shape::At { span, .. }
         | Shape::Badge { span, .. } => *span,
+    }
+}
+
+/// A node expanded more than once (in a repeat, or a fragment inserted
+/// twice) would otherwise report the same thing at the same place again.
+fn report_once(ctx: &mut Ctx, span: Span, message: String) {
+    let diag = SpanDiag { span, message };
+    if !ctx.diags.contains(&diag) {
+        ctx.diags.push(diag);
+    }
+}
+
+fn shape2_span(shape: &Shape2) -> Span {
+    match shape {
+        Shape2::Line { span, .. }
+        | Shape2::Circle { span, .. }
+        | Shape2::Ellipse { span, .. }
+        | Shape2::Rect { span, .. }
+        | Shape2::Arc { span, .. }
+        | Shape2::Path { span, .. }
+        | Shape2::Poly { span, .. } => *span,
     }
 }
 
@@ -537,7 +675,9 @@ fn project_shape(ctx: &mut Ctx, shape: &Shape, out: &mut Vec<IrShape>) {
             env.insert("x".to_string(), sx);
             env.insert("y".to_string(), sy);
             for child in children {
+                let before = out.len();
                 project_2d(ctx, child, &env, out);
+                check_vocabulary(ctx, &out[before..], shape2_span(child));
             }
         }
         Shape::Badge { .. } => unreachable!("project_icon places badges itself"),
@@ -576,7 +716,7 @@ fn ev(ctx: &mut Ctx, num: &EvNum, env: &BTreeMap<String, f64>) -> f64 {
 
 fn project_2d(ctx: &mut Ctx, shape: &Shape2, env: &BTreeMap<String, f64>, out: &mut Vec<IrShape>) {
     match shape {
-        Shape2::Line { args, style } => {
+        Shape2::Line { args, style, .. } => {
             let (x1, y1, x2, y2) = (
                 ev(ctx, &args[0], env),
                 ev(ctx, &args[1], env),
@@ -593,7 +733,7 @@ fn project_2d(ctx: &mut Ctx, shape: &Shape2, env: &BTreeMap<String, f64>, out: &
                 dash,
             });
         }
-        Shape2::Circle { args, style } => {
+        Shape2::Circle { args, style, .. } => {
             let (fill, op, stroke, width, dash) = style_or(style, "none", "outline", OUTLINE_W);
             out.push(IrShape::Circle {
                 cx: ev(ctx, &args[0], env),
@@ -606,7 +746,7 @@ fn project_2d(ctx: &mut Ctx, shape: &Shape2, env: &BTreeMap<String, f64>, out: &
                 dash,
             });
         }
-        Shape2::Ellipse { args, style } => {
+        Shape2::Ellipse { args, style, .. } => {
             let (fill, op, stroke, width, dash) = style_or(style, "none", "outline", OUTLINE_W);
             out.push(IrShape::Ellipse {
                 cx: ev(ctx, &args[0], env),
@@ -620,7 +760,9 @@ fn project_2d(ctx: &mut Ctx, shape: &Shape2, env: &BTreeMap<String, f64>, out: &
                 dash,
             });
         }
-        Shape2::Rect { args, rx, style } => {
+        Shape2::Rect {
+            args, rx, style, ..
+        } => {
             let (fill, op, stroke, width, dash) = style_or(style, "none", "none", 1.4);
             out.push(IrShape::Rect {
                 x: ev(ctx, &args[0], env),
@@ -635,7 +777,7 @@ fn project_2d(ctx: &mut Ctx, shape: &Shape2, env: &BTreeMap<String, f64>, out: &
                 dash,
             });
         }
-        Shape2::Arc { args, style } => {
+        Shape2::Arc { args, style, .. } => {
             let cx = ev(ctx, &args[0], env);
             let cy = ev(ctx, &args[1], env);
             let r = ev(ctx, &args[2], env);
@@ -669,7 +811,9 @@ fn project_2d(ctx: &mut Ctx, shape: &Shape2, env: &BTreeMap<String, f64>, out: &
                 dash,
             });
         }
-        Shape2::Path { template, style } => {
+        Shape2::Path {
+            template, style, ..
+        } => {
             let mut d = String::new();
             for piece in template {
                 match piece {
@@ -704,7 +848,7 @@ fn project_2d(ctx: &mut Ctx, shape: &Shape2, env: &BTreeMap<String, f64>, out: &
                 dash,
             });
         }
-        Shape2::Poly { pts, style } => {
+        Shape2::Poly { pts, style, .. } => {
             let (fill, op, stroke, width, dash) = style_or(style, "ink", "none", 0.0);
             let points = pts
                 .iter()
