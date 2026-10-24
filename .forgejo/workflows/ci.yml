@@ -32,7 +32,9 @@ name: ci
 on:
   push:
     branches: [main]
-    tags: ['v*']
+    # Releases are tagged with the bare version, as 0.1.0 and 0.1.1 were:
+    # 0.1.2, never v0.1.2.
+    tags: ['[0-9]*']
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -145,8 +147,8 @@ jobs:
           [ -n "$ver" ] || { echo "Cargo.toml declares no version"; exit 1; }
           echo "tag=$tag Cargo.toml version=$ver"
           case "$tag" in
-            "v$ver"|"$ver") echo "they agree" ;;
-            *) echo "REFUSED: tag $tag does not name version $ver"; exit 1 ;;
+            "$ver") echo "they agree" ;;
+            *) echo "REFUSED: tag $tag is not version $ver (tags are the bare version)"; exit 1 ;;
           esac
 
       - name: on a tag, publish the binaries to the forge
