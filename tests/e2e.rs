@@ -748,6 +748,34 @@ fn render_refuses_an_icon_name_that_is_not_a_file_name() {
 }
 
 #[test]
+fn path_data_never_writes_negative_zero() {
+    // {0 - 0.001} is formatted in expansion, {x - 0.001} at projection,
+    // once x is known; both wrote -0.00
+    let dir = std::env::temp_dir().join(format!("isolex-e2e-negzero-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("z.ilx"),
+        "icon \"z\" { category \"c\"; canvas 9 9\n  part \"p\" { at 0 0 0 { path d=\"M{0 - 0.001},0 L{x - 0.001},{y - 0.004}\" } } }\n",
+    )
+    .unwrap();
+    let out = bin()
+        .arg("compile")
+        .arg(&dir)
+        .arg("--ir")
+        .arg("-")
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let json: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(json["icons"][0]["shapes"][0]["d"], "M0.00,0 L0.00,0.00");
+}
+
+#[test]
 fn check_failures_render_file_line_col_and_exit_nonzero() {
     let dir = std::env::temp_dir().join(format!("isolex-e2e-bad-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();

@@ -269,7 +269,9 @@ already formatted.
 output text (path data at compile time; coordinates at render time) is
 formatted with exactly two decimal places, round-half-to-even on the
 number's exact binary value: 0.125 is `0.12` and 0.375 `0.38`, while
-0.145, which is 0.14499… in binary, is `0.14`. `isolex render` (§10) is
+0.145, which is 0.14499… in binary, is `0.14`. Zero is written `0.00`,
+never `-0.00`, whether the value is −0.0 or rounds to zero from below
+(−0.001). `isolex render` (§10) is
 the reference for the render-time half: each icon an SVG document whose
 viewBox, coordinates, radii, widths, opacities and badge transforms
 follow this rule, whose path data passes through unchanged, and whose

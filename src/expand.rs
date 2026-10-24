@@ -1157,7 +1157,7 @@ fn expand_node_2d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
                             ast: ast.clone(),
                         };
                         match eval_2d(ctx, &num, env, *span) {
-                            Some(EvNum::Lit(v)) => pieces.push(PathEv::Lit(fmt_num(v))),
+                            Some(EvNum::Lit(v)) => pieces.push(PathEv::Lit(crate::ir::format_number(v))),
                             Some(EvNum::NeedsAnchor {
                                 src,
                                 ast,
@@ -1407,11 +1407,4 @@ fn node_span(node: &Node) -> Span {
         | Node::Insert { span, .. }
         | Node::Badge { span, .. } => *span,
     }
-}
-
-/// The normative numeric formatting rule: fixed two decimal places,
-/// exactly as the shape IR emits coordinates. Byte parity with any other
-/// conforming implementation depends on this being the only rule.
-pub fn fmt_num(v: f64) -> String {
-    format!("{v:.2}")
 }

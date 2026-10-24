@@ -96,3 +96,45 @@ pub struct IrDocument {
 }
 
 pub const IR_VERSION: u32 = 1;
+
+/// The formatting rule (SPEC §7), the one formatter for every number a
+/// toolchain prints into output text: path data at compile time,
+/// coordinates at render time. Two decimal places, ties to even on the
+/// number's exact binary value, which is what `{:.2}` does (0.125 is
+/// 0.12, 0.375 is 0.38). Zero is written 0.00: a value that rounds to it
+/// from below, or is -0.0, would otherwise print as -0.00.
+pub fn format_number(v: f64) -> String {
+    let s = format!("{v:.2}");
+    if s == "-0.00" {
+        "0.00".to_string()
+    } else {
+        s
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::format_number;
+
+    #[test]
+    fn zero_is_never_negative() {
+        for v in [-0.0, -0.001, -0.004_999, 0.0, 0.004] {
+            assert_eq!(format_number(v), "0.00", "{v}");
+        }
+        // not zero: these round away from it
+        assert_eq!(format_number(-0.005_001), "-0.01");
+        assert_eq!(format_number(-0.01), "-0.01");
+    }
+
+    #[test]
+    fn ties_go_to_even() {
+        for (v, want) in [
+            (0.125, "0.12"),
+            (0.375, "0.38"),
+            (-0.125, "-0.12"),
+            (0.145, "0.14"),
+        ] {
+            assert_eq!(format_number(v), want, "{v}");
+        }
+    }
+}

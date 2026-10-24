@@ -65,12 +65,9 @@ impl Palette {
     }
 }
 
-/// The two-decimal rule (SPEC §7), the same the compiler formats path
-/// data with: Rust rounds exact ties to even (0.125 is 0.12, 0.375 is
-/// 0.38) and everything else by its exact binary value.
-pub fn fmt(v: f64) -> String {
-    format!("{v:.2}")
-}
+/// The two-decimal rule (SPEC §7), the one formatter the compiler writes
+/// path data with too.
+pub use crate::ir::format_number as fmt;
 
 /// An icon name used as a file name must stay one: no path separators, no
 /// leading dot, nothing a filesystem treats specially.

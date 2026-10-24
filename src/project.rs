@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use crate::ast::{Face, LexiconConfig, Span};
 use crate::expand::{EvNum, EvStyle, ExpandedIcon, PathEv, Shape, Shape2};
 use crate::expr;
-use crate::ir::{IrDocument, IrIcon, IrShape, IR_VERSION};
+use crate::ir::{format_number as fmt, IrDocument, IrIcon, IrShape, IR_VERSION};
 use crate::resolve::{suggest, SpanDiag};
 
 /// One tile unit along an isometric axis, in output units.
@@ -29,10 +29,6 @@ pub const BADGE_INSET: f64 = 2.0;
 /// The projection: x runs right-down, y left-down, z up.
 pub fn p(x: f64, y: f64, z: f64) -> (f64, f64) {
     ((x - y) * COS * S, (x + y) * SIN * S - z * S)
-}
-
-fn fmt(v: f64) -> String {
-    format!("{v:.2}")
 }
 
 fn style_or(
