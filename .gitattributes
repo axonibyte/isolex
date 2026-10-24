@@ -1,3 +1,8 @@
 # Goldens compare bytes and spans count them: every text file is LF in the
 # working tree too, whatever core.autocrlf says.
 * text=auto eol=lf
+
+# The official KDL test suite is CC BY-SA 4.0 test data (see
+# tests/kdl-suite/README.md), kept byte for byte: some cases are about
+# CR LF and CR newlines, which the LF rule above would rewrite.
+tests/kdl-suite/** -text
