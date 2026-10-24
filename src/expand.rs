@@ -236,6 +236,7 @@ struct Ctx<'a> {
     shapes: (InForce, u64),
     repeats: (InForce, u64),
     insert_depth: InForce,
+    expression_depth: InForce,
     /// A limit was passed: expansion of this icon stops everywhere.
     exhausted: bool,
 }
@@ -255,6 +256,7 @@ impl<'a> Ctx<'a> {
         self.shapes = (in_force(LimitKind::Shapes, &def.limits, lexicon), 0);
         self.repeats = (in_force(LimitKind::Repeats, &def.limits, lexicon), 0);
         self.insert_depth = in_force(LimitKind::InsertDepth, &def.limits, lexicon);
+        self.expression_depth = in_force(LimitKind::ExpressionDepth, &def.limits, lexicon);
         self.exhausted = false;
     }
 
@@ -300,7 +302,8 @@ pub fn expand(resolved: &Resolved) -> (Vec<ExpandedIcon>, Vec<SpanDiag>) {
         icon: String::new(),
         shapes: (unset.clone(), 0),
         repeats: (unset.clone(), 0),
-        insert_depth: unset,
+        insert_depth: unset.clone(),
+        expression_depth: unset,
         exhausted: false,
     };
     let mut out = Vec::new();
@@ -480,10 +483,33 @@ fn expand_one(ctx: &mut Ctx, def: &ResolvedDef, name: String) -> Option<Expanded
 
 // --- evaluation helpers --------------------------------------------------
 
+/// An expression nesting past the icon's expression-depth (SPEC §9) is an
+/// error where it is used. Evaluating one is a loop at any depth, so this
+/// is a default against mistakes, not a guard against a crash.
+fn within_expression_depth(ctx: &mut Ctx, ast: &Expr, span: Span) -> bool {
+    let depth = ast.depth();
+    match ctx.expression_depth.limit {
+        Some(limit) if depth as u64 > limit => {
+            let message = past_limit(
+                format!("icon '{}' nests an expression {depth} deep here", ctx.icon),
+                LimitKind::ExpressionDepth,
+                limit,
+                &format!("levels, {}", ctx.expression_depth.from),
+            );
+            ctx.diag(span, message);
+            false
+        }
+        _ => true,
+    }
+}
+
 fn eval_full(ctx: &mut Ctx, num: &Num, env: &BTreeMap<String, f64>, span: Span) -> Option<f64> {
     match num {
         Num::Lit(v) => Some(*v),
         Num::Expr { src, ast } => {
+            if !within_expression_depth(ctx, ast, span) {
+                return None;
+            }
             let mut free = BTreeSet::new();
             expr::free_vars(ast, &mut free);
             for name in &free {
@@ -520,6 +546,9 @@ fn eval_2d(ctx: &mut Ctx, num: &Num, env: &BTreeMap<String, f64>, span: Span) ->
     match num {
         Num::Lit(v) => Some(EvNum::Lit(*v)),
         Num::Expr { src, ast } => {
+            if !within_expression_depth(ctx, ast, span) {
+                return None;
+            }
             let mut free = BTreeSet::new();
             expr::free_vars(ast, &mut free);
             let needs_anchor = free.iter().any(|n| n == "x" || n == "y");

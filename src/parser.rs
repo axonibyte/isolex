@@ -315,6 +315,7 @@ const BODY_NODES: &[&str] = &[
     "shape-limit",
     "repeat-limit",
     "insert-depth",
+    "expression-depth",
 ];
 
 fn limit_kind(name: &str) -> Option<LimitKind> {

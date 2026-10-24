@@ -594,6 +594,45 @@ fn a_grant_of_a_token_that_is_not_reserved() {
 }
 
 #[test]
+fn deep_expressions_never_overflow_the_stack() {
+    // #18: 100 000 parentheses around a 1 aborted the compiler (exit 134,
+    // "has overflowed its stack"). Parentheses add no depth: it compiles.
+    let parens = format!("{}1{}", "(".repeat(100_000), ")".repeat(100_000));
+    let (ok, stderr) = check_files(
+        "deep-parens",
+        &[(
+            "d.ilx",
+            &format!("icon \"d\" {{ category \"c\"; footprint 1 1 1; part \"p\" {{ box 0 0 0 1 1 \"{parens}\" }} }}\n"),
+        )],
+    );
+    assert!(ok, "{stderr}");
+
+    // a tree 100 001 deep is past the default expression-depth, a
+    // located error and exit 1, not a crash
+    let deep = format!("{}1{}", "-(".repeat(100_000), ")".repeat(100_000));
+    let src = |limit: &str| {
+        format!(
+            "{limit}icon \"d\" {{ category \"c\"; footprint 1 1 1\n  part \"p\" {{ box 0 0 0 1 1 \"{deep}\" }} }}\n"
+        )
+    };
+    let (ok, stderr) = check_files("deep-tree", &[("d.ilx", &src(""))]);
+    assert!(!ok, "{stderr}");
+    assert!(
+        stderr.contains("d.ilx:2:14: icon 'd' nests an expression 100001 deep here past its expression-depth of 256"),
+        "{}",
+        &stderr[..stderr.len().min(400)]
+    );
+
+    // and with no limit at all, it compiles: depth costs memory, never
+    // the stack
+    let (ok, stderr) = check_files(
+        "deep-tree-unlimited",
+        &[("d.ilx", &src("lexicon { expression-depth #null }\n"))],
+    );
+    assert!(ok, "{}", &stderr[..stderr.len().min(400)]);
+}
+
+#[test]
 fn check_failures_render_file_line_col_and_exit_nonzero() {
     let dir = std::env::temp_dir().join(format!("isolex-e2e-bad-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();

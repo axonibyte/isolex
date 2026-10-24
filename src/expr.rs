@@ -1,5 +1,5 @@
-//! The Isolex expression language: tokenizer, Pratt parser, type check,
-//! and evaluator. Self-contained on purpose — SPEC.md §5 defines this
+//! The Isolex expression language: tokenizer, parser, type check, and
+//! evaluator. Self-contained on purpose — SPEC.md §5 defines this
 //! grammar without reference to any host language.
 //!
 //! Two types exist: `Num` (f64) and `Bool`. Comparisons and boolean
@@ -8,23 +8,83 @@
 //! `Num`, and a numeric position requires a `Num` root. Evaluation is
 //! total and pure: no user functions, no recursion, no assignment, no
 //! I/O, no randomness.
+//!
+//! Nothing here recurses (#18). An expression is a flat array of nodes,
+//! each after its operands, so cloning, dropping, comparing or
+//! serializing one is a loop; the parser, type check and evaluator keep
+//! their work on explicit stacks in the heap. How deeply an expression
+//! nests costs memory, never the call stack, which leaves
+//! `expression-depth` (SPEC §9) a limit an author can raise or switch
+//! off rather than a guard against a crash.
 
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::fmt;
 
+/// An expression: its nodes, each after its operands, the root last.
 #[derive(Debug, Clone, PartialEq, Serialize)]
-pub enum Expr {
+pub struct Expr {
+    nodes: Vec<ExprNode>,
+    /// How deeply it nests, worked out once when it is parsed.
+    #[serde(skip)]
+    depth: usize,
+}
+
+/// One node of an [`Expr`]; its operands are indices of earlier nodes.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub enum ExprNode {
     Num(f64),
     Var(String),
-    Neg(Box<Expr>),
-    Bin(BinOp, Box<Expr>, Box<Expr>),
-    Cmp(CmpOp, Box<Expr>, Box<Expr>),
-    And(Box<Expr>, Box<Expr>),
-    Or(Box<Expr>, Box<Expr>),
-    Not(Box<Expr>),
-    Call(Func, Vec<Expr>),
-    If(Box<Expr>, Box<Expr>, Box<Expr>),
+    Neg(usize),
+    Bin(BinOp, usize, usize),
+    Cmp(CmpOp, usize, usize),
+    And(usize, usize),
+    Or(usize, usize),
+    Not(usize),
+    Call(Func, Vec<usize>),
+    If(usize, usize, usize),
+}
+
+impl ExprNode {
+    fn operands(&self) -> Vec<usize> {
+        match self {
+            ExprNode::Num(_) | ExprNode::Var(_) => Vec::new(),
+            ExprNode::Neg(a) | ExprNode::Not(a) => vec![*a],
+            ExprNode::Bin(_, a, b)
+            | ExprNode::Cmp(_, a, b)
+            | ExprNode::And(a, b)
+            | ExprNode::Or(a, b) => vec![*a, *b],
+            ExprNode::Call(_, args) => args.clone(),
+            ExprNode::If(c, t, e) => vec![*c, *t, *e],
+        }
+    }
+}
+
+impl Expr {
+    fn push(&mut self, node: ExprNode) -> usize {
+        self.nodes.push(node);
+        self.nodes.len() - 1
+    }
+
+    fn root(&self) -> usize {
+        self.nodes.len() - 1
+    }
+
+    /// How deeply it nests (SPEC §9, `expression-depth`): a number or a
+    /// name is 1, and an operator or call is one more than its deepest
+    /// operand. Parentheses add nothing.
+    pub fn depth(&self) -> usize {
+        self.depth
+    }
+
+    fn measure_depth(&self) -> usize {
+        let mut depth: Vec<usize> = Vec::with_capacity(self.nodes.len());
+        for node in &self.nodes {
+            let deepest = node.operands().iter().map(|&o| depth[o]).max();
+            depth.push(1 + deepest.unwrap_or(0));
+        }
+        depth.last().copied().unwrap_or(0)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -218,200 +278,345 @@ fn tokenize(src: &str) -> Result<Vec<(usize, Tok)>, ExprError> {
     Ok(out)
 }
 
-// --- Pratt parser --------------------------------------------------------
+// --- parser --------------------------------------------------------------
 
-struct Parser<'a> {
-    toks: &'a [(usize, Tok)],
-    pos: usize,
-    src_len: usize,
+/// A binary operator and how tightly it binds: or(1) < and(2) < cmp(4) <
+/// add/sub(5) < mul/div/rem(6). Unary minus binds tighter than all of them
+/// (7); `not` takes everything from comparison up (3).
+#[derive(Clone, Copy)]
+enum Infix {
+    Or,
+    And,
+    Cmp(CmpOp),
+    Bin(BinOp),
 }
 
-impl<'a> Parser<'a> {
-    fn peek(&self) -> Option<&(usize, Tok)> {
-        self.toks.get(self.pos)
-    }
+fn infix(tok: &Tok) -> Option<(Infix, u8)> {
+    Some(match tok {
+        Tok::Ident(w) if w == "or" => (Infix::Or, 1),
+        Tok::Ident(w) if w == "and" => (Infix::And, 2),
+        Tok::Lt => (Infix::Cmp(CmpOp::Lt), 4),
+        Tok::Le => (Infix::Cmp(CmpOp::Le), 4),
+        Tok::Gt => (Infix::Cmp(CmpOp::Gt), 4),
+        Tok::Ge => (Infix::Cmp(CmpOp::Ge), 4),
+        Tok::EqEq => (Infix::Cmp(CmpOp::Eq), 4),
+        Tok::Ne => (Infix::Cmp(CmpOp::Ne), 4),
+        Tok::Plus => (Infix::Bin(BinOp::Add), 5),
+        Tok::Minus => (Infix::Bin(BinOp::Sub), 5),
+        Tok::Star => (Infix::Bin(BinOp::Mul), 6),
+        Tok::Slash => (Infix::Bin(BinOp::Div), 6),
+        Tok::Percent => (Infix::Bin(BinOp::Rem), 6),
+        _ => return None,
+    })
+}
 
-    fn next(&mut self) -> Option<(usize, Tok)> {
-        let t = self.toks.get(self.pos).cloned();
-        if t.is_some() {
-            self.pos += 1;
+fn func(name: &str) -> Option<Func> {
+    Some(match name {
+        "min" => Func::Min,
+        "max" => Func::Max,
+        "abs" => Func::Abs,
+        "round" => Func::Round,
+        "floor" => Func::Floor,
+        "ceil" => Func::Ceil,
+        "cos" => Func::Cos,
+        "sin" => Func::Sin,
+        "cosr" => Func::Cosr,
+        "sinr" => Func::Sinr,
+        _ => return None,
+    })
+}
+
+/// An operator or parenthesis waiting for what comes after it.
+enum Pending {
+    /// unary minus or `not`: its operand is everything binding at least
+    /// `rhs_min`
+    Prefix { neg: bool, rhs_min: u8 },
+    /// a binary operator, its left operand already parsed
+    Infix { op: Infix, rhs_min: u8 },
+    /// an open parenthesis, with the commas seen inside it
+    Paren { kind: Paren, commas: usize },
+}
+
+enum Paren {
+    Group,
+    /// a function's argument list; `at` is where its name is
+    Call {
+        func: Func,
+        name: String,
+        at: usize,
+    },
+    If,
+}
+
+impl Paren {
+    /// What a parenthesis expects next after a complete operand, for the
+    /// error when something else comes.
+    fn expecting(&self, commas: usize) -> String {
+        match self {
+            Paren::Group => "')'".to_string(),
+            Paren::Call { name, .. } => format!("')' closing {name}"),
+            Paren::If => match commas {
+                0 => "',' after if condition".to_string(),
+                1 => "',' after if branch".to_string(),
+                _ => "')' closing if".to_string(),
+            },
         }
-        t
     }
+}
 
-    fn expect(&mut self, want: &Tok, what: &str) -> Result<(), ExprError> {
-        match self.next() {
-            Some((_, ref t)) if t == want => Ok(()),
-            Some((o, t)) => err(o, format!("expected {what}, found {t:?}")),
-            None => err(
-                self.src_len,
-                format!("expected {what}, found end of expression"),
-            ),
-        }
-    }
-
-    /// Precedence climbing over: or(1) < and(2) < not(3) < cmp(4) <
-    /// add/sub(5) < mul/div/rem(6) < unary minus(7) < atoms.
-    fn parse_expr(&mut self, min_bp: u8) -> Result<Expr, ExprError> {
-        let mut lhs = self.parse_prefix()?;
-        loop {
-            let (op_bp, build): (u8, fn(Expr, Expr) -> Expr) = match self.peek() {
-                Some((_, Tok::Ident(w))) if w == "or" => (1, |a, b| Expr::Or(a.into(), b.into())),
-                Some((_, Tok::Ident(w))) if w == "and" => (2, |a, b| Expr::And(a.into(), b.into())),
-                Some((_, Tok::Lt)) => (4, |a, b| Expr::Cmp(CmpOp::Lt, a.into(), b.into())),
-                Some((_, Tok::Le)) => (4, |a, b| Expr::Cmp(CmpOp::Le, a.into(), b.into())),
-                Some((_, Tok::Gt)) => (4, |a, b| Expr::Cmp(CmpOp::Gt, a.into(), b.into())),
-                Some((_, Tok::Ge)) => (4, |a, b| Expr::Cmp(CmpOp::Ge, a.into(), b.into())),
-                Some((_, Tok::EqEq)) => (4, |a, b| Expr::Cmp(CmpOp::Eq, a.into(), b.into())),
-                Some((_, Tok::Ne)) => (4, |a, b| Expr::Cmp(CmpOp::Ne, a.into(), b.into())),
-                Some((_, Tok::Plus)) => (5, |a, b| Expr::Bin(BinOp::Add, a.into(), b.into())),
-                Some((_, Tok::Minus)) => (5, |a, b| Expr::Bin(BinOp::Sub, a.into(), b.into())),
-                Some((_, Tok::Star)) => (6, |a, b| Expr::Bin(BinOp::Mul, a.into(), b.into())),
-                Some((_, Tok::Slash)) => (6, |a, b| Expr::Bin(BinOp::Div, a.into(), b.into())),
-                Some((_, Tok::Percent)) => (6, |a, b| Expr::Bin(BinOp::Rem, a.into(), b.into())),
-                _ => break,
-            };
-            if op_bp < min_bp {
-                break;
-            }
-            self.pos += 1;
-            let rhs = self.parse_expr(op_bp + 1)?;
-            lhs = build(lhs, rhs);
-        }
-        Ok(lhs)
-    }
-
-    fn parse_prefix(&mut self) -> Result<Expr, ExprError> {
-        match self.next() {
-            Some((_, Tok::Num(n))) => Ok(Expr::Num(n)),
-            Some((_, Tok::Minus)) => {
-                let inner = self.parse_expr(7)?;
-                Ok(Expr::Neg(inner.into()))
-            }
-            Some((_, Tok::LParen)) => {
-                let inner = self.parse_expr(0)?;
-                self.expect(&Tok::RParen, "')'")?;
-                Ok(inner)
-            }
-            Some((o, Tok::Ident(name))) => match name.as_str() {
-                "not" => {
-                    let inner = self.parse_expr(3)?;
-                    Ok(Expr::Not(inner.into()))
+/// Build every pending operator that binds at least as tightly as `bp`
+/// asks: an operator whose operand is complete once something binding
+/// less than its `rhs_min` arrives. Stops at a parenthesis.
+fn reduce(e: &mut Expr, operands: &mut Vec<usize>, pending: &mut Vec<Pending>, bp: u8) {
+    while let Some(top) = pending.last() {
+        let node = match *top {
+            Pending::Prefix { neg, rhs_min } if bp < rhs_min => {
+                let a = operands.pop().expect("a prefix has its operand");
+                if neg {
+                    ExprNode::Neg(a)
+                } else {
+                    ExprNode::Not(a)
                 }
-                "if" => {
-                    self.expect(&Tok::LParen, "'(' after if")?;
-                    let cond = self.parse_expr(0)?;
-                    self.expect(&Tok::Comma, "',' after if condition")?;
-                    let then = self.parse_expr(0)?;
-                    self.expect(&Tok::Comma, "',' after if branch")?;
-                    let alt = self.parse_expr(0)?;
-                    self.expect(&Tok::RParen, "')' closing if")?;
-                    Ok(Expr::If(cond.into(), then.into(), alt.into()))
+            }
+            Pending::Infix { op, rhs_min } if bp < rhs_min => {
+                let b = operands.pop().expect("an infix has its right operand");
+                let a = operands.pop().expect("an infix has its left operand");
+                match op {
+                    Infix::Or => ExprNode::Or(a, b),
+                    Infix::And => ExprNode::And(a, b),
+                    Infix::Cmp(c) => ExprNode::Cmp(c, a, b),
+                    Infix::Bin(o) => ExprNode::Bin(o, a, b),
                 }
-                "min" | "max" | "abs" | "round" | "floor" | "ceil" | "cos" | "sin" | "cosr"
-                | "sinr" => {
-                    let func = match name.as_str() {
-                        "min" => Func::Min,
-                        "max" => Func::Max,
-                        "abs" => Func::Abs,
-                        "round" => Func::Round,
-                        "floor" => Func::Floor,
-                        "ceil" => Func::Ceil,
-                        "cos" => Func::Cos,
-                        "sin" => Func::Sin,
-                        "cosr" => Func::Cosr,
-                        _ => Func::Sinr,
-                    };
-                    self.expect(&Tok::LParen, &format!("'(' after {name}"))?;
-                    let mut args = vec![self.parse_expr(0)?];
-                    while matches!(self.peek(), Some((_, Tok::Comma))) {
-                        self.pos += 1;
-                        args.push(self.parse_expr(0)?);
-                    }
-                    self.expect(&Tok::RParen, &format!("')' closing {name}"))?;
-                    let want = match func {
-                        Func::Min | Func::Max => 2,
-                        _ => 1,
-                    };
-                    if args.len() != want {
+            }
+            _ => break,
+        };
+        pending.pop();
+        operands.push(e.push(node));
+    }
+}
+
+/// Parse an expression with operator and operand stacks instead of
+/// recursion (shunting-yard): the same grammar, precedence,
+/// associativity and errors as SPEC §5's recursive description, at any
+/// depth.
+fn parse(src: &str, toks: &[(usize, Tok)]) -> Result<Expr, ExprError> {
+    let end = src.len();
+    let mut e = Expr {
+        nodes: Vec::new(),
+        depth: 0,
+    };
+    let mut operands: Vec<usize> = Vec::new();
+    let mut pending: Vec<Pending> = Vec::new();
+    // an operand is wanted next, rather than an operator
+    let mut want_operand = true;
+    let found = |i: usize| match toks.get(i) {
+        Some((_, t)) => format!("{t:?}"),
+        None => "end of expression".to_string(),
+    };
+    let found_at = |i: usize| toks.get(i).map(|(o, _)| *o).unwrap_or(end);
+
+    let mut i = 0;
+    while i < toks.len() {
+        let (o, tok) = (&toks[i].0, &toks[i].1);
+        let o = *o;
+        if want_operand {
+            match tok {
+                Tok::Num(n) => {
+                    operands.push(e.push(ExprNode::Num(*n)));
+                    want_operand = false;
+                }
+                Tok::Minus => pending.push(Pending::Prefix {
+                    neg: true,
+                    rhs_min: 7,
+                }),
+                Tok::LParen => pending.push(Pending::Paren {
+                    kind: Paren::Group,
+                    commas: 0,
+                }),
+                Tok::Ident(w) if w == "not" => pending.push(Pending::Prefix {
+                    neg: false,
+                    rhs_min: 3,
+                }),
+                Tok::Ident(w) if w == "if" || func(w).is_some() => {
+                    if !matches!(toks.get(i + 1), Some((_, Tok::LParen))) {
                         return err(
-                            o,
-                            format!("{name} takes {want} argument(s), found {}", args.len()),
+                            found_at(i + 1),
+                            format!("expected '(' after {w}, found {}", found(i + 1)),
                         );
                     }
-                    Ok(Expr::Call(func, args))
+                    i += 1;
+                    let kind = match func(w) {
+                        Some(f) => Paren::Call {
+                            func: f,
+                            name: w.clone(),
+                            at: o,
+                        },
+                        None => Paren::If,
+                    };
+                    pending.push(Pending::Paren { kind, commas: 0 });
                 }
-                _ => {
-                    if matches!(self.peek(), Some((_, Tok::LParen))) {
+                Tok::Ident(w) => {
+                    if matches!(toks.get(i + 1), Some((_, Tok::LParen))) {
                         return err(
                             o,
                             format!(
-                                "unknown function '{name}' (Isolex has min, max, abs, \
+                                "unknown function '{w}' (Isolex has min, max, abs, \
                                  round, floor, ceil, cos, sin, cosr, sinr, if — \
                                  user-defined functions do not exist)"
                             ),
                         );
                     }
-                    Ok(Expr::Var(name))
+                    operands.push(e.push(ExprNode::Var(w.clone())));
+                    want_operand = false;
                 }
-            },
-            Some((o, t)) => err(o, format!("expected a value, found {t:?}")),
-            None => err(self.src_len, "expected a value, found end of expression"),
+                t => return err(o, format!("expected a value, found {t:?}")),
+            }
+        } else if let Some((op, bp)) = infix(tok) {
+            reduce(&mut e, &mut operands, &mut pending, bp);
+            pending.push(Pending::Infix {
+                op,
+                rhs_min: bp + 1,
+            });
+            want_operand = true;
+        } else {
+            reduce(&mut e, &mut operands, &mut pending, 0);
+            match (tok, pending.last_mut()) {
+                // a comma separates a call's or an if's arguments; an if
+                // takes exactly three
+                (
+                    Tok::Comma,
+                    Some(Pending::Paren {
+                        kind: kind @ (Paren::Call { .. } | Paren::If),
+                        commas,
+                    }),
+                ) if !(matches!(kind, Paren::If) && *commas == 2) => {
+                    *commas += 1;
+                    want_operand = true;
+                }
+                (Tok::RParen, Some(Pending::Paren { .. })) => {
+                    let Some(Pending::Paren { kind, commas }) = pending.pop() else {
+                        unreachable!("just matched")
+                    };
+                    match kind {
+                        Paren::Group => {}
+                        Paren::Call { func, name, at } => {
+                            let n = commas + 1;
+                            let want = match func {
+                                Func::Min | Func::Max => 2,
+                                _ => 1,
+                            };
+                            if n != want {
+                                return err(
+                                    at,
+                                    format!("{name} takes {want} argument(s), found {n}"),
+                                );
+                            }
+                            let args = operands.split_off(operands.len() - n);
+                            operands.push(e.push(ExprNode::Call(func, args)));
+                        }
+                        Paren::If => {
+                            if commas < 2 {
+                                return err(
+                                    o,
+                                    format!(
+                                        "expected {}, found {}",
+                                        Paren::If.expecting(commas),
+                                        found(i)
+                                    ),
+                                );
+                            }
+                            let alt = operands.pop().expect("if has three");
+                            let then = operands.pop().expect("if has three");
+                            let cond = operands.pop().expect("if has three");
+                            operands.push(e.push(ExprNode::If(cond, then, alt)));
+                        }
+                    }
+                }
+                (_, Some(Pending::Paren { kind, commas })) => {
+                    return err(
+                        o,
+                        format!("expected {}, found {}", kind.expecting(*commas), found(i)),
+                    );
+                }
+                _ => {
+                    return err(o, format!("unexpected {tok:?} after a complete expression"));
+                }
+            }
         }
+        i += 1;
     }
+
+    if want_operand {
+        return err(end, "expected a value, found end of expression");
+    }
+    reduce(&mut e, &mut operands, &mut pending, 0);
+    if let Some(Pending::Paren { kind, commas }) = pending.last() {
+        return err(
+            end,
+            format!(
+                "expected {}, found end of expression",
+                kind.expecting(*commas)
+            ),
+        );
+    }
+    debug_assert_eq!(operands, vec![e.root()], "one expression, its root last");
+    e.depth = e.measure_depth();
+    Ok(e)
 }
 
 // --- type check ----------------------------------------------------------
 
+/// What operand `k` of `node` must be, and what to call it if it is not.
+fn operand_must_be(node: &ExprNode, k: usize) -> (Ty, &'static str) {
+    match node {
+        ExprNode::Neg(_) => (Ty::Num, "the operand of unary minus"),
+        ExprNode::Bin(..) => (Ty::Num, "an arithmetic operand"),
+        ExprNode::Cmp(..) => (Ty::Num, "a comparison operand"),
+        ExprNode::And(..) | ExprNode::Or(..) => (Ty::Bool, "a boolean operand"),
+        ExprNode::Not(_) => (Ty::Bool, "the operand of 'not'"),
+        ExprNode::Call(..) => (Ty::Num, "a function argument"),
+        ExprNode::If(..) if k == 0 => (Ty::Bool, "the if condition"),
+        ExprNode::If(..) => (Ty::Num, "an if branch"),
+        ExprNode::Num(_) | ExprNode::Var(_) => unreachable!("no operands"),
+    }
+}
+
+fn type_of_node(node: &ExprNode) -> Ty {
+    match node {
+        ExprNode::Cmp(..) | ExprNode::And(..) | ExprNode::Or(..) | ExprNode::Not(_) => Ty::Bool,
+        _ => Ty::Num,
+    }
+}
+
+/// The root's type, checking every operand on the way, depth first and
+/// left to right with an explicit stack, so the first error reported is
+/// the one a recursive check would find first.
 fn type_of(e: &Expr, src_len: usize) -> Result<Ty, ExprError> {
-    let need = |e: &Expr, want: Ty, what: &str| -> Result<(), ExprError> {
-        let got = type_of(e, src_len)?;
-        if got != want {
-            return err(
-                src_len,
-                format!("{what} must be {want:?}, but this sub-expression is {got:?}"),
-            );
-        }
-        Ok(())
-    };
-    match e {
-        Expr::Num(_) | Expr::Var(_) => Ok(Ty::Num),
-        Expr::Neg(a) => {
-            need(a, Ty::Num, "the operand of unary minus")?;
-            Ok(Ty::Num)
-        }
-        Expr::Bin(_, a, b) => {
-            need(a, Ty::Num, "an arithmetic operand")?;
-            need(b, Ty::Num, "an arithmetic operand")?;
-            Ok(Ty::Num)
-        }
-        Expr::Cmp(_, a, b) => {
-            need(a, Ty::Num, "a comparison operand")?;
-            need(b, Ty::Num, "a comparison operand")?;
-            Ok(Ty::Bool)
-        }
-        Expr::And(a, b) | Expr::Or(a, b) => {
-            need(a, Ty::Bool, "a boolean operand")?;
-            need(b, Ty::Bool, "a boolean operand")?;
-            Ok(Ty::Bool)
-        }
-        Expr::Not(a) => {
-            need(a, Ty::Bool, "the operand of 'not'")?;
-            Ok(Ty::Bool)
-        }
-        Expr::Call(_, args) => {
-            for a in args {
-                need(a, Ty::Num, "a function argument")?;
+    let mut checked: Vec<bool> = vec![false; e.nodes.len()];
+    // (node, its next operand to check)
+    let mut stack: Vec<(usize, usize)> = vec![(e.root(), 0)];
+    while let Some(&(n, k)) = stack.last() {
+        let operands = e.nodes[n].operands();
+        match operands.get(k) {
+            Some(&o) if !checked[o] => stack.push((o, 0)),
+            Some(&o) => {
+                let (want, what) = operand_must_be(&e.nodes[n], k);
+                let got = type_of_node(&e.nodes[o]);
+                if got != want {
+                    return err(
+                        src_len,
+                        format!("{what} must be {want:?}, but this sub-expression is {got:?}"),
+                    );
+                }
+                stack.last_mut().expect("on the stack").1 += 1;
             }
-            Ok(Ty::Num)
-        }
-        Expr::If(c, t, a) => {
-            need(c, Ty::Bool, "the if condition")?;
-            need(t, Ty::Num, "an if branch")?;
-            need(a, Ty::Num, "an if branch")?;
-            Ok(Ty::Num)
+            None => {
+                checked[n] = true;
+                stack.pop();
+            }
         }
     }
+    Ok(type_of_node(&e.nodes[e.root()]))
 }
 
 /// Parse a numeric expression (the common case: any numeric attribute).
@@ -429,15 +634,7 @@ fn parse_typed(src: &str, want: Ty) -> Result<Expr, ExprError> {
     if toks.is_empty() {
         return err(0, "empty expression");
     }
-    let mut p = Parser {
-        toks: &toks,
-        pos: 0,
-        src_len: src.len(),
-    };
-    let e = p.parse_expr(0)?;
-    if let Some((o, t)) = p.peek() {
-        return err(*o, format!("unexpected {t:?} after a complete expression"));
-    }
+    let e = parse(src, &toks)?;
     let got = type_of(&e, src.len())?;
     if got != want {
         return err(
@@ -456,6 +653,8 @@ fn parse_typed(src: &str, want: Ty) -> Result<Expr, ExprError> {
     Ok(e)
 }
 
+// --- evaluation ----------------------------------------------------------
+
 /// Evaluate with the given variable environment. BTreeMap so that any
 /// iteration a future change introduces is deterministic by construction.
 ///
@@ -471,116 +670,155 @@ pub fn eval(e: &Expr, env: &BTreeMap<String, f64>) -> Result<f64, ExprError> {
     Ok(v)
 }
 
+/// A step of evaluation: a node to evaluate, or what to do with the
+/// values its operands left on the value stack.
+#[derive(Clone, Copy)]
+enum Step {
+    Eval(usize),
+    Apply(usize),
+    /// `and`/`or`: the left operand is on the value stack; the right one
+    /// is evaluated only if it can still change the answer
+    And(usize),
+    Or(usize),
+    /// turn the value on top into a boolean 0 or 1
+    Truth,
+    /// an if's condition is on the value stack: evaluate one branch
+    Choose(usize, usize),
+}
+
+/// Evaluate with a stack machine. Operands go left to right, so the
+/// first error is the one a recursive evaluation would hit first; `if`
+/// evaluates only the branch it takes, and `and`/`or` stop once the
+/// answer is known, so `if(d == 0, 0, 1 / d)` never divides by zero.
 fn value(e: &Expr, env: &BTreeMap<String, f64>) -> Result<f64, ExprError> {
-    Ok(match e {
-        Expr::Num(n) => *n,
-        Expr::Var(name) => match env.get(name) {
-            Some(v) => *v,
-            None => {
-                let mut names: Vec<&str> = env.keys().map(|s| s.as_str()).collect();
-                names.sort_unstable();
-                return err(
-                    0,
-                    format!(
-                        "unknown name '{name}' (in scope here: {})",
-                        if names.is_empty() {
-                            "nothing".to_string()
-                        } else {
-                            names.join(", ")
+    let mut steps = vec![Step::Eval(e.root())];
+    let mut values: Vec<f64> = Vec::new();
+    while let Some(step) = steps.pop() {
+        match step {
+            Step::Eval(n) => match &e.nodes[n] {
+                ExprNode::Num(v) => values.push(*v),
+                ExprNode::Var(name) => match env.get(name) {
+                    Some(v) => values.push(*v),
+                    None => {
+                        let mut names: Vec<&str> = env.keys().map(|s| s.as_str()).collect();
+                        names.sort_unstable();
+                        return err(
+                            0,
+                            format!(
+                                "unknown name '{name}' (in scope here: {})",
+                                if names.is_empty() {
+                                    "nothing".to_string()
+                                } else {
+                                    names.join(", ")
+                                }
+                            ),
+                        );
+                    }
+                },
+                ExprNode::And(a, b) => {
+                    steps.push(Step::And(*b));
+                    steps.push(Step::Eval(*a));
+                }
+                ExprNode::Or(a, b) => {
+                    steps.push(Step::Or(*b));
+                    steps.push(Step::Eval(*a));
+                }
+                ExprNode::If(c, t, alt) => {
+                    steps.push(Step::Choose(*t, *alt));
+                    steps.push(Step::Eval(*c));
+                }
+                node => {
+                    steps.push(Step::Apply(n));
+                    for o in node.operands().into_iter().rev() {
+                        steps.push(Step::Eval(o));
+                    }
+                }
+            },
+            Step::Apply(n) => {
+                let node = &e.nodes[n];
+                let args = values.split_off(values.len() - node.operands().len());
+                values.push(match node {
+                    ExprNode::Neg(_) => -args[0],
+                    ExprNode::Not(_) => bool_num(!num_bool(args[0])),
+                    ExprNode::Bin(op, ..) => {
+                        let (a, b) = (args[0], args[1]);
+                        match op {
+                            BinOp::Add => a + b,
+                            BinOp::Sub => a - b,
+                            BinOp::Mul => a * b,
+                            BinOp::Div => {
+                                if b == 0.0 {
+                                    return err(0, "division by zero");
+                                }
+                                a / b
+                            }
+                            BinOp::Rem => {
+                                if b == 0.0 {
+                                    return err(0, "remainder by zero");
+                                }
+                                a % b
+                            }
                         }
-                    ),
-                );
-            }
-        },
-        Expr::Neg(a) => -value(a, env)?,
-        Expr::Bin(op, a, b) => {
-            let (a, b) = (value(a, env)?, value(b, env)?);
-            match op {
-                BinOp::Add => a + b,
-                BinOp::Sub => a - b,
-                BinOp::Mul => a * b,
-                BinOp::Div => {
-                    if b == 0.0 {
-                        return err(0, "division by zero");
                     }
-                    a / b
-                }
-                BinOp::Rem => {
-                    if b == 0.0 {
-                        return err(0, "remainder by zero");
+                    ExprNode::Cmp(op, ..) => {
+                        let (a, b) = (args[0], args[1]);
+                        bool_num(match op {
+                            CmpOp::Lt => a < b,
+                            CmpOp::Le => a <= b,
+                            CmpOp::Gt => a > b,
+                            CmpOp::Ge => a >= b,
+                            CmpOp::Eq => a == b,
+                            CmpOp::Ne => a != b,
+                        })
                     }
-                    a % b
+                    ExprNode::Call(f, _) => match f {
+                        Func::Min => args[0].min(args[1]),
+                        Func::Max => args[0].max(args[1]),
+                        Func::Abs => args[0].abs(),
+                        Func::Round => args[0].round(),
+                        Func::Floor => args[0].floor(),
+                        Func::Ceil => args[0].ceil(),
+                        // cos/sin are the same bits everywhere (see below),
+                        // then quantized to 1e-9, which snaps results like
+                        // cosr(pi/2)'s 6e-17 to an exact 0; 1e-9 is far
+                        // below the two-decimal render resolution, so
+                        // nothing visible changes.
+                        Func::Cos => quantize(cos(args[0].to_radians())),
+                        Func::Sin => quantize(sin(args[0].to_radians())),
+                        Func::Cosr => quantize(cos(args[0])),
+                        Func::Sinr => quantize(sin(args[0])),
+                    },
+                    _ => unreachable!("evaluated directly, or by And, Or or Choose"),
+                });
+            }
+            Step::And(b) | Step::Or(b) => {
+                let a = num_bool(values.pop().expect("the left operand"));
+                // `and` with a false left, or `or` with a true one, is decided
+                if a == matches!(step, Step::Or(_)) {
+                    values.push(bool_num(a));
+                } else {
+                    steps.push(Step::Truth);
+                    steps.push(Step::Eval(b));
                 }
             }
-        }
-        Expr::Cmp(op, a, b) => {
-            let (a, b) = (value(a, env)?, value(b, env)?);
-            let r = match op {
-                CmpOp::Lt => a < b,
-                CmpOp::Le => a <= b,
-                CmpOp::Gt => a > b,
-                CmpOp::Ge => a >= b,
-                CmpOp::Eq => a == b,
-                CmpOp::Ne => a != b,
-            };
-            bool_num(r)
-        }
-        Expr::And(a, b) => bool_num(num_bool(value(a, env)?) && num_bool(value(b, env)?)),
-        Expr::Or(a, b) => bool_num(num_bool(value(a, env)?) || num_bool(value(b, env)?)),
-        Expr::Not(a) => bool_num(!num_bool(value(a, env)?)),
-        Expr::Call(f, args) => {
-            let v: Vec<f64> = args
-                .iter()
-                .map(|a| value(a, env))
-                .collect::<Result<_, _>>()?;
-            match f {
-                Func::Min => v[0].min(v[1]),
-                Func::Max => v[0].max(v[1]),
-                Func::Abs => v[0].abs(),
-                Func::Round => v[0].round(),
-                Func::Floor => v[0].floor(),
-                Func::Ceil => v[0].ceil(),
-                // cos/sin are the same bits everywhere (see below), then
-                // quantized to 1e-9, which snaps results like cosr(pi/2)'s
-                // 6e-17 to an exact 0; 1e-9 is far below the two-decimal
-                // render resolution, so nothing visible changes.
-                Func::Cos => quantize(cos(v[0].to_radians())),
-                Func::Sin => quantize(sin(v[0].to_radians())),
-                Func::Cosr => quantize(cos(v[0])),
-                Func::Sinr => quantize(sin(v[0])),
+            Step::Truth => {
+                let v = values.pop().expect("a value");
+                values.push(bool_num(num_bool(v)));
+            }
+            Step::Choose(t, alt) => {
+                let c = num_bool(values.pop().expect("the condition"));
+                steps.push(Step::Eval(if c { t } else { alt }));
             }
         }
-        Expr::If(c, t, a) => {
-            if num_bool(value(c, env)?) {
-                value(t, env)?
-            } else {
-                value(a, env)?
-            }
-        }
-    })
+    }
+    Ok(values.pop().expect("one value"))
 }
 
 /// Collect the free variable names of an expression.
 pub fn free_vars(e: &Expr, out: &mut std::collections::BTreeSet<String>) {
-    match e {
-        Expr::Num(_) => {}
-        Expr::Var(name) => {
+    for node in &e.nodes {
+        if let ExprNode::Var(name) = node {
             out.insert(name.clone());
-        }
-        Expr::Neg(a) | Expr::Not(a) => free_vars(a, out),
-        Expr::Bin(_, a, b) | Expr::Cmp(_, a, b) | Expr::And(a, b) | Expr::Or(a, b) => {
-            free_vars(a, out);
-            free_vars(b, out);
-        }
-        Expr::Call(_, args) => {
-            for a in args {
-                free_vars(a, out);
-            }
-        }
-        Expr::If(c, t, alt) => {
-            free_vars(c, out);
-            free_vars(t, out);
-            free_vars(alt, out);
         }
     }
 }

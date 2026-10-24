@@ -394,6 +394,32 @@ fragment "c" { part "p" { tile 0 0 0 1 1 } }
 }
 
 #[test]
+fn expressions_stop_at_the_expression_depth() {
+    // 300 minus signs around a 1: 301 deep, past the default 256
+    let deep = format!("\"{}1{}\"", "-(".repeat(300), ")".repeat(300));
+    let icon = |limit: &str| {
+        format!("icon \"e\" {{ category \"c\"; footprint 1 1 1; {limit} part \"p\" {{ box 0 0 0 1 1 {deep} }} }}")
+    };
+    let (_, msgs) = compile(&icon(""));
+    assert_eq!(
+        msgs,
+        vec![
+            "icon 'e' nests an expression 301 deep here past its expression-depth of 256 \
+             (levels, the default); if that is intended, raise it in this icon's definition or \
+             the lexicon block, or set `expression-depth #null` for no limit"
+        ]
+    );
+    compile_ok(&icon("expression-depth 301;"));
+    compile_ok(&icon("expression-depth #null;"));
+    let (_, msgs) = compile(&format!("lexicon {{ expression-depth 300 }}\n{}", icon("")));
+    assert!(
+        msgs.len() == 1
+            && msgs[0].contains("expression-depth of 300 (levels, set in the lexicon block)"),
+        "{msgs:?}"
+    );
+}
+
+#[test]
 fn axis_products_stop_at_the_icon_limit() {
     // ten axes of nine variants plus the bare option: 10^10 icons, which
     // must be refused by arithmetic, never built

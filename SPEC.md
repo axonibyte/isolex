@@ -91,7 +91,8 @@ child node (`extends "y"`); declaring both is an error.
 - `badge "icon-name" corner="ne" scale=0.5` — places another icon's
   compiled shapes at a viewBox corner (`ne` default; `nw`/`se`/`sw`;
   scale default 0.5). A badge target must not itself contain a badge.
-- `shape-limit n`, `repeat-limit n`, `insert-depth n` — this definition's
+- `shape-limit n`, `repeat-limit n`, `insert-depth n`,
+  `expression-depth n` — this definition's
   limits (§9); child value wins. Not in fragments, whose work counts
   toward the icon they are inserted into.
 
@@ -166,6 +167,13 @@ IEEE-754 remainder with the dividend's sign (Rust/C `fmod`). Division
 and remainder by zero are compile-time errors when reached. `repeat`
 counts must evaluate to non-negative integers; every iteration counts
 toward the icon's `repeat-limit` (§9).
+
+An expression may nest to any depth; how deeply one nests costs memory,
+never a crash, so a conforming compiler must not parse, check or
+evaluate expressions with recursion bounded by a call stack. Its depth
+is 1 for a number or a name and one more than its deepest operand for an
+operator or call (parentheses add nothing), and one nesting past the
+icon's `expression-depth` (§9) is an error where it is used.
 
 Every number is finite. An expression whose value is not (an overflow
 to infinity, or NaN) is a compile-time error when reached; only the
@@ -303,6 +311,7 @@ it:
 | `repeat-limit` | repeat iterations in one icon, all loops together | 1 000 000 | lexicon block, definition |
 | `insert-depth` | how deeply fragment insertions nest | 32 | lexicon block, definition |
 | `icon-limit` | icons the lexicon emits, after axis products | 100 000 | lexicon block |
+| `expression-depth` | how deeply one expression nests (§5) | 256 | lexicon block, definition |
 
 Each takes a positive whole number, or `#null` for no limit. A
 definition's value wins over the lexicon block's, which wins over the
@@ -318,7 +327,8 @@ before any combination is built.
 
 The defaults are the values above unless the compiler was built with
 `ISOLEX_DEFAULT_SHAPE_LIMIT`, `ISOLEX_DEFAULT_REPEAT_LIMIT`,
-`ISOLEX_DEFAULT_INSERT_DEPTH` or `ISOLEX_DEFAULT_ICON_LIMIT` set. Such a
+`ISOLEX_DEFAULT_INSERT_DEPTH`, `ISOLEX_DEFAULT_ICON_LIMIT` or
+`ISOLEX_DEFAULT_EXPRESSION_DEPTH` set. Such a
 build accepts or rejects a lexicon differently but never compiles it to
 different IR; a lexicon that needs more than the values above should
 say so with a directive.

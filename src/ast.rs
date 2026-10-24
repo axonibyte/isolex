@@ -248,6 +248,11 @@ pub const DEFAULT_ICON_LIMIT: u64 = build_default(
     100_000,
     "ISOLEX_DEFAULT_ICON_LIMIT must be a positive whole number",
 );
+pub const DEFAULT_EXPRESSION_DEPTH: u64 = build_default(
+    option_env!("ISOLEX_DEFAULT_EXPRESSION_DEPTH"),
+    256,
+    "ISOLEX_DEFAULT_EXPRESSION_DEPTH must be a positive whole number",
+);
 
 const fn build_default(set: Option<&str>, fallback: u64, complaint: &str) -> u64 {
     match set {
@@ -277,14 +282,18 @@ pub enum LimitKind {
     /// Icons the whole lexicon emits, after axis products.
     #[serde(rename = "icon-limit")]
     Icons,
+    /// How deeply one expression nests.
+    #[serde(rename = "expression-depth")]
+    ExpressionDepth,
 }
 
 impl LimitKind {
-    pub const ALL: [LimitKind; 4] = [
+    pub const ALL: [LimitKind; 5] = [
         LimitKind::Shapes,
         LimitKind::Repeats,
         LimitKind::InsertDepth,
         LimitKind::Icons,
+        LimitKind::ExpressionDepth,
     ];
 
     /// The directive that sets it.
@@ -294,6 +303,7 @@ impl LimitKind {
             LimitKind::Repeats => "repeat-limit",
             LimitKind::InsertDepth => "insert-depth",
             LimitKind::Icons => "icon-limit",
+            LimitKind::ExpressionDepth => "expression-depth",
         }
     }
 
@@ -305,6 +315,7 @@ impl LimitKind {
             LimitKind::Repeats => DEFAULT_REPEAT_LIMIT,
             LimitKind::InsertDepth => DEFAULT_INSERT_DEPTH,
             LimitKind::Icons => DEFAULT_ICON_LIMIT,
+            LimitKind::ExpressionDepth => DEFAULT_EXPRESSION_DEPTH,
         }
     }
 
