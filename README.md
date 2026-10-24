@@ -38,6 +38,7 @@ total, pure, and byte-deterministic. See [SPEC.md](SPEC.md).
 isolex check src/          # parse + resolve + lint the lexicon
 isolex compile src/ --ir out.json
 isolex docs src/           # generate the lexicon's reference tables
+isolex render src/ --svg out/ [--palette palette.json]   # one SVG per icon
 ```
 
 ## Documentation

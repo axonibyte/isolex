@@ -8,6 +8,7 @@ use isolex::expand::expand;
 use isolex::ir::IrDocument;
 use isolex::parser::{parse_lexicon, Diag};
 use isolex::project::{project, Vocabulary};
+use isolex::render::{missing_colors, render_icon, safe_file_name, Palette};
 use isolex::resolve::{resolve, SpanDiag};
 
 fn main() -> ExitCode {
@@ -23,6 +24,23 @@ fn main() -> ExitCode {
             _ => usage(),
         },
         Some("docs") if args.len() == 2 => run(&args[1], Mode::Docs),
+        Some("render") => match args.as_slice() {
+            [_, dir, flag, out] if flag == "--svg" => run(
+                dir,
+                Mode::Render {
+                    out: out.clone(),
+                    palette: None,
+                },
+            ),
+            [_, dir, flag, out, pflag, palette] if flag == "--svg" && pflag == "--palette" => run(
+                dir,
+                Mode::Render {
+                    out: out.clone(),
+                    palette: Some(palette.clone()),
+                },
+            ),
+            _ => usage(),
+        },
         _ => usage(),
     }
 }
@@ -31,6 +49,7 @@ fn usage() -> ExitCode {
     eprintln!("usage: isolex check <lexicon-dir>");
     eprintln!("       isolex compile <lexicon-dir> --ir <out.json|->");
     eprintln!("       isolex docs <lexicon-dir>");
+    eprintln!("       isolex render <lexicon-dir> --svg <out-dir> [--palette <palette.json>]");
     ExitCode::from(2)
 }
 
@@ -38,6 +57,12 @@ enum Mode {
     Check,
     CompileTo(String),
     Docs,
+    /// One SVG per icon into `out`, colored by the built-in palette or
+    /// the built-in one with a palette file laid over it.
+    Render {
+        out: String,
+        palette: Option<String>,
+    },
 }
 
 fn collect_ilx(dir: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<()> {
@@ -151,7 +176,67 @@ fn run(dir: &str, mode: Mode) -> ExitCode {
             print!("{}", docs_markdown(&doc));
             ExitCode::SUCCESS
         }
+        Mode::Render { out, palette } => render_svg(&doc, &out, palette.as_deref()),
     }
+}
+
+/// One SVG per icon into `out`. Everything is checked first, the palette,
+/// every token's color and every icon name as a file name, so a render
+/// that fails writes nothing.
+fn render_svg(doc: &IrDocument, out: &str, palette: Option<&str>) -> ExitCode {
+    let palette = match palette {
+        None => Palette::default(),
+        Some(path) => match std::fs::read_to_string(path) {
+            Ok(text) => match Palette::with_json(&text) {
+                Ok(p) => p,
+                Err(e) => {
+                    eprintln!("isolex: {path}: {e}");
+                    return ExitCode::FAILURE;
+                }
+            },
+            Err(e) => {
+                eprintln!("isolex: cannot read {path}: {e}");
+                return ExitCode::FAILURE;
+            }
+        },
+    };
+    let missing = missing_colors(&doc.icons, &palette);
+    for (token, icons) in &missing {
+        let icons: Vec<&str> = icons.iter().map(|s| s.as_str()).collect();
+        eprintln!(
+            "isolex: the palette has no color for '{token}' (painted by {}); add it to a palette \
+             file and pass --palette",
+            icons.join(", ")
+        );
+    }
+    let unsafe_names: Vec<&str> = doc
+        .icons
+        .iter()
+        .map(|i| i.name.as_str())
+        .filter(|n| !safe_file_name(n))
+        .collect();
+    for name in &unsafe_names {
+        eprintln!(
+            "isolex: icon '{name}' cannot be written as a file name; render takes names of \
+             letters, digits, '-', '_' and '.', not starting with '.'"
+        );
+    }
+    if !missing.is_empty() || !unsafe_names.is_empty() {
+        return ExitCode::FAILURE;
+    }
+    if let Err(e) = std::fs::create_dir_all(out) {
+        eprintln!("isolex: cannot create {out}: {e}");
+        return ExitCode::FAILURE;
+    }
+    for icon in &doc.icons {
+        let path = Path::new(out).join(format!("{}.svg", icon.name));
+        if let Err(e) = std::fs::write(&path, render_icon(icon, &palette)) {
+            eprintln!("isolex: cannot write {}: {e}", path.display());
+            return ExitCode::FAILURE;
+        }
+    }
+    println!("rendered {} icon(s) into {out}", doc.icons.len());
+    ExitCode::SUCCESS
 }
 
 fn to_json(doc: &IrDocument) -> String {

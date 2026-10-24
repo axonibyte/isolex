@@ -632,6 +632,121 @@ fn deep_expressions_never_overflow_the_stack() {
     assert!(ok, "{}", &stderr[..stderr.len().min(400)]);
 }
 
+/// Run `isolex render` on a lexicon of the given files: (succeeded,
+/// stderr, the output directory).
+fn render(tag: &str, files: &[(&str, &str)], palette: Option<&str>) -> (bool, String, PathBuf) {
+    let base = std::env::temp_dir().join(format!("isolex-e2e-render-{tag}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let src = base.join("src");
+    std::fs::create_dir_all(&src).unwrap();
+    for (name, text) in files {
+        std::fs::write(src.join(name), text).unwrap();
+    }
+    let out = base.join("svg");
+    let mut cmd = bin();
+    cmd.arg("render").arg(&src).arg("--svg").arg(&out);
+    if let Some(p) = palette {
+        let path = base.join("palette.json");
+        std::fs::write(&path, p).unwrap();
+        cmd.arg("--palette").arg(path);
+    }
+    let run = cmd.output().unwrap();
+    (
+        run.status.success(),
+        String::from_utf8(run.stderr).unwrap(),
+        out,
+    )
+}
+
+/// Every SVG in a directory, in name order, as one text.
+fn svgs(dir: &std::path::Path) -> String {
+    let mut names: Vec<String> = std::fs::read_dir(dir)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    names.sort();
+    names
+        .iter()
+        .map(|n| {
+            format!(
+                "== {n} ==\n{}",
+                std::fs::read_to_string(dir.join(n)).unwrap()
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn render_matches_the_svg_golden_and_is_deterministic() {
+    let sample = include_str!("fixtures/sample.ilx");
+    let (ok, stderr, out) = render("golden", &[("sample.ilx", sample)], None);
+    assert!(ok, "{stderr}");
+    let a = svgs(&out);
+    let (_, _, again) = render("golden-again", &[("sample.ilx", sample)], None);
+    assert_eq!(a, svgs(&again), "a second render must be byte-identical");
+    // one file per icon the IR holds
+    assert_eq!(a.matches("== ").count(), 7, "{a}");
+
+    let golden_path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/sample.svg.golden"
+    );
+    if std::env::var("UPDATE_GOLDENS").is_ok() {
+        std::fs::write(golden_path, &a).unwrap();
+    }
+    let want = std::fs::read_to_string(golden_path)
+        .expect("golden missing: run with UPDATE_GOLDENS=1 once, then review the diff");
+    assert_eq!(a, want, "SVG drifted from the golden");
+}
+
+#[test]
+fn render_takes_a_palette_over_the_built_in_one() {
+    let icon = "icon \"i\" { category \"c\"; canvas 9 9; part \"p\" { at 0 0 0 { circle 4 4 3 fill=\"brand\" stroke=\"ink\" } } }\n";
+    // brand has no built-in color: nothing is written
+    let (ok, stderr, out) = render("nopalette", &[("i.ilx", icon)], None);
+    assert!(!ok, "{stderr}");
+    assert!(
+        stderr.contains("the palette has no color for 'brand' (painted by i); add it to a palette file and pass --palette"),
+        "{stderr}"
+    );
+    assert!(!out.exists(), "a failed render writes nothing");
+
+    let (ok, stderr, out) = render(
+        "palette",
+        &[("i.ilx", icon)],
+        Some(r##"{"brand": "#c00", "ink": "black"}"##),
+    );
+    assert!(ok, "{stderr}");
+    let svg = std::fs::read_to_string(out.join("i.svg")).unwrap();
+    assert!(
+        svg.contains("<circle cx=\"4.00\" cy=\"4.00\" r=\"3.00\" fill=\"#c00\" stroke=\"black\" stroke-width=\"1.20\"/>"),
+        "{svg}"
+    );
+
+    let (ok, stderr, _) = render("badpalette", &[("i.ilx", icon)], Some("[\"red\"]"));
+    assert!(!ok && stderr.contains("must be a JSON object"), "{stderr}");
+}
+
+#[test]
+fn render_refuses_an_icon_name_that_is_not_a_file_name() {
+    // icon names become file names; this one would climb out of the
+    // output directory
+    let (ok, stderr, out) = render(
+        "unsafe",
+        &[(
+            "u.ilx",
+            "icon \"../escape\" { category \"c\"; canvas 9 9; part \"p\" { at 0 0 0 { circle 4 4 3 } } }\n",
+        )],
+        None,
+    );
+    assert!(!ok, "{stderr}");
+    assert!(
+        stderr.contains("icon '../escape' cannot be written as a file name"),
+        "{stderr}"
+    );
+    assert!(!out.exists() && !out.parent().unwrap().join("escape.svg").exists());
+}
+
 #[test]
 fn check_failures_render_file_line_col_and_exit_nonzero() {
     let dir = std::env::temp_dir().join(format!("isolex-e2e-bad-{}", std::process::id()));

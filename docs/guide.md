@@ -314,7 +314,21 @@ when it reserves nothing, since the grant then has no effect.
 isolex check src/                 # while authoring — fast, catches everything
 isolex compile src/ --ir out.json # feed a renderer / build
 isolex docs src/ > reference.md   # generate the lexicon's reference tables
+isolex render src/ --svg out/     # one SVG per icon, to look at
 ```
+
+`render` colors tokens from a built-in palette of placeholder colors for
+the tokens the compiler uses by default. Give it your own as a JSON
+object of token to CSS color, which extends or overrides the built-in
+one:
+
+```sh
+echo '{"accent": "#c62828", "ink": "#111"}' > palette.json
+isolex render src/ --svg out/ --palette palette.json
+```
+
+A token with no color is an error naming the icons that paint with it,
+and nothing is written.
 
 `check` early and often; the diagnostics are precise and are treated as
 API (they have golden tests). When two builds of the same source differ,

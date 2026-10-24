@@ -267,7 +267,14 @@ already formatted.
 
 **The formatting rule**: every number a conforming toolchain prints into
 output text (path data at compile time; coordinates at render time) is
-formatted with exactly two decimal places, round-half-to-even.
+formatted with exactly two decimal places, round-half-to-even on the
+number's exact binary value: 0.125 is `0.12` and 0.375 `0.38`, while
+0.145, which is 0.14499… in binary, is `0.14`. `isolex render` (§10) is
+the reference for the render-time half: each icon an SVG document whose
+viewBox, coordinates, radii, widths, opacities and badge transforms
+follow this rule, whose path data passes through unchanged, and whose
+badges are a `<g transform="translate(tx ty) scale(s)">` around the
+target's shapes.
 
 Determinism: identical lexicon bytes must produce identical IR bytes.
 Platform maths libraries disagree in the last bit of `cos` and `sin`
@@ -338,7 +345,13 @@ say so with a directive.
 `isolex check <dir>` parses, resolves, expands and projects, reporting
 diagnostics and counts. `isolex compile <dir> --ir <path|->` writes the
 IR JSON. `isolex docs <dir>` emits per-category markdown reference
-tables from `describe` metadata. Diagnostics go to standard error,
+tables from `describe` metadata. `isolex render <dir> --svg <out>
+[--palette <file>]` writes one `<icon>.svg` per icon into `<out>` (§7),
+coloring tokens from a built-in palette that a palette file (a JSON
+object of token to CSS color) extends or overrides; a token with no
+color, or an icon name that is not a safe file name (letters, digits,
+`-`, `_` and `.`, not starting with `.`), is an error, and a render
+that fails writes nothing. Diagnostics go to standard error,
 warnings first. Exit status: 0 clean (warnings included), 1 errors or
 I/O failure, 2 usage.
 

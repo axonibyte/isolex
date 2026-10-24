@@ -7,4 +7,5 @@ pub mod expr;
 pub mod ir;
 pub mod parser;
 pub mod project;
+pub mod render;
 pub mod resolve;
