@@ -6,6 +6,7 @@
 
 use crate::ast::*;
 use crate::expr;
+use crate::kdl;
 
 /// A diagnostic with a resolved location. Rendering is intentionally
 /// plain (`file:line:col: message`) so error output is stable enough to
@@ -59,7 +60,7 @@ impl<'a> FileCtx<'a> {
         });
     }
 
-    fn span(&self, s: miette::SourceSpan) -> Span {
+    fn span(&self, s: kdl::Span) -> Span {
         Span {
             file: self.idx,
             start: s.offset(),
@@ -113,17 +114,14 @@ pub fn parse_lexicon(files: &[(String, String)]) -> ParseOutcome {
             text,
             diags: Vec::new(),
         };
-        match text.parse::<kdl::KdlDocument>() {
+        match kdl::Document::parse(text) {
             Ok(doc) => {
                 for node in doc.nodes() {
                     parse_top(&mut ctx, node, &mut lexicon);
                 }
             }
-            Err(e) => {
-                // kdl's own message, located at the first error span
-                let off = e.diagnostics.first().map(|d| d.span.offset()).unwrap_or(0);
-                ctx.diag(off, format!("KDL syntax error: {e}"));
-            }
+            // the reader stops at the first syntax error, and says what it is
+            Err(e) => ctx.diag(e.offset, format!("KDL syntax error: {}", e.message)),
         }
         diags.append(&mut ctx.diags);
     }
@@ -132,7 +130,7 @@ pub fn parse_lexicon(files: &[(String, String)]) -> ParseOutcome {
 
 const TOP_NODES: &[&str] = &["lexicon", "base", "icon", "fragment", "axis"];
 
-fn parse_top(ctx: &mut FileCtx, node: &kdl::KdlNode, out: &mut Lexicon) {
+fn parse_top(ctx: &mut FileCtx, node: kdl::NodeRef, out: &mut Lexicon) {
     let name = node.name().value();
     match name {
         "lexicon" => {
@@ -226,7 +224,7 @@ fn parse_top(ctx: &mut FileCtx, node: &kdl::KdlNode, out: &mut Lexicon) {
     }
 }
 
-fn parse_definition(ctx: &mut FileCtx, node: &kdl::KdlNode) -> Option<Definition> {
+fn parse_definition(ctx: &mut FileCtx, node: kdl::NodeRef) -> Option<Definition> {
     let kind = match node.name().value() {
         "base" => DefKind::Base,
         "icon" => DefKind::Icon,
@@ -323,18 +321,18 @@ fn limit_kind(name: &str) -> Option<LimitKind> {
 }
 
 /// `shape-limit 250000`, or `shape-limit #null` for none.
-fn set_limit(ctx: &mut FileCtx, node: &kdl::KdlNode, kind: LimitKind, limits: &mut Limits) {
+fn set_limit(ctx: &mut FileCtx, node: kdl::NodeRef, kind: LimitKind, limits: &mut Limits) {
     let off = node.span().offset();
     let name = kind.directive();
-    let args: Vec<&kdl::KdlEntry> = node
+    let args: Vec<&kdl::Entry> = node
         .entries()
         .iter()
         .filter(|e| e.name().is_none())
         .collect();
     let limit = match args.as_slice() {
         [e] => match e.value() {
-            kdl::KdlValue::Integer(i) => u64::try_from(*i).ok().filter(|n| *n > 0).map(Limit::At),
-            kdl::KdlValue::Null => Some(Limit::Unlimited),
+            kdl::Value::Integer(i) => u64::try_from(*i).ok().filter(|n| *n > 0).map(Limit::At),
+            kdl::Value::Null => Some(Limit::Unlimited),
             _ => None,
         },
         _ => None,
@@ -351,7 +349,7 @@ fn set_limit(ctx: &mut FileCtx, node: &kdl::KdlNode, kind: LimitKind, limits: &m
     }
 }
 
-fn parse_body_child(ctx: &mut FileCtx, ch: &kdl::KdlNode, kind: DefKind, def: &mut Definition) {
+fn parse_body_child(ctx: &mut FileCtx, ch: kdl::NodeRef, kind: DefKind, def: &mut Definition) {
     let off = ch.span().offset();
     // An axis is a set of overlays; anything else in it would be dropped.
     if kind == DefKind::Axis && !matches!(ch.name().value(), "variant" | "emit-base") {
@@ -511,7 +509,7 @@ fn parse_body_child(ctx: &mut FileCtx, ch: &kdl::KdlNode, kind: DefKind, def: &m
             });
         }
         "emit-base" if kind == DefKind::Axis => match ch.entries().first().map(|e| e.value()) {
-            Some(kdl::KdlValue::Bool(b)) => def.emit_base = *b,
+            Some(kdl::Value::Bool(b)) => def.emit_base = *b,
             _ => ctx.diag(off, "emit-base takes #true or #false"),
         },
         other if limit_kind(other).is_some() => {
@@ -555,7 +553,7 @@ enum Ctx {
     PolyPts2,
 }
 
-fn parse_geometry_children(ctx: &mut FileCtx, node: &kdl::KdlNode, gctx: Ctx) -> Vec<Node> {
+fn parse_geometry_children(ctx: &mut FileCtx, node: kdl::NodeRef, gctx: Ctx) -> Vec<Node> {
     let mut out = Vec::new();
     if let Some(children) = node.children() {
         for ch in children.nodes() {
@@ -575,7 +573,7 @@ const NODES_2D: &[&str] = &[
     "line", "circle", "ellipse", "rect", "arc", "path", "poly", "repeat", "insert",
 ];
 
-fn parse_geometry(ctx: &mut FileCtx, ch: &kdl::KdlNode, gctx: Ctx) -> Option<Node> {
+fn parse_geometry(ctx: &mut FileCtx, ch: kdl::NodeRef, gctx: Ctx) -> Option<Node> {
     let off = ch.span().offset();
     let name = ch.name().value();
     let span = ctx.span(ch.span());
@@ -872,15 +870,15 @@ fn parse_path_template(ctx: &mut FileCtx, off: usize, d: &str) -> Option<Vec<Pat
 
 // --- entry helpers -------------------------------------------------------
 
-fn kdl_num(v: &kdl::KdlValue) -> Option<f64> {
+fn kdl_num(v: &kdl::Value) -> Option<f64> {
     match v {
-        kdl::KdlValue::Integer(i) => Some(*i as f64),
-        kdl::KdlValue::Float(f) => Some(*f),
+        kdl::Value::Integer(i) => Some(*i as f64),
+        kdl::Value::Float(f) => Some(*f),
         _ => None,
     }
 }
 
-fn parse_num_entry(ctx: &mut FileCtx, e: &kdl::KdlEntry) -> Option<Num> {
+fn parse_num_entry(ctx: &mut FileCtx, e: &kdl::Entry) -> Option<Num> {
     if let Some(n) = kdl_num(e.value()) {
         // KDL 2.0 spells these #inf, #-inf and #nan; JSON has none of them
         if !n.is_finite() {
@@ -921,7 +919,7 @@ fn parse_num_entry(ctx: &mut FileCtx, e: &kdl::KdlEntry) -> Option<Num> {
     None
 }
 
-fn num_args<const N: usize>(ctx: &mut FileCtx, node: &kdl::KdlNode) -> Option<[Num; N]> {
+fn num_args<const N: usize>(ctx: &mut FileCtx, node: kdl::NodeRef) -> Option<[Num; N]> {
     let off = node.span().offset();
     let v = num_args_from(ctx, node, 0, off, N, node.name().value())?;
     v.try_into().ok()
@@ -929,13 +927,13 @@ fn num_args<const N: usize>(ctx: &mut FileCtx, node: &kdl::KdlNode) -> Option<[N
 
 fn num_args_from(
     ctx: &mut FileCtx,
-    node: &kdl::KdlNode,
+    node: kdl::NodeRef,
     skip: usize,
     off: usize,
     want: usize,
     what: &str,
 ) -> Option<Vec<Num>> {
-    let args: Vec<&kdl::KdlEntry> = node
+    let args: Vec<&kdl::Entry> = node
         .entries()
         .iter()
         .filter(|e| e.name().is_none())
@@ -958,7 +956,7 @@ fn num_args_from(
     Some(out)
 }
 
-fn first_string_arg(ctx: &mut FileCtx, node: &kdl::KdlNode) -> Option<String> {
+fn first_string_arg(ctx: &mut FileCtx, node: kdl::NodeRef) -> Option<String> {
     let e = node.entries().iter().find(|e| e.name().is_none())?;
     match e.value().as_string() {
         Some(s) => Some(s.to_string()),
@@ -969,7 +967,7 @@ fn first_string_arg(ctx: &mut FileCtx, node: &kdl::KdlNode) -> Option<String> {
     }
 }
 
-fn string_args(ctx: &mut FileCtx, node: &kdl::KdlNode) -> Vec<String> {
+fn string_args(ctx: &mut FileCtx, node: kdl::NodeRef) -> Vec<String> {
     let mut out = Vec::new();
     for e in node.entries().iter().filter(|e| e.name().is_none()) {
         match e.value().as_string() {
@@ -980,14 +978,14 @@ fn string_args(ctx: &mut FileCtx, node: &kdl::KdlNode) -> Vec<String> {
     out
 }
 
-fn string_prop(_ctx: &mut FileCtx, node: &kdl::KdlNode, name: &str) -> Option<String> {
+fn string_prop(_ctx: &mut FileCtx, node: kdl::NodeRef, name: &str) -> Option<String> {
     node.entries()
         .iter()
         .find(|e| e.name().map(|n| n.value()) == Some(name))
         .and_then(|e| e.value().as_string().map(|s| s.to_string()))
 }
 
-fn num_prop(ctx: &mut FileCtx, node: &kdl::KdlNode, name: &str) -> Option<Num> {
+fn num_prop(ctx: &mut FileCtx, node: kdl::NodeRef, name: &str) -> Option<Num> {
     let e = node
         .entries()
         .iter()
@@ -995,7 +993,7 @@ fn num_prop(ctx: &mut FileCtx, node: &kdl::KdlNode, name: &str) -> Option<Num> {
     parse_num_entry(ctx, e)
 }
 
-fn when_prop(ctx: &mut FileCtx, node: &kdl::KdlNode) -> Option<Num> {
+fn when_prop(ctx: &mut FileCtx, node: kdl::NodeRef) -> Option<Num> {
     let e = node
         .entries()
         .iter()
@@ -1019,7 +1017,7 @@ fn when_prop(ctx: &mut FileCtx, node: &kdl::KdlNode) -> Option<Num> {
     }
 }
 
-fn style_props(ctx: &mut FileCtx, node: &kdl::KdlNode) -> Style {
+fn style_props(ctx: &mut FileCtx, node: kdl::NodeRef) -> Style {
     Style {
         fill: string_prop(ctx, node, "fill"),
         stroke: string_prop(ctx, node, "stroke"),
@@ -1044,7 +1042,7 @@ fn reserved(name: &str, what: &str) -> String {
 
 /// A box's `fills`: body (the default), virt or none. Anything else used
 /// to fall back to the body fills without a word.
-fn fills_prop(ctx: &mut FileCtx, node: &kdl::KdlNode) -> Option<Option<String>> {
+fn fills_prop(ctx: &mut FileCtx, node: kdl::NodeRef) -> Option<Option<String>> {
     let Some(e) = node
         .entries()
         .iter()

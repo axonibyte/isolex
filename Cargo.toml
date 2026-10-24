@@ -8,11 +8,9 @@ license = "Apache-2.0"
 repository = "https://github.com/axonibyte/isolex"
 
 [dependencies]
-kdl = "6.7"
 # cos/sin in pure Rust, identical bits on every platform (SPEC §7): no
 # arch-specific paths, and no hardware float instructions on the way.
 libm = { version = "0.2.16", default-features = false, features = ["force-soft-floats"] }
-miette = "7"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 
