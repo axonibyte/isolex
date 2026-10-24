@@ -33,6 +33,9 @@ pub struct ResolvedDef {
     pub axes: Vec<String>,
     pub grants: Vec<Grant>,
     pub parts: Vec<(String, Vec<Node>)>,
+    /// Limits set along the chain, child over parent, each with the name
+    /// of the definition (or variant) that set it.
+    pub limits: BTreeMap<LimitKind, (Limit, String)>,
     pub span: Span,
 }
 
@@ -52,6 +55,8 @@ pub struct Resolved {
     pub bases: BTreeMap<String, ResolvedDef>,
     pub fragments: BTreeMap<String, Definition>,
     pub axes: BTreeMap<String, AxisDef>,
+    /// Limits the lexicon block sets for every icon.
+    pub lexicon_limits: Limits,
     pub diags: Vec<SpanDiag>,
 }
 
@@ -100,7 +105,14 @@ pub(crate) fn suggest<'x>(want: &str, have: impl Iterator<Item = &'x str>) -> St
 
 pub fn resolve(lexicon: &Lexicon) -> Resolved {
     let mut ctx = Ctx { diags: Vec::new() };
-    let mut out = Resolved::default();
+    let mut out = Resolved {
+        lexicon_limits: lexicon
+            .config
+            .as_ref()
+            .map(|c| c.limits.clone())
+            .unwrap_or_default(),
+        ..Resolved::default()
+    };
 
     // --- index and duplicate detection --------------------------------
     let mut index: BTreeMap<&str, &Definition> = BTreeMap::new();
@@ -253,6 +265,7 @@ fn resolve_one(
         axes: Vec::new(),
         grants: Vec::new(),
         parts: Vec::new(),
+        limits: BTreeMap::new(),
         span: leaf.span,
     };
 
@@ -288,6 +301,9 @@ fn merge_body(ctx: &mut Ctx, r: &mut ResolvedDef, body: &DefBody, whose: &str) {
         }
     }
     r.grants.extend(body.grants.iter().cloned());
+    for (kind, limit) in &body.limits {
+        r.limits.insert(*kind, (*limit, whose.to_string()));
+    }
 
     for decl in &body.parts {
         let existing = r.parts.iter().position(|(n, _)| n == &decl.name);

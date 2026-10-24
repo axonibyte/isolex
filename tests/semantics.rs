@@ -244,7 +244,7 @@ icon \"srv\" {{ extends \"primary\" }}"
 }
 
 #[test]
-fn repeat_when_and_the_cap() {
+fn repeat_when_and_counts() {
     let src = r#"
 icon "x" {
   category "c"
@@ -261,13 +261,12 @@ icon "x" {
     let xs: Vec<f64> = boxes(&icons[0]).iter().map(|b| b.0).collect();
     assert_eq!(xs, vec![0.0, 1.0, 3.0], "the guard skipped i == 2");
 
-    let (_, msgs) = compile(
-        "icon \"y\" { category \"c\"; footprint 1 1 1; part \"p\" { repeat 10001 \"i\" { box 0 0 0 1 1 1 } } }",
+    // a repeat has no cap of its own any more: past the old 10 000 is fine
+    // while the icon stays within its shape-limit and repeat-limit
+    let icons = compile_ok(
+        "icon \"y\" { category \"c\"; footprint 1 1 1; part \"p\" { repeat 10001 \"i\" { tile 0 0 0 1 1 } } }",
     );
-    assert!(
-        msgs.iter().any(|m| m.contains("exceeds the cap")),
-        "{msgs:?}"
-    );
+    assert_eq!(icons[0].shapes.len(), 10_001);
 
     let (_, msgs) = compile(
         "icon \"z\" { category \"c\"; footprint 1 1 1; part \"p\" { repeat 2.5 \"i\" { box 0 0 0 1 1 1 } } }",
@@ -276,6 +275,164 @@ icon "x" {
         msgs.iter().any(|m| m.contains("non-negative integer")),
         "{msgs:?}"
     );
+}
+
+#[test]
+fn nested_repeats_stop_at_the_shape_limit() {
+    // two repeats, each well under any per-repeat cap, multiply to 101 000
+    // tiles; before limits this ran on to 100 million and out of memory
+    let (icons, msgs) = compile(
+        "icon \"big\" { category \"c\"; footprint 1 1 1; part \"p\" {\n  repeat 1000 \"a\" { repeat 101 \"b\" { tile 0 0 0 1 1 } } } }",
+    );
+    assert_eq!(
+        msgs,
+        vec![
+            "icon 'big' goes here past its shape-limit of 100000 (shapes and points, the \
+             default); if that is intended, raise it in this icon's definition or the lexicon \
+             block, or set `shape-limit #null` for no limit"
+        ]
+    );
+    assert_eq!(
+        icons[0].shapes.len(),
+        100_000,
+        "expansion stopped at the limit"
+    );
+}
+
+#[test]
+fn the_shape_limit_can_be_raised_lowered_or_switched_off() {
+    let six = "part \"p\" { repeat 6 \"i\" { tile 0 0 0 1 1 } }";
+    let lexicon = "lexicon { shape-limit 5 }\n";
+
+    let (_, msgs) = compile(&format!(
+        "{lexicon}icon \"i\" {{ category \"c\"; footprint 1 1 1; {six} }}"
+    ));
+    assert!(
+        msgs.len() == 1
+            && msgs[0].contains("shape-limit of 5 (shapes and points, set in the lexicon block)"),
+        "{msgs:?}"
+    );
+
+    // a definition's value beats the lexicon block's
+    compile_ok(&format!(
+        "{lexicon}icon \"i\" {{ category \"c\"; footprint 1 1 1; shape-limit 10; {six} }}"
+    ));
+    // #null switches it off
+    compile_ok(&format!(
+        "{lexicon}icon \"i\" {{ category \"c\"; footprint 1 1 1; shape-limit #null; {six} }}"
+    ));
+
+    // inherited from a base, and a child's own value beats its parent's
+    let base = "base \"b\" { category \"c\"; footprint 1 1 1; shape-limit 3 }\n";
+    let (_, msgs) = compile(&format!("{base}icon \"i\" {{ extends \"b\"; {six} }}"));
+    assert!(
+        msgs.len() == 1 && msgs[0].contains("shape-limit of 3 (shapes and points, set by 'b')"),
+        "{msgs:?}"
+    );
+    compile_ok(&format!(
+        "{base}icon \"i\" {{ extends \"b\"; shape-limit 6; {six} }}"
+    ));
+}
+
+#[test]
+fn polygon_points_count_toward_the_shape_limit() {
+    // the polygon and its four points are five
+    let poly = "part \"p\" { poly3d { pt 0 0 0; pt 1 0 0; pt 1 1 0; pt 0 1 0 } }";
+    compile_ok(&format!(
+        "icon \"i\" {{ category \"c\"; footprint 1 1 1; shape-limit 5; {poly} }}"
+    ));
+    let (_, msgs) = compile(&format!(
+        "icon \"i\" {{ category \"c\"; footprint 1 1 1; shape-limit 4; {poly} }}"
+    ));
+    assert!(
+        msgs.len() == 1 && msgs[0].contains("shape-limit of 4"),
+        "{msgs:?}"
+    );
+}
+
+#[test]
+fn loops_that_emit_nothing_stop_at_the_repeat_limit() {
+    // no shapes at all, so only the iteration count can stop it
+    let empty =
+        "part \"p\" { repeat 1001 \"a\" { repeat 1000 \"b\" { tile 0 0 0 1 1 when=\"b < 0\" } } }";
+    let (icons, msgs) = compile(&format!(
+        "icon \"spin\" {{ category \"c\"; footprint 1 1 1; {empty} }}"
+    ));
+    assert!(
+        msgs.len() == 1
+            && msgs[0].contains(
+                "icon 'spin' goes here past its repeat-limit of 1000000 (repeat iterations, the default)"
+            ),
+        "{msgs:?}"
+    );
+    assert!(icons[0].shapes.is_empty());
+    compile_ok(&format!(
+        "icon \"spin\" {{ category \"c\"; footprint 1 1 1; repeat-limit 2000000; {empty} }}"
+    ));
+}
+
+#[test]
+fn fragment_nesting_stops_at_the_insert_depth() {
+    let chain = r#"
+fragment "a" { part "p" { insert "b" } }
+fragment "b" { part "p" { insert "c" } }
+fragment "c" { part "p" { tile 0 0 0 1 1 } }
+"#;
+    compile_ok(&format!(
+        "{chain}icon \"i\" {{ category \"c\"; footprint 1 1 1; part \"p\" {{ insert \"a\" }} }}"
+    ));
+    let (_, msgs) = compile(&format!(
+        "{chain}icon \"i\" {{ category \"c\"; footprint 1 1 1; insert-depth 2; part \"p\" {{ insert \"a\" }} }}"
+    ));
+    assert!(
+        msgs.len() == 1
+            && msgs[0].contains(
+                "icon 'i' nests fragment insertions here past its insert-depth of 2 (levels, set by 'i')"
+            ),
+        "{msgs:?}"
+    );
+}
+
+#[test]
+fn axis_products_stop_at_the_icon_limit() {
+    // ten axes of nine variants plus the bare option: 10^10 icons, which
+    // must be refused by arithmetic, never built
+    let mut src = String::new();
+    for a in 0..10 {
+        src.push_str(&format!("axis \"a{a}\" {{"));
+        for v in 0..9 {
+            src.push_str(&format!(
+                " variant \"v{a}{v}\" {{ part \"p{a}{v}\" {{ tile 0 0 0 1 1 }} }};"
+            ));
+        }
+        src.push_str(" }\n");
+    }
+    let axes: Vec<String> = (0..10).map(|a| format!("\"a{a}\"")).collect();
+    src.push_str(&format!(
+        "icon \"many\" {{ category \"c\"; footprint 1 1 1; axes {} }}\n",
+        axes.join(" ")
+    ));
+    let (icons, msgs) = compile(&src);
+    assert!(
+        msgs.len() == 1
+            && msgs[0].contains(
+                "'many' takes the lexicon past its icon-limit of 100000 (icons, the default); \
+                 if that is intended, raise it in the lexicon block"
+            ),
+        "{msgs:?}"
+    );
+    assert!(icons.is_empty());
+
+    // and from the lexicon block: four icons against a limit of three, then four
+    let small = "axis \"s\" { variant \"x\" { part \"x\" { tile 0 0 0 1 1 } } }\n\
+                 icon \"one\" { category \"c\"; footprint 1 1 1; axes \"s\" }\n\
+                 icon \"two\" { category \"c\"; footprint 1 1 1; axes \"s\" }\n";
+    let (_, msgs) = compile(&format!("lexicon {{ icon-limit 3 }}\n{small}"));
+    assert!(
+        msgs.len() == 1 && msgs[0].contains("'two' takes the lexicon past its icon-limit of 3"),
+        "{msgs:?}"
+    );
+    compile_ok(&format!("lexicon {{ icon-limit 4 }}\n{small}"));
 }
 
 #[test]

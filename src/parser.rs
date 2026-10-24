@@ -150,11 +150,20 @@ fn parse_top(ctx: &mut FileCtx, node: &kdl::KdlNode, out: &mut Lexicon) {
                                 .filter_map(|e| kdl_num(e.value()))
                                 .collect();
                         }
+                        other if limit_kind(other).is_some() => {
+                            let kind = limit_kind(other).expect("checked");
+                            set_limit(ctx, ch, kind, &mut cfg.limits);
+                        }
                         other => ctx.diag(
                             ch.span().offset(),
                             format!(
                                 "unknown lexicon setting '{other}'{}",
-                                suggest(other, ["tokens", "stroke-widths"].into_iter())
+                                suggest(
+                                    other,
+                                    ["tokens", "stroke-widths"]
+                                        .into_iter()
+                                        .chain(LimitKind::ALL.iter().map(|k| k.directive()))
+                                )
                             ),
                         ),
                     }
@@ -266,7 +275,43 @@ const BODY_NODES: &[&str] = &[
     "grant",
     "variant",
     "emit-base",
+    "shape-limit",
+    "repeat-limit",
+    "insert-depth",
 ];
+
+fn limit_kind(name: &str) -> Option<LimitKind> {
+    LimitKind::ALL.into_iter().find(|k| k.directive() == name)
+}
+
+/// `shape-limit 250000`, or `shape-limit #null` for none.
+fn set_limit(ctx: &mut FileCtx, node: &kdl::KdlNode, kind: LimitKind, limits: &mut Limits) {
+    let off = node.span().offset();
+    let name = kind.directive();
+    let args: Vec<&kdl::KdlEntry> = node
+        .entries()
+        .iter()
+        .filter(|e| e.name().is_none())
+        .collect();
+    let limit = match args.as_slice() {
+        [e] => match e.value() {
+            kdl::KdlValue::Integer(i) => u64::try_from(*i).ok().filter(|n| *n > 0).map(Limit::At),
+            kdl::KdlValue::Null => Some(Limit::Unlimited),
+            _ => None,
+        },
+        _ => None,
+    };
+    let Some(limit) = limit else {
+        ctx.diag(
+            off,
+            format!("{name} takes a positive whole number, or #null for no limit"),
+        );
+        return;
+    };
+    if limits.insert(kind, limit).is_some() {
+        ctx.diag(off, format!("{name} is set twice here"));
+    }
+}
 
 fn parse_body_child(ctx: &mut FileCtx, ch: &kdl::KdlNode, kind: DefKind, def: &mut Definition) {
     let off = ch.span().offset();
@@ -400,6 +445,25 @@ fn parse_body_child(ctx: &mut FileCtx, ch: &kdl::KdlNode, kind: DefKind, def: &m
             Some(kdl::KdlValue::Bool(b)) => def.emit_base = *b,
             _ => ctx.diag(off, "emit-base takes #true or #false"),
         },
+        other if limit_kind(other).is_some() => {
+            let limit = limit_kind(other).expect("checked");
+            if limit.lexicon_wide() {
+                ctx.diag(
+                    off,
+                    format!("{other} counts the whole lexicon; set it in the lexicon block"),
+                );
+            } else if kind == DefKind::Fragment {
+                ctx.diag(
+                    off,
+                    format!(
+                        "a fragment's work counts toward the icon it is inserted into; \
+                         set {other} on that icon or in the lexicon block"
+                    ),
+                );
+            } else {
+                set_limit(ctx, ch, limit, &mut def.body.limits);
+            }
+        }
         other => ctx.diag(
             off,
             format!(

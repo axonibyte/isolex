@@ -196,8 +196,28 @@ expression holds:
 insert "disk-stack" n=2 when="ports > 4"
 ```
 
-The count of a `repeat` is evaluated up front and capped (10 000); guards
-and counts are pure, so compilation always terminates.
+The count of a `repeat` is evaluated up front; guards and counts are
+pure, so compilation always terminates.
+
+Nested repeats multiply, so a two-line typo can ask for a hundred
+million shapes. Generous limits catch that and point at the line: an icon
+stops at 100 000 shapes and points (`shape-limit`) and a million repeat
+iterations (`repeat-limit`), fragments nest at most 32 deep
+(`insert-depth`), and a lexicon emits at most 100 000 icons
+(`icon-limit`). If you mean it, say so, for one definition (inherited by
+whatever extends it) or for the whole lexicon, and `#null` switches a
+limit off:
+
+```kdl
+lexicon {
+  shape-limit 250000
+}
+
+base "dense-grid" {
+  repeat-limit 5000000
+  shape-limit #null
+}
+```
 
 ## Axes: variant families
 

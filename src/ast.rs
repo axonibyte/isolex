@@ -4,6 +4,8 @@
 //! every construct carries a span so later stages can blame source
 //! locations without re-parsing.
 
+use std::collections::BTreeMap;
+
 use serde::Serialize;
 
 use crate::expr::Expr;
@@ -218,6 +220,109 @@ pub struct Variant {
     pub span: Span,
 }
 
+// The defaults, each overridable when the compiler is built, as an
+// #ifndef would be in C:
+//
+//     ISOLEX_DEFAULT_SHAPE_LIMIT=500000 cargo build --release
+//
+// A value that is not a positive whole number stops the build. SPEC §9
+// gives the values used when nothing is set; a lexicon that needs more
+// should say so with a directive rather than rely on a custom build.
+pub const DEFAULT_SHAPE_LIMIT: u64 = build_default(
+    option_env!("ISOLEX_DEFAULT_SHAPE_LIMIT"),
+    100_000,
+    "ISOLEX_DEFAULT_SHAPE_LIMIT must be a positive whole number",
+);
+pub const DEFAULT_REPEAT_LIMIT: u64 = build_default(
+    option_env!("ISOLEX_DEFAULT_REPEAT_LIMIT"),
+    1_000_000,
+    "ISOLEX_DEFAULT_REPEAT_LIMIT must be a positive whole number",
+);
+pub const DEFAULT_INSERT_DEPTH: u64 = build_default(
+    option_env!("ISOLEX_DEFAULT_INSERT_DEPTH"),
+    32,
+    "ISOLEX_DEFAULT_INSERT_DEPTH must be a positive whole number",
+);
+pub const DEFAULT_ICON_LIMIT: u64 = build_default(
+    option_env!("ISOLEX_DEFAULT_ICON_LIMIT"),
+    100_000,
+    "ISOLEX_DEFAULT_ICON_LIMIT must be a positive whole number",
+);
+
+const fn build_default(set: Option<&str>, fallback: u64, complaint: &str) -> u64 {
+    match set {
+        None => fallback,
+        Some(s) => match u64::from_str_radix(s, 10) {
+            Ok(n) if n > 0 => n,
+            _ => panic!("{}", complaint),
+        },
+    }
+}
+
+/// A resource limit (SPEC §9). Each has a generous default and can be
+/// raised, lowered, or switched off: the defaults keep a mistake from
+/// exhausting the machine, and the directives let an author who means
+/// it say so.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+pub enum LimitKind {
+    /// Shapes and polygon points one icon emits.
+    #[serde(rename = "shape-limit")]
+    Shapes,
+    /// Repeat iterations in one icon, every loop together.
+    #[serde(rename = "repeat-limit")]
+    Repeats,
+    /// How deeply fragment insertions nest.
+    #[serde(rename = "insert-depth")]
+    InsertDepth,
+    /// Icons the whole lexicon emits, after axis products.
+    #[serde(rename = "icon-limit")]
+    Icons,
+}
+
+impl LimitKind {
+    pub const ALL: [LimitKind; 4] = [
+        LimitKind::Shapes,
+        LimitKind::Repeats,
+        LimitKind::InsertDepth,
+        LimitKind::Icons,
+    ];
+
+    /// The directive that sets it.
+    pub fn directive(self) -> &'static str {
+        match self {
+            LimitKind::Shapes => "shape-limit",
+            LimitKind::Repeats => "repeat-limit",
+            LimitKind::InsertDepth => "insert-depth",
+            LimitKind::Icons => "icon-limit",
+        }
+    }
+
+    /// The limit when no directive sets one: one of the DEFAULT_*
+    /// constants below, fixed when the compiler is built.
+    pub fn default_limit(self) -> u64 {
+        match self {
+            LimitKind::Shapes => DEFAULT_SHAPE_LIMIT,
+            LimitKind::Repeats => DEFAULT_REPEAT_LIMIT,
+            LimitKind::InsertDepth => DEFAULT_INSERT_DEPTH,
+            LimitKind::Icons => DEFAULT_ICON_LIMIT,
+        }
+    }
+
+    /// Only the lexicon block can set it: it counts the whole lexicon.
+    pub fn lexicon_wide(self) -> bool {
+        self == LimitKind::Icons
+    }
+}
+
+/// A limit as written: a positive whole number, or `#null` for none.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub enum Limit {
+    At(u64),
+    Unlimited,
+}
+
+pub type Limits = BTreeMap<LimitKind, Limit>;
+
 /// The shared body shape of base/icon/fragment definitions and axis
 /// variants: the things inheritance merges.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
@@ -230,6 +335,8 @@ pub struct DefBody {
     pub axes: Vec<String>,
     pub grants: Vec<Grant>,
     pub parts: Vec<PartDecl>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub limits: Limits,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -250,6 +357,8 @@ pub struct Definition {
 pub struct LexiconConfig {
     pub tokens: Vec<String>,
     pub stroke_widths: Vec<f64>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub limits: Limits,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]

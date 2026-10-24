@@ -146,6 +146,49 @@ fn diagnostics_name_the_problem_and_the_place() {
             &["#nan is not a finite number"],
         ),
         (
+            "icon \"x\" {\n  shape-limit 0\n}",
+            2,
+            &["shape-limit takes a positive whole number, or #null for no limit"],
+        ),
+        (
+            "lexicon {\n  repeat-limit 2.5\n}",
+            2,
+            &["repeat-limit takes a positive whole number, or #null for no limit"],
+        ),
+        (
+            "icon \"x\" {\n  insert-depth \"deep\"\n}",
+            2,
+            &["insert-depth takes a positive whole number, or #null for no limit"],
+        ),
+        (
+            "icon \"x\" {\n  shape-limit 5\n  shape-limit 6\n}",
+            3,
+            &["shape-limit is set twice here"],
+        ),
+        (
+            "icon \"x\" {\n  icon-limit 5\n}",
+            2,
+            &["icon-limit counts the whole lexicon; set it in the lexicon block"],
+        ),
+        (
+            "fragment \"f\" {\n  shape-limit 5\n}",
+            2,
+            &["a fragment's work counts toward the icon it is inserted into"],
+        ),
+        (
+            "icon \"x\" {\n  shape-limimt 5\n}",
+            2,
+            &["unknown node 'shape-limimt'", "did you mean 'shape-limit'?"],
+        ),
+        (
+            "lexicon {\n  icon-limt 5\n}",
+            2,
+            &[
+                "unknown lexicon setting 'icon-limt'",
+                "did you mean 'icon-limit'?",
+            ],
+        ),
+        (
             "icon \"x\" {\n  grant \"accent\"\n}",
             2,
             &["grant takes a token and a reason"],

@@ -23,7 +23,7 @@ compilation byte-deterministic.
 - `lexicon { … }` — at most one per lexicon. Settings: `tokens "a" "b" …`
   (the theme token vocabulary) and `stroke-widths 1.2 …` (the permitted
   stroke widths). v0 records these for consumers; enforcement hooks are
-  reserved.
+  reserved. The limits of §9 can be set here for every icon.
 - `base "name" { … }` — an abstract definition. Never emitted; may be
   incomplete.
 - `icon "name" { … }` — a concrete definition. After resolution it must
@@ -55,6 +55,9 @@ child node (`extends "y"`); declaring both is an error.
 - `badge "icon-name" corner="ne" scale=0.5` — places another icon's
   compiled shapes at a viewBox corner (`ne` default; `nw`/`se`/`sw`;
   scale default 0.5). A badge target must not itself contain a badge.
+- `shape-limit n`, `repeat-limit n`, `insert-depth n` — this definition's
+  limits (§9); child value wins. Not in fragments, whose work counts
+  toward the icon they are inserted into.
 
 ## 4. Geometry vocabulary
 
@@ -122,7 +125,8 @@ other position requires a `Num` root. `cos`/`sin` take degrees;
 rosette helpers are written in). `%` is
 IEEE-754 remainder with the dividend's sign (Rust/C `fmod`). Division
 and remainder by zero are compile-time errors when reached. `repeat`
-counts must evaluate to non-negative integers and are capped at 10 000.
+counts must evaluate to non-negative integers; every iteration counts
+toward the icon's `repeat-limit` (§9).
 
 Every number is finite. An expression whose value is not (an overflow
 to infinity, or NaN) is a compile-time error when reached; only the
@@ -224,7 +228,43 @@ expected and found, and offers a nearest-name suggestion (edit distance
 ≤ 2) where one exists. Diagnostic text is part of the compiler's
 compatibility surface and is golden-tested.
 
-## 9. CLI
+## 9. Limits
+
+Nothing in the language is Turing-shaped, but a few constructs multiply:
+nested `repeat`s, fragments inserted inside repeats or other fragments,
+and axes, whose product grows with each one an icon opts into. A small
+source can therefore ask for an output too large to build. Four limits
+keep a mistake from exhausting the machine. Each has a generous default,
+and each can be raised, lowered, or switched off by an author who means
+it:
+
+| Directive | Bounds | Default | Set in |
+|---|---|---|---|
+| `shape-limit` | shapes and polygon points one icon emits | 100 000 | lexicon block, definition |
+| `repeat-limit` | repeat iterations in one icon, all loops together | 1 000 000 | lexicon block, definition |
+| `insert-depth` | how deeply fragment insertions nest | 32 | lexicon block, definition |
+| `icon-limit` | icons the lexicon emits, after axis products | 100 000 | lexicon block |
+
+Each takes a positive whole number, or `#null` for no limit. A
+definition's value wins over the lexicon block's, which wins over the
+default; a definition's value is inherited down its `extends` chain,
+child over parent, and an axis variant can set one like any other body
+node.
+
+Expansion counts as it goes and stops at the node that goes past a
+limit, with an error naming the limit, its value and where that came
+from, and how to raise it or switch it off; nothing past that point in
+the icon is expanded. `icon-limit` is checked by multiplying axis sizes,
+before any combination is built.
+
+The defaults are the values above unless the compiler was built with
+`ISOLEX_DEFAULT_SHAPE_LIMIT`, `ISOLEX_DEFAULT_REPEAT_LIMIT`,
+`ISOLEX_DEFAULT_INSERT_DEPTH` or `ISOLEX_DEFAULT_ICON_LIMIT` set. Such a
+build accepts or rejects a lexicon differently but never compiles it to
+different IR; a lexicon that needs more than the values above should
+say so with a directive.
+
+## 10. CLI
 
 `isolex check <dir>` parses, resolves, expands and projects, reporting
 diagnostics and counts. `isolex compile <dir> --ir <path|->` writes the
@@ -232,7 +272,7 @@ IR JSON. `isolex docs <dir>` emits per-category markdown reference
 tables from `describe` metadata. Exit status: 0 clean, 1 diagnostics or
 I/O failure, 2 usage.
 
-## 10. Conformance
+## 11. Conformance
 
 A conforming compiler produces byte-identical IR for identical
 lexicons, rejects everything §5 forbids with located diagnostics, and

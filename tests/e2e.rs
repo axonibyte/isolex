@@ -283,6 +283,27 @@ fn a_name_emitted_twice_is_reported_where_it_is_emitted_again() {
 }
 
 #[test]
+fn nested_repeats_fail_cleanly_at_the_shape_limit() {
+    // the lexicon from #5: 100 million tiles, which aborted (exit 134)
+    // allocating 5.1 GB; it now stops at the default shape-limit
+    let dir = std::env::temp_dir().join(format!("isolex-e2e-limit-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("big.ilx"),
+        "icon \"big\" { category \"c\"; footprint 1 1 1; part \"p\" {\n  repeat 10000 \"a\" { repeat 10000 \"b\" { tile 0 0 0 1 1 } } } }\n",
+    )
+    .unwrap();
+    let out = bin().arg("check").arg(&dir).output().unwrap();
+    let stderr = String::from_utf8(out.stderr).unwrap();
+    assert_eq!(out.status.code(), Some(1), "{stderr}");
+    assert!(
+        stderr.contains("big.ilx:2:41: icon 'big' goes here past its shape-limit of 100000"),
+        "{stderr}"
+    );
+}
+
+#[test]
 fn check_failures_render_file_line_col_and_exit_nonzero() {
     let dir = std::env::temp_dir().join(format!("isolex-e2e-bad-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();

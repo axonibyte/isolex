@@ -124,7 +124,9 @@ insert "disk-stack" cx=0.55 cy=0.55 n=4
 
 ### `repeat count "var" { … }`
 Emits the body `count` times with `var` bound `0 … count-1` (count
-evaluated up front, capped at 10 000). Nest them for grids.
+evaluated up front; every iteration counts toward the icon's
+`repeat-limit`, and every shape toward its `shape-limit`). Nest them for
+grids.
 ```kdl
 repeat 3 "row" {
   repeat 4 "col" {

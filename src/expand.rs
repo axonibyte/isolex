@@ -8,12 +8,61 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Serialize;
 
-use crate::ast::{Face, Node, Num, PathPiece, Span, Style};
+use crate::ast::{Face, Limit, LimitKind, Limits, Node, Num, PathPiece, Span, Style};
 use crate::expr::{self, Expr};
 use crate::resolve::{apply_variant, Resolved, ResolvedDef, SpanDiag};
 
-pub const REPEAT_CAP: usize = 10_000;
-const INSERT_DEPTH_CAP: usize = 32;
+/// A limit in force (SPEC §9): its ceiling, `None` when switched off,
+/// and where that came from, for the error that names it.
+#[derive(Debug, Clone)]
+struct InForce {
+    limit: Option<u64>,
+    from: String,
+}
+
+/// The definition chain's value wins, then the lexicon block's, then the
+/// built-in default.
+fn in_force(
+    kind: LimitKind,
+    chain: &BTreeMap<LimitKind, (Limit, String)>,
+    lexicon: &Limits,
+) -> InForce {
+    let limit = |l: &Limit| match l {
+        Limit::At(n) => Some(*n),
+        Limit::Unlimited => None,
+    };
+    if let Some((l, whose)) = chain.get(&kind) {
+        InForce {
+            limit: limit(l),
+            from: format!("set by '{whose}'"),
+        }
+    } else if let Some(l) = lexicon.get(&kind) {
+        InForce {
+            limit: limit(l),
+            from: "set in the lexicon block".to_string(),
+        }
+    } else {
+        InForce {
+            limit: Some(kind.default_limit()),
+            from: "the default".to_string(),
+        }
+    }
+}
+
+/// The error for going past a limit: what happened, the limit and where
+/// it came from, and how to raise it or switch it off.
+fn past_limit(what: String, kind: LimitKind, limit: u64, from: &str) -> String {
+    let d = kind.directive();
+    let place = if kind.lexicon_wide() {
+        "in the lexicon block"
+    } else {
+        "in this icon's definition or the lexicon block"
+    };
+    format!(
+        "{what} past its {d} of {limit} ({from}); if that is intended, raise it {place}, \
+         or set `{d} #null` for no limit"
+    )
+}
 
 /// A number that may still need the anchor's screen coordinates.
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -175,6 +224,13 @@ struct Ctx<'a> {
     resolved: &'a Resolved,
     diags: Vec<SpanDiag>,
     insert_stack: Vec<String>,
+    /// The icon being expanded, and its limits and use of them.
+    icon: String,
+    shapes: (InForce, u64),
+    repeats: (InForce, u64),
+    insert_depth: InForce,
+    /// A limit was passed: expansion of this icon stops everywhere.
+    exhausted: bool,
 }
 
 impl<'a> Ctx<'a> {
@@ -184,21 +240,91 @@ impl<'a> Ctx<'a> {
             message: message.into(),
         });
     }
+
+    /// Start an icon: its limits, nothing used.
+    fn begin(&mut self, name: &str, def: &ResolvedDef) {
+        let lexicon = &self.resolved.lexicon_limits;
+        self.icon = name.to_string();
+        self.shapes = (in_force(LimitKind::Shapes, &def.limits, lexicon), 0);
+        self.repeats = (in_force(LimitKind::Repeats, &def.limits, lexicon), 0);
+        self.insert_depth = in_force(LimitKind::InsertDepth, &def.limits, lexicon);
+        self.exhausted = false;
+    }
+
+    /// Count one shape or point (`Shapes`) or one repeat iteration
+    /// (`Repeats`) at `span`. False once a limit is passed: the caller
+    /// stops, and so does everything else in this icon.
+    fn spend(&mut self, kind: LimitKind, span: Span) -> bool {
+        if self.exhausted {
+            return false;
+        }
+        let ((in_force, used), what) = match kind {
+            LimitKind::Shapes => (&mut self.shapes, "shapes and points"),
+            LimitKind::Repeats => (&mut self.repeats, "repeat iterations"),
+            _ => unreachable!("only shapes and repeats are spent"),
+        };
+        *used += 1;
+        match in_force.limit {
+            Some(limit) if *used > limit => {
+                let message = past_limit(
+                    format!("icon '{}' goes here", self.icon),
+                    kind,
+                    limit,
+                    &format!("{what}, {}", in_force.from),
+                );
+                self.exhausted = true;
+                self.diag(span, message);
+                false
+            }
+            _ => true,
+        }
+    }
 }
 
 pub fn expand(resolved: &Resolved) -> (Vec<ExpandedIcon>, Vec<SpanDiag>) {
+    let unset = InForce {
+        limit: None,
+        from: String::new(),
+    };
     let mut ctx = Ctx {
         resolved,
         diags: Vec::new(),
         insert_stack: Vec::new(),
+        icon: String::new(),
+        shapes: (unset.clone(), 0),
+        repeats: (unset.clone(), 0),
+        insert_depth: unset,
+        exhausted: false,
     };
     let mut out = Vec::new();
+
+    // Axes multiply the way nested repeats do, so the icon count is
+    // checked by multiplying their sizes, before any product is built.
+    let icon_limit = in_force(LimitKind::Icons, &BTreeMap::new(), &resolved.lexicon_limits);
+    let mut icon_count: u128 = 0;
+    let mut within_icon_limit = Vec::new();
+    for icon in &resolved.icons {
+        icon_count = icon_count.saturating_add(axis_product(&ctx, icon));
+        match icon_limit.limit {
+            Some(limit) if icon_count > u128::from(limit) => {
+                let message = past_limit(
+                    format!("'{}' takes the lexicon", icon.name),
+                    LimitKind::Icons,
+                    limit,
+                    &format!("icons, {}", icon_limit.from),
+                );
+                ctx.diag(icon.span, message);
+                break;
+            }
+            _ => within_icon_limit.push(icon),
+        }
+    }
     // Each emitted name, with what emitted it: an icon and the variants
     // applied to it. Names are decided here, not by evaluation, so a
     // collision is one whether or not the icons expand cleanly.
     let mut emitted: BTreeMap<String, (String, Vec<(String, String)>)> = BTreeMap::new();
 
-    for icon in &resolved.icons {
+    for icon in within_icon_limit {
         for combo in axis_combos(&mut ctx, icon) {
             let mut def = icon.clone();
             let mut suffix = String::new();
@@ -249,6 +375,15 @@ fn describe_source((icon, applied): &(String, Vec<(String, String)>)) -> String 
     s
 }
 
+/// How many icons an icon's axes expand into, without building them.
+fn axis_product(ctx: &Ctx, icon: &ResolvedDef) -> u128 {
+    icon.axes
+        .iter()
+        .filter_map(|a| ctx.resolved.axes.get(a))
+        .map(|axis| axis.variants.len() as u128 + u128::from(axis.emit_base))
+        .fold(1, u128::saturating_mul)
+}
+
 /// The cartesian product of variant choices, in axis declaration order.
 /// An axis with `emit-base #false` offers no "absent" option, so every
 /// emitted combination carries one of its variants — which also excludes
@@ -285,6 +420,7 @@ fn axis_combos(ctx: &mut Ctx, icon: &ResolvedDef) -> Vec<Vec<(String, Option<usi
 }
 
 fn expand_one(ctx: &mut Ctx, def: &ResolvedDef, name: String) -> Option<ExpandedIcon> {
+    ctx.begin(&name, def);
     // parameters evaluate in declaration order; earlier params are in
     // scope for later defaults
     let mut env: BTreeMap<String, f64> = BTreeMap::new();
@@ -465,15 +601,9 @@ fn repeat_count(
         );
         return None;
     }
-    let n = v.round() as usize;
-    if n > REPEAT_CAP {
-        ctx.diag(
-            span,
-            format!("repeat count {n} exceeds the cap of {REPEAT_CAP}"),
-        );
-        return None;
-    }
-    Some(n)
+    // No cap of its own: every iteration counts toward the icon's
+    // repeat-limit, so a huge count stops there, at this repeat.
+    Some(v.round() as usize)
 }
 
 // --- 3-D expansion -------------------------------------------------------
@@ -485,6 +615,9 @@ fn expand_nodes_3d(
     out: &mut Vec<Shape>,
 ) {
     for node in nodes {
+        if ctx.exhausted {
+            return;
+        }
         expand_node_3d(ctx, node, env, out);
     }
 }
@@ -520,6 +653,9 @@ fn expand_node_3d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
             }
             let v = evs!(args, *span, 6);
             let opacity = opacity.as_ref().and_then(|o| eval_full(ctx, o, env, *span));
+            if !ctx.spend(LimitKind::Shapes, *span) {
+                return;
+            }
             out.push(Shape::Box3 {
                 x: v[0],
                 y: v[1],
@@ -545,6 +681,9 @@ fn expand_node_3d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
             let Some(style) = eval_style(ctx, style, env, *span) else {
                 return;
             };
+            if !ctx.spend(LimitKind::Shapes, *span) {
+                return;
+            }
             out.push(Shape::Tile {
                 x: v[0],
                 y: v[1],
@@ -568,6 +707,9 @@ fn expand_node_3d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
             }
             let v = evs!(args, *span, 5);
             let opacity = opacity.as_ref().and_then(|o| eval_full(ctx, o, env, *span));
+            if !ctx.spend(LimitKind::Shapes, *span) {
+                return;
+            }
             out.push(Shape::Cylinder {
                 cx: v[0],
                 cy: v[1],
@@ -593,6 +735,9 @@ fn expand_node_3d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
             }
             let v = evs!(args, *span, 5);
             let opacity = opacity.as_ref().and_then(|o| eval_full(ctx, o, env, *span));
+            if !ctx.spend(LimitKind::Shapes, *span) {
+                return;
+            }
             out.push(Shape::FaceRect {
                 face: *face,
                 a: v[0],
@@ -619,6 +764,9 @@ fn expand_node_3d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
             };
             let mut pts = Vec::new();
             collect_pts3(ctx, children, env, &mut pts);
+            if !ctx.spend(LimitKind::Shapes, *span) {
+                return;
+            }
             out.push(Shape::Poly3d {
                 pts,
                 style,
@@ -630,6 +778,9 @@ fn expand_node_3d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
                 return;
             }
             let v = evs!(args, *span, 4);
+            if !ctx.spend(LimitKind::Shapes, *span) {
+                return;
+            }
             out.push(Shape::Shadow {
                 cx: v[0],
                 cy: v[1],
@@ -651,6 +802,9 @@ fn expand_node_3d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
             let Some(style) = eval_style(ctx, style, env, *span) else {
                 return;
             };
+            if !ctx.spend(LimitKind::Shapes, *span) {
+                return;
+            }
             out.push(Shape::Seg {
                 a: [v[0], v[1], v[2]],
                 b: [v[3], v[4], v[5]],
@@ -670,6 +824,9 @@ fn expand_node_3d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
             let v = evs!(args, *span, 3);
             let mut kids = Vec::new();
             expand_nodes_2d(ctx, children, env, &mut kids);
+            if !ctx.spend(LimitKind::Shapes, *span) {
+                return;
+            }
             out.push(Shape::At {
                 x: v[0],
                 y: v[1],
@@ -692,6 +849,9 @@ fn expand_node_3d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
                 return;
             };
             for i in 0..n {
+                if !ctx.spend(LimitKind::Repeats, *span) {
+                    break;
+                }
                 let mut env2 = env.clone();
                 env2.insert(var.clone(), i as f64);
                 expand_nodes_3d(ctx, children, &env2, out);
@@ -726,6 +886,9 @@ fn expand_node_3d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
                 return;
             }
             let scale = scale.as_ref().and_then(|s| eval_full(ctx, s, env, *span));
+            if !ctx.spend(LimitKind::Shapes, *span) {
+                return;
+            }
             out.push(Shape::Badge {
                 icon: icon.clone(),
                 corner: corner.clone(),
@@ -760,7 +923,7 @@ fn collect_pts3(
                         None => ok = false,
                     }
                 }
-                if ok {
+                if ok && ctx.spend(LimitKind::Shapes, *span) {
                     out.push(v);
                 }
             }
@@ -778,6 +941,9 @@ fn collect_pts3(
                     continue;
                 };
                 for i in 0..n {
+                    if !ctx.spend(LimitKind::Repeats, *span) {
+                        break;
+                    }
                     let mut env2 = env.clone();
                     env2.insert(var.clone(), i as f64);
                     collect_pts3(ctx, children, &env2, out);
@@ -797,6 +963,9 @@ fn expand_nodes_2d(
     out: &mut Vec<Shape2>,
 ) {
     for node in nodes {
+        if ctx.exhausted {
+            return;
+        }
         expand_node_2d(ctx, node, env, out);
     }
 }
@@ -833,6 +1002,9 @@ fn expand_node_2d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
             let Some(style) = eval_style(ctx, style, env, *span) else {
                 return;
             };
+            if !ctx.spend(LimitKind::Shapes, *span) {
+                return;
+            }
             out.push(Shape2::Line { args: a, style });
         }
         Node::Circle {
@@ -848,6 +1020,9 @@ fn expand_node_2d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
             let Some(style) = eval_style(ctx, style, env, *span) else {
                 return;
             };
+            if !ctx.spend(LimitKind::Shapes, *span) {
+                return;
+            }
             out.push(Shape2::Circle { args: a, style });
         }
         Node::Ellipse {
@@ -863,6 +1038,9 @@ fn expand_node_2d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
             let Some(style) = eval_style(ctx, style, env, *span) else {
                 return;
             };
+            if !ctx.spend(LimitKind::Shapes, *span) {
+                return;
+            }
             out.push(Shape2::Ellipse { args: a, style });
         }
         Node::Rect2d {
@@ -886,6 +1064,9 @@ fn expand_node_2d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
             let Some(style) = eval_style(ctx, style, env, *span) else {
                 return;
             };
+            if !ctx.spend(LimitKind::Shapes, *span) {
+                return;
+            }
             out.push(Shape2::Rect { args: a, rx, style });
         }
         Node::Arc {
@@ -901,6 +1082,9 @@ fn expand_node_2d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
             let Some(style) = eval_style(ctx, style, env, *span) else {
                 return;
             };
+            if !ctx.spend(LimitKind::Shapes, *span) {
+                return;
+            }
             out.push(Shape2::Arc { args: a, style });
         }
         Node::Path {
@@ -944,6 +1128,9 @@ fn expand_node_2d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
             let Some(style) = eval_style(ctx, style, env, *span) else {
                 return;
             };
+            if !ctx.spend(LimitKind::Shapes, *span) {
+                return;
+            }
             out.push(Shape2::Path {
                 template: pieces,
                 style,
@@ -963,6 +1150,9 @@ fn expand_node_2d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
             };
             let mut pts = Vec::new();
             collect_pts2(ctx, children, env, &mut pts);
+            if !ctx.spend(LimitKind::Shapes, *span) {
+                return;
+            }
             out.push(Shape2::Poly { pts, style });
         }
         Node::Repeat {
@@ -979,6 +1169,9 @@ fn expand_node_2d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
                 return;
             };
             for i in 0..n {
+                if !ctx.spend(LimitKind::Repeats, *span) {
+                    break;
+                }
                 let mut env2 = env.clone();
                 env2.insert(var.clone(), i as f64);
                 expand_nodes_2d(ctx, children, &env2, out);
@@ -1014,6 +1207,9 @@ fn collect_pts2(
                 let a = eval_2d(ctx, &args[0], env, *span);
                 let b = eval_2d(ctx, &args[1], env, *span);
                 if let (Some(a), Some(b)) = (a, b) {
+                    if !ctx.spend(LimitKind::Shapes, *span) {
+                        continue;
+                    }
                     out.push([a, b]);
                 }
             }
@@ -1031,6 +1227,9 @@ fn collect_pts2(
                     continue;
                 };
                 for i in 0..n {
+                    if !ctx.spend(LimitKind::Repeats, *span) {
+                        break;
+                    }
                     let mut env2 = env.clone();
                     env2.insert(var.clone(), i as f64);
                     collect_pts2(ctx, children, &env2, out);
@@ -1076,12 +1275,17 @@ fn expand_insert(
         );
         return;
     }
-    if ctx.insert_stack.len() >= INSERT_DEPTH_CAP {
-        ctx.diag(
-            span,
-            format!("fragment insertion deeper than {INSERT_DEPTH_CAP}"),
-        );
-        return;
+    if let Some(limit) = ctx.insert_depth.limit {
+        if ctx.insert_stack.len() as u64 >= limit {
+            let message = past_limit(
+                format!("icon '{}' nests fragment insertions here", ctx.icon),
+                LimitKind::InsertDepth,
+                limit,
+                &format!("levels, {}", ctx.insert_depth.from),
+            );
+            ctx.diag(span, message);
+            return;
+        }
     }
 
     // hygienic environment: fragment params only, defaults evaluated in
