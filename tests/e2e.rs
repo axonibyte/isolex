@@ -158,7 +158,7 @@ fn an_expression_that_overflows_is_a_located_error() {
 }
 
 #[test]
-fn geometry_that_overflows_when_projected_names_its_icon() {
+fn geometry_that_overflows_when_projected_is_reported_at_its_node() {
     // every value finite, but 1e307 tile units are past f64's range once
     // projected to output units
     let (ok, stderr) = check_files(
@@ -171,7 +171,7 @@ fn geometry_that_overflows_when_projected_names_its_icon() {
     assert!(!ok, "{stderr}");
     assert!(
         stderr.contains(
-            "wide.ilx:2:1: icon 'wide' projects to inf, not a finite number: its geometry is too large to draw"
+            "wide.ilx:5:14: icon 'wide' projects to inf, not a finite number: its geometry is too large to draw"
         ),
         "{stderr}"
     );
@@ -187,7 +187,7 @@ fn geometry_that_overflows_when_projected_names_its_icon() {
     );
     assert!(!ok, "{stderr}");
     assert!(
-        stderr.contains("seg.ilx:1:1: icon 'far' projects to inf, not a finite number"),
+        stderr.contains("seg.ilx:1:56: icon 'far' projects to inf, not a finite number"),
         "{stderr}"
     );
 }
@@ -204,7 +204,64 @@ fn an_anchor_expression_that_overflows_is_an_error() {
     );
     assert!(!ok, "{stderr}");
     assert!(
-        stderr.contains("in 'x * big': the result is inf, not a finite number"),
+        stderr.contains("at.ilx:2:25: in 'x * big': the result is inf, not a finite number"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn badge_errors_are_reported_at_the_badge() {
+    // these were all reported at the first file's 1:1, wherever they were
+    let (ok, stderr) = check_files(
+        "badge",
+        &[
+            (
+                "a.ilx",
+                "icon \"first\" { category \"c\"; footprint 1 1 1; part \"p\" { tile 0 0 0 1 1 } }\n",
+            ),
+            (
+                "b.ilx",
+                "\n\n\nicon \"second\" {\n  category \"c\"\n  footprint 1 1 1\n  part \"p\" {\n    badge \"nosuch\"\n  }\n}\n",
+            ),
+        ],
+    );
+    assert!(!ok, "{stderr}");
+    assert!(
+        stderr.contains("b.ilx:8:5: badge references unknown icon 'nosuch'"),
+        "{stderr}"
+    );
+
+    let (ok, stderr) = check_files(
+        "badge-nested",
+        &[(
+            "n.ilx",
+            "icon \"dot\" { category \"c\"; canvas 4 4; part \"p\" { at 0 0 0 { circle 2 2 1 } } }\nicon \"marked\" { category \"c\"; footprint 1 1 1\n  part \"p\" { badge \"dot\" } }\nicon \"outer\" { category \"c\"; footprint 1 1 1\n  part \"p\" { badge \"marked\" } }\n",
+        )],
+    );
+    assert!(!ok, "{stderr}");
+    assert!(
+        stderr
+            .contains("n.ilx:5:14: badge target 'marked' itself contains a badge — one level only"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn anchor_expression_errors_are_reported_at_their_node() {
+    let (ok, stderr) = check_files(
+        "anchor-errors",
+        &[(
+            "e.ilx",
+            "icon \"e\" { category \"c\"; footprint 1 1 1\n  part \"p\" {\n    at 1 0 0 {\n      circle \"1 / (x - x)\" 0 1\n      path d=\"M{x},{1 / (y - y)}\"\n    }\n  }\n}\n",
+        )],
+    );
+    assert!(!ok, "{stderr}");
+    assert!(
+        stderr.contains("e.ilx:4:7: in '1 / (x - x)': division by zero"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("e.ilx:5:7: in '1 / (y - y)': division by zero"),
         "{stderr}"
     );
 }

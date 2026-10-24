@@ -5,7 +5,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::ast::Face;
+use crate::ast::{Face, Span};
 use crate::expand::{EvNum, EvStyle, ExpandedIcon, PathEv, Shape, Shape2};
 use crate::expr;
 use crate::ir::{IrDocument, IrIcon, IrShape, IR_VERSION};
@@ -54,68 +54,44 @@ struct Ctx {
     diags: Vec<SpanDiag>,
 }
 
+/// A badge waiting for every icon to be projected: `at` indexes the empty
+/// group standing in for it in its icon's shapes.
+struct PendingBadge {
+    at: usize,
+    target: String,
+    corner: String,
+    span: Span,
+}
+
 pub fn project(icons: &[ExpandedIcon]) -> (IrDocument, Vec<SpanDiag>) {
     let mut ctx = Ctx { diags: Vec::new() };
 
-    // First pass: project every icon without badges resolved.
-    let mut projected: Vec<IrIcon> = icons
+    // First pass: project every icon, with badges left as empty groups.
+    let (mut projected, pending): (Vec<IrIcon>, Vec<Vec<PendingBadge>>) = icons
         .iter()
         .map(|icon| project_icon(&mut ctx, icon))
-        .collect();
+        .unzip();
 
-    // Second pass: resolve badge groups against the projected set (an
-    // icon used as a badge must itself contain no badge — one level, so
-    // no cycles are possible).
+    // Second pass: fill the groups from the projected set (an icon used
+    // as a badge must itself contain no badge — one level, so no cycles
+    // are possible).
     let by_name: BTreeMap<String, IrIcon> = projected
         .iter()
         .map(|i| (i.name.clone(), i.clone()))
         .collect();
-    for icon in &mut projected {
+    for (icon, badges) in projected.iter_mut().zip(&pending) {
         let viewbox = icon.viewbox;
-        for shape in &mut icon.shapes {
-            if let IrShape::Group {
-                tx,
-                ty,
-                scale,
-                shapes,
-            } = shape
-            {
-                if let Some(pending) = shapes.pop() {
-                    if let IrShape::Path { d, .. } = &pending {
-                        // encoded request: d = "badge:<name>:<corner>"
-                        let parts: Vec<&str> = d.splitn(3, ':').collect();
-                        if parts.len() == 3 && parts[0] == "badge" {
-                            resolve_badge(
-                                &mut ctx.diags,
-                                &by_name,
-                                parts[1],
-                                parts[2],
-                                viewbox,
-                                tx,
-                                ty,
-                                scale,
-                                shapes,
-                            );
-                            continue;
-                        }
-                    }
-                    shapes.push(pending);
+        for badge in badges {
+            let group = &mut icon.shapes[badge.at];
+            resolve_badge(&mut ctx.diags, &by_name, badge, viewbox, group);
+            if let IrShape::Group { tx, ty, .. } = group {
+                if let Some(v) = non_finite(&[*tx, *ty]) {
+                    ctx.diags.push(SpanDiag {
+                        span: badge.span,
+                        message: too_large(&icon.name, v),
+                    });
                 }
             }
-        }
-    }
-
-    // Finite inputs can still overflow once projected to output units,
-    // and JSON would write the result as null (SPEC §7).
-    for (ir, icon) in projected.iter().zip(icons) {
-        if let Some(v) = first_non_finite(ir) {
-            ctx.diags.push(SpanDiag {
-                span: icon.span,
-                message: format!(
-                    "icon '{}' projects to {v}, not a finite number: its geometry is too large to draw",
-                    ir.name
-                ),
-            });
         }
     }
 
@@ -128,11 +104,21 @@ pub fn project(icons: &[ExpandedIcon]) -> (IrDocument, Vec<SpanDiag>) {
     )
 }
 
-/// The first value in an icon's IR that is not finite, if any. Path data
-/// holds numbers already formatted, where Rust writes them as `inf`,
-/// `-inf` and `NaN`: none of their letters is an SVG path command, so
-/// finding them there is unambiguous.
-fn first_non_finite(icon: &IrIcon) -> Option<f64> {
+/// Finite inputs can still overflow once projected to output units, and
+/// JSON would write the result as null (SPEC §7).
+fn too_large(icon: &str, v: f64) -> String {
+    format!("icon '{icon}' projects to {v}, not a finite number: its geometry is too large to draw")
+}
+
+fn non_finite(vs: &[f64]) -> Option<f64> {
+    vs.iter().copied().find(|v| !v.is_finite())
+}
+
+/// The first value in projected shapes that is not finite, if any. Path
+/// data holds numbers already formatted, where Rust writes them as
+/// `inf`, `-inf` and `NaN`: none of their letters is an SVG path
+/// command, so finding them there is unambiguous.
+fn first_non_finite(shapes: &[IrShape]) -> Option<f64> {
     fn in_d(d: &str) -> Option<f64> {
         if d.contains("NaN") {
             Some(f64::NAN)
@@ -144,82 +130,76 @@ fn first_non_finite(icon: &IrIcon) -> Option<f64> {
             None
         }
     }
-    fn in_shapes(shapes: &[IrShape]) -> Option<f64> {
-        let bad = |vs: &[f64]| vs.iter().copied().find(|v| !v.is_finite());
-        shapes.iter().find_map(|s| match s {
-            IrShape::Polygon {
-                points,
-                fill_opacity,
-                stroke_width,
-                ..
-            } => bad(&points.concat()).or_else(|| bad(&[*fill_opacity, *stroke_width])),
-            IrShape::Path {
-                d,
-                fill_opacity,
-                stroke_width,
-                ..
-            } => in_d(d).or_else(|| bad(&[*fill_opacity, *stroke_width])),
-            IrShape::Ellipse {
-                cx,
-                cy,
-                rx,
-                ry,
-                fill_opacity,
-                stroke_width,
-                ..
-            } => bad(&[*cx, *cy, *rx, *ry, *fill_opacity, *stroke_width]),
-            IrShape::Circle {
-                cx,
-                cy,
-                r,
-                fill_opacity,
-                stroke_width,
-                ..
-            } => bad(&[*cx, *cy, *r, *fill_opacity, *stroke_width]),
-            IrShape::Rect {
-                x,
-                y,
-                w,
-                h,
-                rx,
-                fill_opacity,
-                stroke_width,
-                ..
-            } => bad(&[*x, *y, *w, *h, *rx, *fill_opacity, *stroke_width]),
-            IrShape::Group {
-                tx,
-                ty,
-                scale,
-                shapes,
-            } => bad(&[*tx, *ty, *scale]).or_else(|| in_shapes(shapes)),
-        })
-    }
-    let bad = |vs: &[f64]| vs.iter().copied().find(|v| !v.is_finite());
-    bad(&icon.viewbox)
-        .or_else(|| icon.footprint.and_then(|f| bad(&f)))
-        .or_else(|| icon.canvas.and_then(|c| bad(&c)))
-        .or_else(|| in_shapes(&icon.shapes))
+    shapes.iter().find_map(|s| match s {
+        IrShape::Polygon {
+            points,
+            fill_opacity,
+            stroke_width,
+            ..
+        } => non_finite(&points.concat()).or_else(|| non_finite(&[*fill_opacity, *stroke_width])),
+        IrShape::Path {
+            d,
+            fill_opacity,
+            stroke_width,
+            ..
+        } => in_d(d).or_else(|| non_finite(&[*fill_opacity, *stroke_width])),
+        IrShape::Ellipse {
+            cx,
+            cy,
+            rx,
+            ry,
+            fill_opacity,
+            stroke_width,
+            ..
+        } => non_finite(&[*cx, *cy, *rx, *ry, *fill_opacity, *stroke_width]),
+        IrShape::Circle {
+            cx,
+            cy,
+            r,
+            fill_opacity,
+            stroke_width,
+            ..
+        } => non_finite(&[*cx, *cy, *r, *fill_opacity, *stroke_width]),
+        IrShape::Rect {
+            x,
+            y,
+            w,
+            h,
+            rx,
+            fill_opacity,
+            stroke_width,
+            ..
+        } => non_finite(&[*x, *y, *w, *h, *rx, *fill_opacity, *stroke_width]),
+        IrShape::Group {
+            tx,
+            ty,
+            scale,
+            shapes,
+        } => non_finite(&[*tx, *ty, *scale]).or_else(|| first_non_finite(shapes)),
+    })
 }
 
-#[allow(clippy::too_many_arguments)]
 fn resolve_badge(
     diags: &mut Vec<SpanDiag>,
     by_name: &BTreeMap<String, IrIcon>,
-    name: &str,
-    corner: &str,
+    badge: &PendingBadge,
     viewbox: [f64; 4],
-    tx: &mut f64,
-    ty: &mut f64,
-    scale: &mut f64,
-    shapes: &mut Vec<IrShape>,
+    group: &mut IrShape,
 ) {
+    let IrShape::Group {
+        tx,
+        ty,
+        scale,
+        shapes,
+    } = group
+    else {
+        unreachable!("a pending badge indexes its placeholder group");
+    };
+    let s = *scale;
+    let name = &badge.target;
     let Some(target) = by_name.get(name) else {
         diags.push(SpanDiag {
-            span: crate::ast::Span {
-                file: 0,
-                start: 0,
-                len: 0,
-            },
+            span: badge.span,
             message: format!("badge references unknown icon '{name}'"),
         });
         return;
@@ -230,19 +210,14 @@ fn resolve_badge(
         .any(|s| matches!(s, IrShape::Group { .. }))
     {
         diags.push(SpanDiag {
-            span: crate::ast::Span {
-                file: 0,
-                start: 0,
-                len: 0,
-            },
+            span: badge.span,
             message: format!("badge target '{name}' itself contains a badge — one level only"),
         });
         return;
     }
     let [minx, miny, w, h] = viewbox;
     let [bminx, bminy, bw, bh] = target.viewbox;
-    let s = *scale;
-    let (px, py) = match corner {
+    let (px, py) = match badge.corner.as_str() {
         "nw" => (minx + BADGE_INSET, miny + BADGE_INSET),
         "se" => (
             minx + w - BADGE_INSET - bw * s,
@@ -256,17 +231,52 @@ fn resolve_badge(
     *shapes = target.shapes.clone();
 }
 
-fn project_icon(ctx: &mut Ctx, icon: &ExpandedIcon) -> IrIcon {
+fn project_icon(ctx: &mut Ctx, icon: &ExpandedIcon) -> (IrIcon, Vec<PendingBadge>) {
     let viewbox = match (&icon.footprint, &icon.canvas) {
         (Some([w, d, h]), _) => volume_viewbox(*w, *d, *h),
         (_, Some([w, h])) => [0.0, 0.0, *w, *h],
         _ => [0.0, 0.0, 0.0, 0.0],
     };
-    let mut shapes = Vec::new();
-    for shape in &icon.shapes {
-        project_shape(ctx, shape, &mut shapes);
+    if let Some(v) = non_finite(&viewbox) {
+        ctx.diags.push(SpanDiag {
+            span: icon.span,
+            message: too_large(&icon.name, v),
+        });
     }
-    IrIcon {
+    let mut shapes = Vec::new();
+    let mut badges = Vec::new();
+    for shape in &icon.shapes {
+        if let Shape::Badge {
+            icon: target,
+            corner,
+            scale,
+            span,
+        } = shape
+        {
+            badges.push(PendingBadge {
+                at: shapes.len(),
+                target: target.clone(),
+                corner: corner.clone(),
+                span: *span,
+            });
+            shapes.push(IrShape::Group {
+                tx: 0.0,
+                ty: 0.0,
+                scale: scale.unwrap_or(BADGE_SCALE),
+                shapes: Vec::new(),
+            });
+            continue;
+        }
+        let before = shapes.len();
+        project_shape(ctx, shape, &mut shapes);
+        if let Some(v) = first_non_finite(&shapes[before..]) {
+            ctx.diags.push(SpanDiag {
+                span: shape_span(shape),
+                message: too_large(&icon.name, v),
+            });
+        }
+    }
+    let ir = IrIcon {
         name: icon.name.clone(),
         category: icon.category.clone(),
         footprint: icon.footprint,
@@ -275,6 +285,21 @@ fn project_icon(ctx: &mut Ctx, icon: &ExpandedIcon) -> IrIcon {
         describe: icon.describe.clone(),
         grants: icon.grants.clone(),
         shapes,
+    };
+    (ir, badges)
+}
+
+fn shape_span(shape: &Shape) -> Span {
+    match shape {
+        Shape::Box3 { span, .. }
+        | Shape::Tile { span, .. }
+        | Shape::Cylinder { span, .. }
+        | Shape::FaceRect { span, .. }
+        | Shape::Poly3d { span, .. }
+        | Shape::Shadow { span, .. }
+        | Shape::Seg { span, .. }
+        | Shape::At { span, .. }
+        | Shape::Badge { span, .. } => *span,
     }
 }
 
@@ -339,6 +364,7 @@ fn project_shape(ctx: &mut Ctx, shape: &Shape, out: &mut Vec<IrShape>) {
             h,
             fills,
             opacity,
+            ..
         } => {
             let (ft, fr, fl) = match fills.as_deref() {
                 Some("virt") => ("virt", "virt", "virt"),
@@ -375,6 +401,7 @@ fn project_shape(ctx: &mut Ctx, shape: &Shape, out: &mut Vec<IrShape>) {
             w,
             d,
             style,
+            ..
         } => {
             let (fill, op, stroke, width, dash) = style_or(style, "body-top", "outline", OUTLINE_W);
             let pts = vec![
@@ -394,6 +421,7 @@ fn project_shape(ctx: &mut Ctx, shape: &Shape, out: &mut Vec<IrShape>) {
             top,
             side,
             opacity,
+            ..
         } => {
             let (tcx, tcy) = p(*cx, *cy, z + h);
             let (bcx, bcy) = p(*cx, *cy, *z);
@@ -442,6 +470,7 @@ fn project_shape(ctx: &mut Ctx, shape: &Shape, out: &mut Vec<IrShape>) {
             h,
             fill,
             opacity,
+            ..
         } => {
             let pts = match face {
                 Face::Front => vec![
@@ -466,12 +495,14 @@ fn project_shape(ctx: &mut Ctx, shape: &Shape, out: &mut Vec<IrShape>) {
                 None,
             ));
         }
-        Shape::Poly3d { pts: pts3, style } => {
+        Shape::Poly3d {
+            pts: pts3, style, ..
+        } => {
             let (fill, op, stroke, width, dash) = style_or(style, "body-top", "outline", OUTLINE_W);
             let pts = pts3.iter().map(|[x, y, z]| pt(*x, *y, *z)).collect();
             out.push(polygon(pts, &fill, op, &stroke, width, dash));
         }
-        Shape::Shadow { cx, cy, rx, ry } => {
+        Shape::Shadow { cx, cy, rx, ry, .. } => {
             let (px, py) = p(*cx, *cy, 0.0);
             out.push(IrShape::Ellipse {
                 cx: px,
@@ -485,7 +516,7 @@ fn project_shape(ctx: &mut Ctx, shape: &Shape, out: &mut Vec<IrShape>) {
                 dash: None,
             });
         }
-        Shape::Seg { a, b, style } => {
+        Shape::Seg { a, b, style, .. } => {
             let (x0, y0) = p(a[0], a[1], a[2]);
             let (x1, y1) = p(b[0], b[1], b[2]);
             let (fill, op, stroke, width, dash) = style_or(style, "none", "ink", 1.4);
@@ -498,7 +529,9 @@ fn project_shape(ctx: &mut Ctx, shape: &Shape, out: &mut Vec<IrShape>) {
                 dash,
             });
         }
-        Shape::At { x, y, z, children } => {
+        Shape::At {
+            x, y, z, children, ..
+        } => {
             let (sx, sy) = p(*x, *y, *z);
             let mut env = BTreeMap::new();
             env.insert("x".to_string(), sx);
@@ -507,27 +540,7 @@ fn project_shape(ctx: &mut Ctx, shape: &Shape, out: &mut Vec<IrShape>) {
                 project_2d(ctx, child, &env, out);
             }
         }
-        Shape::Badge {
-            icon,
-            corner,
-            scale,
-        } => {
-            // deferred to the second pass; encoded as a group whose lone
-            // child names the request
-            out.push(IrShape::Group {
-                tx: 0.0,
-                ty: 0.0,
-                scale: scale.unwrap_or(BADGE_SCALE),
-                shapes: vec![IrShape::Path {
-                    d: format!("badge:{icon}:{corner}"),
-                    fill: "none".to_string(),
-                    fill_opacity: 1.0,
-                    stroke: "none".to_string(),
-                    stroke_width: 0.0,
-                    dash: None,
-                }],
-            });
-        }
+        Shape::Badge { .. } => unreachable!("project_icon places badges itself"),
     }
 }
 
@@ -543,6 +556,7 @@ fn ev(ctx: &mut Ctx, num: &EvNum, env: &BTreeMap<String, f64>) -> f64 {
             src,
             ast,
             env: captured,
+            span,
         } => {
             let mut full = captured.clone();
             full.extend(env.iter().map(|(k, v)| (k.clone(), *v)));
@@ -550,11 +564,7 @@ fn ev(ctx: &mut Ctx, num: &EvNum, env: &BTreeMap<String, f64>) -> f64 {
                 Ok(v) => v,
                 Err(e) => {
                     ctx.diags.push(SpanDiag {
-                        span: crate::ast::Span {
-                            file: 0,
-                            start: 0,
-                            len: 0,
-                        },
+                        span: *span,
                         message: format!("in '{src}': {}", e.message),
                     });
                     0.0
@@ -668,6 +678,7 @@ fn project_2d(ctx: &mut Ctx, shape: &Shape2, env: &BTreeMap<String, f64>, out: &
                         src,
                         ast,
                         env: captured,
+                        span,
                     } => {
                         let mut full = captured.clone();
                         full.extend(env.iter().map(|(k, v)| (k.clone(), *v)));
@@ -675,11 +686,7 @@ fn project_2d(ctx: &mut Ctx, shape: &Shape2, env: &BTreeMap<String, f64>, out: &
                             Ok(v) => d.push_str(&fmt(v)),
                             Err(e) => {
                                 ctx.diags.push(SpanDiag {
-                                    span: crate::ast::Span {
-                                        file: 0,
-                                        start: 0,
-                                        len: 0,
-                                    },
+                                    span: *span,
                                     message: format!("in '{src}': {}", e.message),
                                 });
                             }

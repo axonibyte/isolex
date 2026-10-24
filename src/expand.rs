@@ -23,6 +23,8 @@ pub enum EvNum {
         src: String,
         ast: Expr,
         env: BTreeMap<String, f64>,
+        /// The node it belongs to, for errors only projection can find.
+        span: Span,
     },
 }
 
@@ -42,6 +44,7 @@ pub enum PathEv {
         src: String,
         ast: Expr,
         env: BTreeMap<String, f64>,
+        span: Span,
     },
 }
 
@@ -89,6 +92,7 @@ pub enum Shape {
         h: f64,
         fills: Option<String>,
         opacity: Option<f64>,
+        span: Span,
     },
     Tile {
         x: f64,
@@ -97,6 +101,7 @@ pub enum Shape {
         w: f64,
         d: f64,
         style: EvStyle,
+        span: Span,
     },
     Cylinder {
         cx: f64,
@@ -107,6 +112,7 @@ pub enum Shape {
         top: Option<String>,
         side: Option<String>,
         opacity: Option<f64>,
+        span: Span,
     },
     FaceRect {
         face: Face,
@@ -117,32 +123,38 @@ pub enum Shape {
         h: f64,
         fill: Option<String>,
         opacity: Option<f64>,
+        span: Span,
     },
     Poly3d {
         pts: Vec<[f64; 3]>,
         style: EvStyle,
+        span: Span,
     },
     Shadow {
         cx: f64,
         cy: f64,
         rx: f64,
         ry: f64,
+        span: Span,
     },
     Seg {
         a: [f64; 3],
         b: [f64; 3],
         style: EvStyle,
+        span: Span,
     },
     At {
         x: f64,
         y: f64,
         z: f64,
         children: Vec<Shape2>,
+        span: Span,
     },
     Badge {
         icon: String,
         corner: String,
         scale: Option<f64>,
+        span: Span,
     },
 }
 
@@ -393,6 +405,7 @@ fn eval_2d(ctx: &mut Ctx, num: &Num, env: &BTreeMap<String, f64>, span: Span) ->
                     src: src.clone(),
                     ast: ast.clone(),
                     env: captured,
+                    span,
                 })
             } else {
                 match expr::eval(ast, env) {
@@ -516,6 +529,7 @@ fn expand_node_3d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
                 h: v[5],
                 fills: fills.clone(),
                 opacity,
+                span: *span,
             });
         }
         Node::Tile {
@@ -538,6 +552,7 @@ fn expand_node_3d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
                 w: v[3],
                 d: v[4],
                 style,
+                span: *span,
             });
         }
         Node::Cylinder {
@@ -562,6 +577,7 @@ fn expand_node_3d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
                 top: top.clone(),
                 side: side.clone(),
                 opacity,
+                span: *span,
             });
         }
         Node::FaceRect {
@@ -586,6 +602,7 @@ fn expand_node_3d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
                 h: v[4],
                 fill: fill.clone(),
                 opacity,
+                span: *span,
             });
         }
         Node::Poly3d {
@@ -602,7 +619,11 @@ fn expand_node_3d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
             };
             let mut pts = Vec::new();
             collect_pts3(ctx, children, env, &mut pts);
-            out.push(Shape::Poly3d { pts, style });
+            out.push(Shape::Poly3d {
+                pts,
+                style,
+                span: *span,
+            });
         }
         Node::Shadow { args, when, span } => {
             if !when_passes(ctx, when, env, *span) {
@@ -614,6 +635,7 @@ fn expand_node_3d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
                 cy: v[1],
                 rx: v[2],
                 ry: v[3],
+                span: *span,
             });
         }
         Node::Seg {
@@ -633,6 +655,7 @@ fn expand_node_3d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
                 a: [v[0], v[1], v[2]],
                 b: [v[3], v[4], v[5]],
                 style,
+                span: *span,
             });
         }
         Node::At {
@@ -652,6 +675,7 @@ fn expand_node_3d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
                 y: v[1],
                 z: v[2],
                 children: kids,
+                span: *span,
             });
         }
         Node::Repeat {
@@ -706,6 +730,7 @@ fn expand_node_3d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
                 icon: icon.clone(),
                 corner: corner.clone(),
                 scale,
+                span: *span,
             });
         }
         other => {
@@ -898,8 +923,18 @@ fn expand_node_2d(ctx: &mut Ctx, node: &Node, env: &BTreeMap<String, f64>, out: 
                         };
                         match eval_2d(ctx, &num, env, *span) {
                             Some(EvNum::Lit(v)) => pieces.push(PathEv::Lit(fmt_num(v))),
-                            Some(EvNum::NeedsAnchor { src, ast, env }) => {
-                                pieces.push(PathEv::Expr { src, ast, env })
+                            Some(EvNum::NeedsAnchor {
+                                src,
+                                ast,
+                                env,
+                                span,
+                            }) => {
+                                pieces.push(PathEv::Expr {
+                                src,
+                                ast,
+                                env,
+                                span,
+                            })
                             }
                             None => return,
                         }

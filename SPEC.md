@@ -191,7 +191,9 @@ viewBox is `[0, 0, w, h]`.
 
 Projection keeps every number finite too: an icon whose geometry
 overflows once projected to output units (its viewBox, a point, a
-radius, a number in path data) is a compile-time error naming the icon.
+radius, a number in path data) is a compile-time error naming the icon,
+reported at the node that overflowed (the anchor, for 2-D nodes inside
+`at`; the `badge`, for a badge placed out of range).
 No value in the IR is ever infinite or NaN.
 
 The IR is JSON: `{ "ir_version": 1, "icons": [ … ] }`, each icon
