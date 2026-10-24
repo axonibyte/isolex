@@ -642,12 +642,12 @@ fn project_2d(ctx: &mut Ctx, shape: &Shape2, env: &BTreeMap<String, f64>, out: &
             let a0 = ev(ctx, &args[3], env);
             let a1 = ev(ctx, &args[4], env);
             let (x0, y0) = (
-                cx + r * crate::expr::quantize(a0.to_radians().cos()),
-                cy - r * crate::expr::quantize(a0.to_radians().sin()),
+                cx + r * crate::expr::quantize(crate::expr::cos(a0.to_radians())),
+                cy - r * crate::expr::quantize(crate::expr::sin(a0.to_radians())),
             );
             let (x1, y1) = (
-                cx + r * crate::expr::quantize(a1.to_radians().cos()),
-                cy - r * crate::expr::quantize(a1.to_radians().sin()),
+                cx + r * crate::expr::quantize(crate::expr::cos(a1.to_radians())),
+                cy - r * crate::expr::quantize(crate::expr::sin(a1.to_radians())),
             );
             let large = if (a1 - a0).abs() > 180.0 { 1 } else { 0 };
             let (fill, op, stroke, width, dash) = style_or(style, "none", "ink", 1.4);
@@ -728,7 +728,7 @@ mod tests {
         let (x, y) = p(2.0, 1.0, 0.28);
         assert!((x - 34.641_016_151_377_55).abs() < 1e-12);
         assert!((y - 48.8).abs() < 1e-12);
-        assert_eq!(COS, 30.0_f64.to_radians().cos());
+        assert_eq!(COS, crate::expr::cos(30.0_f64.to_radians()));
     }
 
     #[test]

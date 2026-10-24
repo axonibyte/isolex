@@ -304,6 +304,49 @@ fn nested_repeats_fail_cleanly_at_the_shape_limit() {
 }
 
 #[test]
+fn files_are_read_directory_by_directory_in_name_order() {
+    // SPEC §1: each directory's entries in byte order of their names, a
+    // directory's files where its name sorts. So a/ comes before a-b/,
+    // where sorting whole paths as strings would put "a-b/" first ('-'
+    // is 0x2D, '/' is 0x2F) and change the emission order.
+    let dir = std::env::temp_dir().join(format!("isolex-e2e-order-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    for (path, icon) in [
+        ("a-b/x.ilx", "second"),
+        ("a/x.ilx", "first"),
+        ("b.ilx", "third"),
+    ] {
+        let file = dir.join(path);
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(
+            file,
+            format!("icon \"{icon}\" {{ category \"c\"; footprint 1 1 1 }}\n"),
+        )
+        .unwrap();
+    }
+    let out = bin()
+        .arg("compile")
+        .arg(&dir)
+        .arg("--ir")
+        .arg("-")
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let json: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let names: Vec<&str> = json["icons"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| i["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(names, vec!["first", "second", "third"]);
+}
+
+#[test]
 fn check_failures_render_file_line_col_and_exit_nonzero() {
     let dir = std::env::temp_dir().join(format!("isolex-e2e-bad-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();

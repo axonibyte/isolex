@@ -540,15 +540,14 @@ fn value(e: &Expr, env: &BTreeMap<String, f64>) -> Result<f64, ExprError> {
                 Func::Round => v[0].round(),
                 Func::Floor => v[0].floor(),
                 Func::Ceil => v[0].ceil(),
-                // Quantized to 1e-9 so platform libm differences (FreeBSD
-                // vs Linux differ at ~1e-16) cannot reach the IR bytes;
-                // 1e-9 is far below the two-decimal render resolution, so
-                // nothing visible changes. All downstream arithmetic is
-                // exact IEEE-754 and therefore already portable.
-                Func::Cos => quantize(v[0].to_radians().cos()),
-                Func::Sin => quantize(v[0].to_radians().sin()),
-                Func::Cosr => quantize(v[0].cos()),
-                Func::Sinr => quantize(v[0].sin()),
+                // cos/sin are the same bits everywhere (see below), then
+                // quantized to 1e-9, which snaps results like cosr(pi/2)'s
+                // 6e-17 to an exact 0; 1e-9 is far below the two-decimal
+                // render resolution, so nothing visible changes.
+                Func::Cos => quantize(cos(v[0].to_radians())),
+                Func::Sin => quantize(sin(v[0].to_radians())),
+                Func::Cosr => quantize(cos(v[0])),
+                Func::Sinr => quantize(sin(v[0])),
             }
         }
         Expr::If(c, t, a) => {
@@ -586,10 +585,25 @@ pub fn free_vars(e: &Expr, out: &mut std::collections::BTreeSet<String>) {
     }
 }
 
-/// Round a transcendental result to 1e-9 to erase cross-platform libm
-/// last-ulp divergence (SPEC §7). Determinism, not accuracy.
+/// Round a cos/sin result to 1e-9 (SPEC §7), so values that are zero or
+/// one in exact arithmetic come out exactly zero or one.
 pub fn quantize(v: f64) -> f64 {
     (v * 1e9).round() / 1e9
+}
+
+/// Cosine of radians, from libm's pure-Rust implementation rather than
+/// the platform's maths library: platforms' own cos and sin may differ in
+/// the last bit, and rounding afterwards cannot hide that when a result
+/// lies right at a rounding boundary. The same code computes the same
+/// bits everywhere (SPEC §7). Every other operation the compiler performs
+/// is basic IEEE-754 arithmetic, which is already exact and portable.
+pub fn cos(radians: f64) -> f64 {
+    libm::cos(radians)
+}
+
+/// Sine of radians; see [`cos`].
+pub fn sin(radians: f64) -> f64 {
+    libm::sin(radians)
 }
 
 fn bool_num(b: bool) -> f64 {
@@ -732,5 +746,39 @@ mod tests {
         // to a finite result is not one.
         assert_eq!(eval(&parse_num("1 / (a * a)").unwrap(), &big), Ok(0.0));
         assert_eq!(eval(&parse_num("min(a * a, 2)").unwrap(), &big), Ok(2.0));
+    }
+
+    #[test]
+    fn cos_and_sin_are_the_same_bits_everywhere() {
+        // Sweeping 20 million arguments, the platforms' own cos and sin
+        // differed from libm's in 1 083 956 of 40 million results with
+        // glibc and 580 547 with Windows' UCRT, and from each other: glibc
+        // and UCRT disagree on the sine of `a`. Both differ from libm on
+        // the cosine of `b`. These are libm's values, on every platform.
+        let a = f64::from_bits(4_686_651_910_829_642_665); // 215714.62251296386
+        assert_eq!(sin(a).to_bits(), 0.299_860_931_826_934_63_f64.to_bits());
+        let b = f64::from_bits(13_840_824_672_179_564_243); // -5.121784682949243
+        assert_eq!(cos(b).to_bits(), 0.398_055_041_475_774_3_f64.to_bits());
+
+        // And the hard cases for argument reduction (K. C. Ng, "Argument
+        // Reduction for Huge Arguments"): correctly rounded.
+        assert_eq!(cos(1e22).to_bits(), 0.523_214_785_395_139_f64.to_bits());
+        assert_eq!(
+            sin(1e22).to_bits(),
+            (-0.852_200_849_767_188_8_f64).to_bits()
+        );
+        // and through the language, where the 1e-9 rounding follows
+        let e = env(&[("big", 1e22)]);
+        assert_eq!(num("cosr(big)", &[("big", 1e22)]), 0.523214785);
+        assert_eq!(eval(&parse_num("sinr(big)").unwrap(), &e), Ok(-0.85220085));
+    }
+
+    #[test]
+    fn round_takes_halves_away_from_zero() {
+        // SPEC §5: the opposite of the output formatting's half-to-even
+        assert_eq!(num("round(2.5)", &[]), 3.0);
+        assert_eq!(num("round(-2.5)", &[]), -3.0);
+        assert_eq!(num("round(0.5)", &[]), 1.0);
+        assert_eq!(num("round(-0.5)", &[]), -1.0);
     }
 }

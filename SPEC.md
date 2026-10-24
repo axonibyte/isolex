@@ -13,10 +13,13 @@ implementation needs to produce byte-identical output.
 
 A **lexicon** is a directory tree of `.ilx` files compiled as one unit:
 one global namespace across every definition kind; duplicate names are
-errors; there are no imports in v0. Files are processed in sorted path
-order and definitions in file order; every downstream ordering (emission,
-axis expansion, diagnostics) derives from these, which is what makes
-compilation byte-deterministic.
+errors; there are no imports in v0. Files are processed directory by
+directory, depth first: each directory's entries in byte order of their
+names, a subdirectory's files at the place its name sorts. So `a/x.ilx`
+comes before `a-b/x.ilx`, where a sort of whole path strings would put
+it after (`-` is 0x2D, `/` is 0x2F). Definitions are processed in file
+order; every downstream ordering (emission, axis expansion, diagnostics)
+derives from these, which is what makes compilation byte-deterministic.
 
 ## 2. Top-level nodes
 
@@ -122,7 +125,10 @@ Two types exist. Comparisons and boolean operators produce `Bool`,
 legal only as an `if` condition or as the root of a `when` guard; every
 other position requires a `Num` root. `cos`/`sin` take degrees;
 `cosr`/`sinr` take radians (the radian-native form the star, gear, and
-rosette helpers are written in). `%` is
+rosette helpers are written in). `round` takes halves away from zero
+(`round(2.5)` is 3, `round(-2.5)` is −3), unlike the half-to-even rule
+for formatting output (§7); `floor`, `ceil` and `abs` are the usual
+IEEE-754 operations. `%` is
 IEEE-754 remainder with the dividend's sign (Rust/C `fmod`). Division
 and remainder by zero are compile-time errors when reached. `repeat`
 counts must evaluate to non-negative integers; every iteration counts
@@ -223,10 +229,17 @@ output text (path data at compile time; coordinates at render time) is
 formatted with exactly two decimal places, round-half-to-even.
 
 Determinism: identical lexicon bytes must produce identical IR bytes.
-Runtime `cos`/`sin`/`cosr`/`sinr` (in expressions and `arc` endpoints)
-are quantized to 1e-9 before use, which erases cross-platform libm last-ulp
-divergence; every other arithmetic operation is exact IEEE-754. Identical
-lexicon bytes therefore produce identical IR bytes on any platform.
+Platform maths libraries disagree in the last bit of `cos` and `sin`
+(over 40 million results, glibc's differed from musl's in 2.7% and
+Windows' UCRT's in 1.5%, and the two disagreed with each other), so a
+conforming compiler does not use them: runtime `cos`/`sin`/`cosr`/`sinr`
+(in expressions and `arc` endpoints) are computed by one portable
+implementation, musl's, as the reference compiler takes it from the
+`libm` crate built without hardware-specific paths. Every other
+operation is basic IEEE-754 arithmetic, which is exact and portable.
+Identical lexicon bytes therefore produce identical IR bytes on any
+platform. The results are then quantized to 1e-9, which makes values
+that are 0 or 1 in exact arithmetic (`cosr` of π/2) exactly so.
 
 ## 8. Diagnostics
 
