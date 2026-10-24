@@ -300,7 +300,14 @@ fn merge_body(ctx: &mut Ctx, r: &mut ResolvedDef, body: &DefBody, whose: &str) {
             r.axes.push(a.clone());
         }
     }
-    r.grants.extend(body.grants.iter().cloned());
+    // A union by token, in first-seen order; a child's reason replaces
+    // its parent's, the way a child's value wins everywhere else.
+    for grant in &body.grants {
+        match r.grants.iter_mut().find(|g| g.token == grant.token) {
+            Some(slot) => *slot = grant.clone(),
+            None => r.grants.push(grant.clone()),
+        }
+    }
     for (kind, limit) in &body.limits {
         r.limits.insert(*kind, (*limit, whose.to_string()));
     }

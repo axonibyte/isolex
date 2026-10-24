@@ -546,6 +546,29 @@ icon "i" { category "c"; footprint 1 1 1; axes "a" "b"; part "p" { tile 0 0 0 1 
 }
 
 #[test]
+fn grants_union_down_the_chain() {
+    // a base and its child granting the same token emitted it twice; it
+    // is one grant, in the slot it was first given, with the child's
+    // reason, the way a child's value wins everywhere else
+    let src = r#"
+base "b" { category "c"; footprint 1 1 1; grant "accent" reason="the base's" }
+icon "i" {
+  extends "b"
+  grant "accent-dim" reason="only the child's"
+  grant "accent" reason="the child's"
+}
+"#;
+    let icons = compile_ok(src);
+    assert_eq!(
+        icons[0].grants,
+        vec![
+            ("accent".to_string(), "the child's".to_string()),
+            ("accent-dim".to_string(), "only the child's".to_string()),
+        ]
+    );
+}
+
+#[test]
 fn a_duplicate_definition_is_reported_once() {
     // the resolver names it; its two emissions are not a second error
     let (_, msgs) = compile(

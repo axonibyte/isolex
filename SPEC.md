@@ -141,7 +141,9 @@ compilation always terminates.
 Scoping: params and enclosing `repeat` variables are in scope;
 fragments are **hygienic** — a fragment body sees only its own params
 (caller args evaluate in caller scope, then bind). Inside `at`, the
-names `x` and `y` are bound to the anchor's screen coordinates.
+names `x` and `y` are bound to the anchor's screen coordinates. They are
+reserved for that everywhere: a param or `repeat` variable named `x` or
+`y` is an error, since `at` would override it.
 
 ## 6. Inheritance and axes
 
@@ -156,13 +158,18 @@ Single `extends` chain, walked root-first, merged child-over-parent:
    replacing or removing an unknown name is an error with a
    nearest-name suggestion.
 3. `category`/`footprint`/`canvas`: child wins. `describe` concatenates.
-   `axes` and `grant`s union (first-seen order).
+   `axes` union (first-seen order). `grant`s union by token, in
+   first-seen order; a child granting a token its ancestor granted keeps
+   that slot and replaces the reason.
 
 Cycles are errors reporting the full chain. Only `base` and `icon` can
 be extended.
 
 An `axis` holds `variant "name" { …definition body… }` overlays and an
-optional `emit-base #false`. An icon (or ancestor) opts in with `axes`.
+optional `emit-base #false`, and nothing else: any other node in an axis
+body is an error, and so is `extends` on an axis or in a variant (a
+variant overlays the icon that opts into its axis; it has no parent of
+its own). An icon (or ancestor) opts in with `axes`.
 The compiler expands the cartesian product in axis-declaration order ×
 variant-declaration order; each combination applies its variants as
 child merges and emits `name-<v1>[-<v2>…]`. The bare name is the

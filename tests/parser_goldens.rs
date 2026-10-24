@@ -188,6 +188,34 @@ fn diagnostics_name_the_problem_and_the_place() {
                 "did you mean 'icon-limit'?",
             ],
         ),
+        // these four were accepted and then ignored
+        (
+            "axis \"a\" {\n  variant \"v\" {\n    extends \"b\"\n  }\n}",
+            3,
+            &["a variant cannot extend"],
+        ),
+        (
+            "axis \"a\" {\n  category \"c\"\n}",
+            2,
+            &["an axis holds only variant and emit-base", "'category'"],
+        ),
+        (
+            "axis \"a\" {\n  part \"p\" { tile 0 0 0 1 1 }\n}",
+            2,
+            &["an axis holds only variant and emit-base", "'part'"],
+        ),
+        ("axis \"a\" extends=\"b\" { }", 1, &["an axis cannot extend"]),
+        // and these two were overridden by the anchor inside `at`
+        (
+            "icon \"x\" {\n  param x 5\n}",
+            2,
+            &["'x' is reserved for the anchor's screen position"],
+        ),
+        (
+            "icon \"x\" {\n  part \"p\" {\n    repeat 3 \"y\" {\n      tile 0 0 0 1 1\n    }\n  }\n}",
+            3,
+            &["'y' is reserved for the anchor's screen position"],
+        ),
         (
             "icon \"x\" {\n  grant \"accent\"\n}",
             2,

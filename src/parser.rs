@@ -216,6 +216,10 @@ fn parse_definition(ctx: &mut FileCtx, node: &kdl::KdlNode) -> Option<Definition
     for entry in node.entries() {
         match entry.name().map(|n| n.value()) {
             None => {} // the name arg
+            Some("extends") if kind == DefKind::Axis => ctx.diag(
+                entry.span().offset(),
+                "an axis cannot extend: its variants overlay the icons that opt into it",
+            ),
             Some("extends") => match entry.value().as_string() {
                 Some(s) => extends = Some(s.to_string()),
                 None => ctx.diag(
@@ -315,6 +319,21 @@ fn set_limit(ctx: &mut FileCtx, node: &kdl::KdlNode, kind: LimitKind, limits: &m
 
 fn parse_body_child(ctx: &mut FileCtx, ch: &kdl::KdlNode, kind: DefKind, def: &mut Definition) {
     let off = ch.span().offset();
+    // An axis is a set of overlays; anything else in it would be dropped.
+    if kind == DefKind::Axis && !matches!(ch.name().value(), "variant" | "emit-base") {
+        let name = ch.name().value();
+        ctx.diag(
+            off,
+            if name == "extends" {
+                "an axis cannot extend: its variants overlay the icons that opt into it".to_string()
+            } else {
+                format!(
+                    "an axis holds only variant and emit-base; '{name}' belongs inside a variant"
+                )
+            },
+        );
+        return;
+    }
     match ch.name().value() {
         "extends" => match (first_string_arg(ctx, ch), &def.extends) {
             (Some(parent), None) => def.extends = Some(parent),
@@ -351,6 +370,10 @@ fn parse_body_child(ctx: &mut FileCtx, ch: &kdl::KdlNode, kind: DefKind, def: &m
             let value = entries.get(1).filter(|e| e.name().is_none());
             match (name, value) {
                 (Some(n), Some(v)) => {
+                    if anchor_name(n) {
+                        ctx.diag(off, reserved(n, "param"));
+                        return;
+                    }
                     if let Some(num) = parse_num_entry(ctx, v) {
                         def.body
                             .params
@@ -432,6 +455,13 @@ fn parse_body_child(ctx: &mut FileCtx, ch: &kdl::KdlNode, kind: DefKind, def: &m
             };
             if let Some(children) = ch.children() {
                 for gch in children.nodes() {
+                    if gch.name().value() == "extends" {
+                        ctx.diag(
+                            gch.span().offset(),
+                            "a variant cannot extend: it overlays the icon that opts into its axis",
+                        );
+                        continue;
+                    }
                     parse_body_child(ctx, gch, DefKind::Icon, &mut sub);
                 }
             }
@@ -541,6 +571,10 @@ fn parse_geometry(ctx: &mut FileCtx, ch: &kdl::KdlNode, gctx: Ctx) -> Option<Nod
             );
             return None;
         };
+        if anchor_name(var) {
+            ctx.diag(off, reserved(var, "repeat variable"));
+            return None;
+        }
         return Some(Node::Repeat {
             count,
             var: var.to_string(),
@@ -954,4 +988,17 @@ fn style_props(ctx: &mut FileCtx, node: &kdl::KdlNode) -> Style {
         dash: string_prop(ctx, node, "dash"),
         opacity: num_prop(ctx, node, "opacity"),
     }
+}
+
+/// Inside `at`, `x` and `y` are the anchor's screen position, so a param
+/// or loop variable of either name would be overridden there.
+fn anchor_name(name: &str) -> bool {
+    name == "x" || name == "y"
+}
+
+fn reserved(name: &str, what: &str) -> String {
+    format!(
+        "'{name}' is reserved for the anchor's screen position inside `at`; \
+         give this {what} another name"
+    )
 }
