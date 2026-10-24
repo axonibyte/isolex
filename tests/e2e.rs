@@ -210,6 +210,22 @@ fn an_anchor_expression_that_overflows_is_an_error() {
 }
 
 #[test]
+fn a_name_emitted_twice_is_reported_where_it_is_emitted_again() {
+    let (ok, stderr) = check_files(
+        "collide",
+        &[(
+            "names.ilx",
+            "axis \"state\" { variant \"down\" { part \"b\" { tile 0 0 1 1 1 } } }\nicon \"srv\" { category \"c\"; footprint 1 1 1; axes \"state\"; part \"p\" { tile 0 0 0 1 1 } }\nicon \"srv-down\" { category \"c\"; footprint 1 1 1; part \"p\" { box 0 0 0 1 1 1 } }\n",
+        )],
+    );
+    assert!(!ok, "{stderr}");
+    assert!(
+        stderr.contains("names.ilx:3:1: 'srv-down' is emitted twice"),
+        "{stderr}"
+    );
+}
+
+#[test]
 fn check_failures_render_file_line_col_and_exit_nonzero() {
     let dir = std::env::temp_dir().join(format!("isolex-e2e-bad-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();

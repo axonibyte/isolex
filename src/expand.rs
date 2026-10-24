@@ -181,27 +181,60 @@ pub fn expand(resolved: &Resolved) -> (Vec<ExpandedIcon>, Vec<SpanDiag>) {
         insert_stack: Vec::new(),
     };
     let mut out = Vec::new();
+    // Each emitted name, with what emitted it: an icon and the variants
+    // applied to it. Names are decided here, not by evaluation, so a
+    // collision is one whether or not the icons expand cleanly.
+    let mut emitted: BTreeMap<String, (String, Vec<(String, String)>)> = BTreeMap::new();
 
     for icon in &resolved.icons {
         for combo in axis_combos(&mut ctx, icon) {
             let mut def = icon.clone();
             let mut suffix = String::new();
+            let mut applied = Vec::new();
             for (axis_name, variant_idx) in &combo {
                 if let Some(vi) = variant_idx {
                     let axis = &resolved.axes[axis_name];
                     let variant = &axis.variants[*vi];
                     suffix.push('-');
                     suffix.push_str(&variant.name);
+                    applied.push((axis_name.clone(), variant.name.clone()));
                     apply_variant(&mut def, variant, &mut ctx.diags);
                 }
             }
             let name = format!("{}{}", icon.name, suffix);
+            let source = (icon.name.clone(), applied);
+            match emitted.get(&name) {
+                // the same definition twice: the resolver has already
+                // reported it as a duplicate
+                Some(first) if *first == source => {}
+                Some(first) => {
+                    let message = format!(
+                        "'{name}' is emitted twice: by {}, and by {}",
+                        describe_source(first),
+                        describe_source(&source)
+                    );
+                    ctx.diag(icon.span, message);
+                }
+                None => {
+                    emitted.insert(name.clone(), source);
+                }
+            }
             if let Some(exp) = expand_one(&mut ctx, &def, name) {
                 out.push(exp);
             }
         }
     }
     (out, ctx.diags)
+}
+
+/// "icon 'srv' with variant 'down' of axis 'state'", or just "icon 'srv'".
+fn describe_source((icon, applied): &(String, Vec<(String, String)>)) -> String {
+    let mut s = format!("icon '{icon}'");
+    for (i, (axis, variant)) in applied.iter().enumerate() {
+        s.push_str(if i == 0 { " with " } else { " and " });
+        s.push_str(&format!("variant '{variant}' of axis '{axis}'"));
+    }
+    s
 }
 
 /// The cartesian product of variant choices, in axis declaration order.

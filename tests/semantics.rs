@@ -349,6 +349,56 @@ fn duplicate_names_are_an_error() {
 }
 
 #[test]
+fn an_expanded_name_colliding_with_a_definition_is_an_error() {
+    // the IR held srv, srv-down, srv-down, and compiled clean
+    let src = r#"
+axis "state" { variant "down" { part "b" { tile 0 0 1 1 1 } } }
+icon "srv" { category "c"; footprint 1 1 1; axes "state"; part "p" { tile 0 0 0 1 1 } }
+icon "srv-down" { category "c"; footprint 1 1 1; part "p" { box 0 0 0 1 1 1 } }
+"#;
+    let (_, msgs) = compile(src);
+    assert_eq!(
+        msgs,
+        vec![
+            "'srv-down' is emitted twice: by icon 'srv' with variant 'down' of axis 'state', \
+             and by icon 'srv-down'"
+        ],
+    );
+}
+
+#[test]
+fn expanded_names_colliding_with_each_other_are_an_error() {
+    // one icon against itself: a's "x-y" and a's "x" plus b's "y" both
+    // spell i-x-y
+    let src = r#"
+axis "a" {
+  variant "x" { part "ax" { tile 0 0 1 1 1 } }
+  variant "x-y" { part "axy" { tile 0 0 2 1 1 } }
+}
+axis "b" { variant "y" { part "by" { tile 0 0 3 1 1 } } }
+icon "i" { category "c"; footprint 1 1 1; axes "a" "b"; part "p" { tile 0 0 0 1 1 } }
+"#;
+    let (_, msgs) = compile(src);
+    assert_eq!(
+        msgs,
+        vec![
+            "'i-x-y' is emitted twice: by icon 'i' with variant 'x' of axis 'a' and variant 'y' \
+             of axis 'b', and by icon 'i' with variant 'x-y' of axis 'a'"
+        ],
+    );
+}
+
+#[test]
+fn a_duplicate_definition_is_reported_once() {
+    // the resolver names it; its two emissions are not a second error
+    let (_, msgs) = compile(
+        "icon \"x\" { category \"c\"; footprint 1 1 1 }\nicon \"x\" { category \"c\"; footprint 1 1 1 }",
+    );
+    assert_eq!(msgs.len(), 1, "{msgs:?}");
+    assert!(msgs[0].contains("duplicate definition 'x'"), "{msgs:?}");
+}
+
+#[test]
 fn anchor_expressions_defer_and_capture_their_environment() {
     use isolex::expand::{EvNum, Shape2};
     let src = r#"

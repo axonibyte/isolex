@@ -165,6 +165,12 @@ child merges and emits `name-<v1>[-<v2>…]`. The bare name is the
 all-absent combination; an axis with `emit-base #false` offers no
 absent option, so every emitted combination carries one of its variants.
 
+Emitted names are one namespace too: a name produced twice, whether by
+a definition and an expansion (`srv-down` beside `srv` with variant
+`down`) or by two expansions (variant `x-y` of one axis beside `x` of
+it plus `y` of another), is an error naming both sources, reported at
+the second in emission order.
+
 ## 7. Projection and the shape IR
 
 Constants (normative, as literals — no libm variance may reach output):
