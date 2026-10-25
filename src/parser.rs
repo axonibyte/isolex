@@ -134,12 +134,19 @@ fn parse_top(ctx: &mut FileCtx, node: kdl::NodeRef, out: &mut Lexicon) {
     let name = node.name().value();
     match name {
         "lexicon" => {
+            only_props(ctx, node, &[]);
             let mut cfg = LexiconConfig::default();
             // each reserved token with where it was written, checked against
             // the tokens once the whole block is read (either may come first)
             let mut reserved_at: Vec<(String, usize)> = Vec::new();
             if let Some(children) = node.children() {
                 for ch in children.nodes() {
+                    let setting = ch.name().value();
+                    if matches!(setting, "tokens" | "reserved" | "stroke-widths")
+                        || limit_kind(setting).is_some()
+                    {
+                        only_props(ctx, ch, &[]);
+                    }
                     match ch.name().value() {
                         "tokens" => {
                             cfg.tokens = string_args(ctx, ch);
@@ -365,6 +372,17 @@ fn parse_body_child(ctx: &mut FileCtx, ch: kdl::NodeRef, kind: DefKind, def: &mu
             },
         );
         return;
+    }
+    if BODY_NODES.contains(&ch.name().value()) {
+        only_props(
+            ctx,
+            ch,
+            if ch.name().value() == "grant" {
+                &["reason"]
+            } else {
+                &[]
+            },
+        );
     }
     match ch.name().value() {
         "extends" => match (first_string_arg(ctx, ch), &def.extends) {
@@ -634,6 +652,12 @@ fn parse_geometry(ctx: &mut FileCtx, ch: kdl::NodeRef, gctx: Ctx) -> Option<Node
     let off = ch.span().offset();
     let name = ch.name().value();
     let span = ctx.span(ch.span());
+
+    // an unknown node is reported as one; insert's properties are params
+    let known = name == "pt" || NODES_3D.contains(&name) || NODES_2D.contains(&name);
+    if known && name != "insert" {
+        only_props(ctx, ch, geometry_props(name));
+    }
 
     // pt is special: only valid inside poly bodies
     if name == "pt" {
@@ -1036,11 +1060,19 @@ fn string_args(ctx: &mut FileCtx, node: kdl::NodeRef) -> Vec<String> {
     out
 }
 
-fn string_prop(_ctx: &mut FileCtx, node: kdl::NodeRef, name: &str) -> Option<String> {
-    node.entries()
+fn string_prop(ctx: &mut FileCtx, node: kdl::NodeRef, name: &str) -> Option<String> {
+    let e = node
+        .entries()
         .iter()
-        .find(|e| e.name().map(|n| n.value()) == Some(name))
-        .and_then(|e| e.value().as_string().map(|s| s.to_string()))
+        .find(|e| e.name().map(|n| n.value()) == Some(name))?;
+    match e.value().as_string() {
+        Some(s) => Some(s.to_string()),
+        // used to be dropped as if it were not there
+        None => {
+            ctx.diag(e.span().offset(), format!("{name} takes a string"));
+            None
+        }
+    }
 }
 
 fn num_prop(ctx: &mut FileCtx, node: kdl::NodeRef, name: &str) -> Option<Num> {
@@ -1082,6 +1114,50 @@ fn style_props(ctx: &mut FileCtx, node: kdl::NodeRef) -> Style {
         width: num_prop(ctx, node, "width"),
         dash: string_prop(ctx, node, "dash"),
         opacity: num_prop(ctx, node, "opacity"),
+    }
+}
+
+/// The properties each geometry node reads. `insert` is not here: its
+/// properties are the fragment's params.
+fn geometry_props(name: &str) -> &'static [&'static str] {
+    const STYLE: &[&str] = &["fill", "stroke", "width", "dash", "opacity", "when"];
+    match name {
+        "box" => &["fills", "opacity", "when"],
+        "cylinder" => &["top", "side", "opacity", "when"],
+        "facerect" => &["fill", "opacity", "when"],
+        "rect" => &["fill", "stroke", "width", "dash", "opacity", "rx", "when"],
+        "path" => &["fill", "stroke", "width", "dash", "opacity", "d", "when"],
+        "badge" => &["corner", "scale", "when"],
+        "shadow" | "at" | "repeat" => &["when"],
+        "pt" => &[],
+        _ => STYLE,
+    }
+}
+
+/// Every property is read by name, so one a node does not read would be
+/// dropped without a word (#39): `box … fill="brand"` painted nothing and
+/// said nothing. Each is an error instead, saying what the node takes.
+fn only_props(ctx: &mut FileCtx, node: kdl::NodeRef, takes: &[&str]) {
+    let what = node.name().value();
+    for e in node.entries() {
+        let Some(prop) = e.name().map(|n| n.value()) else {
+            continue;
+        };
+        if takes.contains(&prop) {
+            continue;
+        }
+        let list = match takes {
+            [] => format!("{what} takes no properties"),
+            [one] => format!("{what} takes only {one}"),
+            [init @ .., last] => format!("{what} takes {} and {last}", init.join(", ")),
+        };
+        ctx.diag(
+            e.span().offset(),
+            format!(
+                "unknown property '{prop}' on {what}; {list}{}",
+                suggest(prop, takes.iter().copied())
+            ),
+        );
     }
 }
 

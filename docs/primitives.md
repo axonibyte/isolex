@@ -6,9 +6,16 @@ units**. In any numeric slot a bare number is a literal and a quoted
 string is an [expression](guide.md#the-expression-language). Painter
 order is document order after resolution.
 
-Style properties, where applicable: `fill`, `stroke` (a theme token or
-`none`), `width`, `dash` (e.g. `dash="3 2.5"`), `opacity`, and the
-`when="…"` guard.
+Style properties: `fill`, `stroke` (a theme token or `none`), `width`,
+`dash` (e.g. `dash="3 2.5"`), `opacity`, and the `when="…"` guard. Most
+nodes take all of these; the exceptions are named below. A property a
+node does not take is an error, never ignored:
+
+- `box` takes `fills=`, `opacity=` and `when=`, not `fill=`.
+- `cylinder` takes `top=`, `side=`, `opacity=` and `when=`.
+- `facerect` takes `fill=`, `opacity=` and `when=`.
+- `shadow`, `at` and `repeat` take only `when=`; `pt` takes none.
+- `badge` takes `corner=`, `scale=` and `when=`.
 
 ## 3-D nodes (on the isometric grid, outside `at`)
 

@@ -250,6 +250,53 @@ fn diagnostics_name_the_problem_and_the_place() {
             2,
             &["grant takes a token and a reason"],
         ),
+        // properties a node does not read were dropped without a word (#39)
+        (
+            "icon \"x\" {\n  part \"p\" {\n    box 0 0 0 1 1 1 fill=\"brand\"\n  }\n}",
+            3,
+            &["unknown property 'fill' on box; box takes fills, opacity and when", "did you mean 'fills'?"],
+        ),
+        (
+            "icon \"x\" {\n  part \"p\" {\n    cylinder 0 0 0 1 1 fill=\"ink\"\n  }\n}",
+            3,
+            &["unknown property 'fill' on cylinder; cylinder takes top, side, opacity and when"],
+        ),
+        (
+            "icon \"x\" {\n  part \"p\" {\n    shadow 0 0 1 1 opacity=0.5\n  }\n}",
+            3,
+            &["unknown property 'opacity' on shadow; shadow takes only when"],
+        ),
+        (
+            "icon \"x\" {\n  part \"p\" {\n    poly3d {\n      pt 0 0 0 when=\"1\"\n    }\n  }\n}",
+            4,
+            &["unknown property 'when' on pt; pt takes no properties"],
+        ),
+        (
+            "icon \"x\" {\n  part \"p\" {\n    at 0 0 0 {\n      circle \"x\" \"y\" 9 strok=\"ink\"\n    }\n  }\n}",
+            4,
+            &["unknown property 'strok' on circle", "did you mean 'stroke'?"],
+        ),
+        (
+            "icon \"x\" {\n  part \"p\" when=\"1\" { }\n}",
+            2,
+            &["unknown property 'when' on part; part takes no properties"],
+        ),
+        (
+            "icon \"x\" {\n  grant \"accent\" reason=\"red\" why=\"red\"\n}",
+            2,
+            &["unknown property 'why' on grant; grant takes only reason"],
+        ),
+        (
+            "lexicon {\n  tokens \"ink\" fill=\"ink\"\n}",
+            2,
+            &["unknown property 'fill' on tokens; tokens takes no properties"],
+        ),
+        // and so was a string property given something else
+        (
+            "icon \"x\" {\n  part \"p\" {\n    tile 0 0 0 1 1 fill=3\n  }\n}",
+            3,
+            &["fill takes a string"],
+        ),
     ];
 
     for (src, line, fragments) in cases {
@@ -271,6 +318,62 @@ fn diagnostics_name_the_problem_and_the_place() {
             );
         }
     }
+}
+
+/// The other side of #39: every property a node reads is accepted, and
+/// an unknown node is reported once, not once more per property.
+#[test]
+fn every_property_a_node_reads_is_accepted() {
+    let src = r#"icon "x" extends="y" {
+  part "p" {
+    box 0 0 0 1 1 1 fills="virt" opacity=0.5 when="1 == 1"
+    tile 0 0 0 1 1 fill="ink" stroke="ink" width=1.2 dash="2 1" opacity=0.5 when="1 == 1"
+    cylinder 0 0 0 1 1 top="ink" side="ink" opacity=0.5 when="1 == 1"
+    facerect "front" 0 0 0 1 1 fill="ink" opacity=0.5 when="1 == 1"
+    poly3d fill="ink" stroke="ink" width=1.2 dash="2 1" opacity=0.5 when="1 == 1" {
+      pt 0 0 0
+    }
+    shadow 0 0 1 1 when="1 == 1"
+    seg 0 0 0 1 1 1 fill="ink" stroke="ink" width=1.2 dash="2 1" opacity=0.5 when="1 == 1"
+    badge "b" corner="sw" scale=0.5 when="1 == 1"
+    insert "f" anything=2 when="1 == 1"
+    repeat 2 "i" when="1 == 1" { tile 0 0 0 1 1 }
+    at 0 0 0 when="1 == 1" {
+      line 0 0 1 1 fill="ink" stroke="ink" width=1.2 dash="2 1" opacity=0.5 when="1 == 1"
+      circle 0 0 1 fill="ink" stroke="ink" width=1.2 dash="2 1" opacity=0.5 when="1 == 1"
+      ellipse 0 0 1 1 fill="ink" stroke="ink" width=1.2 dash="2 1" opacity=0.5 when="1 == 1"
+      rect 0 0 1 1 rx=1 fill="ink" stroke="ink" width=1.2 dash="2 1" opacity=0.5 when="1 == 1"
+      arc 0 0 1 0 90 fill="ink" stroke="ink" width=1.2 dash="2 1" opacity=0.5 when="1 == 1"
+      path d="M0,0 h1" fill="ink" stroke="ink" width=1.2 dash="2 1" opacity=0.5 when="1 == 1"
+      poly fill="ink" stroke="ink" width=1.2 dash="2 1" opacity=0.5 when="1 == 1" {
+        pt 0 0
+      }
+    }
+  }
+  grant "accent" reason="it is a warning"
+}"#;
+    let outcome = parse_one("t.ilx", src);
+    assert_eq!(outcome.diags, vec![], "every property here is read");
+
+    let outcome = parse_one(
+        "t.ilx",
+        "icon \"x\" {\n  part \"p\" {\n    bx 0 0 0 1 1 1 fill=\"ink\"\n  }\n}",
+    );
+    assert_eq!(outcome.diags.len(), 1, "{:?}", outcome.diags);
+    assert!(outcome.diags[0]
+        .message
+        .contains("unknown geometry node 'bx'"));
+}
+
+/// The error is at the property, where an editor underlines it.
+#[test]
+fn an_unknown_property_is_reported_where_it_is_written() {
+    let outcome = parse_one(
+        "t.ilx",
+        "icon \"x\" {\n  part \"p\" {\n    box 0 0 0 1 1 1 fill=\"brand\"\n  }\n}",
+    );
+    assert_eq!(outcome.diags.len(), 1, "{:?}", outcome.diags);
+    assert_eq!((outcome.diags[0].line, outcome.diags[0].col), (3, 21));
 }
 
 #[test]

@@ -139,6 +139,10 @@ expansion.
 
 Style properties everywhere applicable: `fill`, `stroke` (theme tokens
 or `none`), `width`, `dash` ("3 2.5"), `opacity`, and the `when` guard.
+Each node takes only the properties docs/primitives.md lists for it; any
+other property on any node is a diagnostic at the property, as is a
+string property given a value that is not a string. (`insert`'s
+properties are its fragment's params, checked against the fragment.)
 
 ## 5. Values and expressions
 
