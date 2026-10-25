@@ -1,0 +1,9 @@
+isolex
+Copyright Axonibyte Innovations, LLC
+https://forge.axonibyte.com/axonibyte/isolex
+
+Licensed under the Apache License, Version 2.0 (LICENSE).
+
+tests/kdl-suite holds the official KDL test suite, which is the KDL
+contributors' and licensed under CC BY-SA 4.0 (see its README.md and
+LICENSE.md); it is test data, and no part of isolex.

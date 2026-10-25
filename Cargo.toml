@@ -4,6 +4,7 @@ version = "0.3.0"
 edition = "2021"
 rust-version = "1.97"
 description = "A declarative language for icon systems — define glyph families with parameters and prototype inheritance, compile deterministically to vector output."
+authors = ["Axonibyte Innovations, LLC"]
 license = "Apache-2.0"
 repository = "https://github.com/axonibyte/isolex"
 

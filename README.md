@@ -70,4 +70,5 @@ publishes it as `isolex-<version>.wasm`.
 Every example in the guides is compile-checked against the current
 compiler.
 
-Licensed under the Apache License, Version 2.0.
+Copyright Axonibyte Innovations, LLC. Licensed under the Apache License,
+Version 2.0 (see [LICENSE](LICENSE) and [NOTICE](NOTICE)).

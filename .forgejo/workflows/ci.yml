@@ -193,39 +193,33 @@ jobs:
           printf 'header = "Authorization: token %s"\n' "$PACKAGE_TOKEN" > "$cfg"
           base="${GITHUB_SERVER_URL:-https://forge.axonibyte.com}/api/packages/${GITHUB_REPOSITORY_OWNER}/generic/$crate/$ver"
           published=0
+          # put FILE NAME: one upload, then read back anonymously and
+          # compared byte for byte; any failure stops the publish.
+          put() {
+            code=$(timeout 300 curl --config "$cfg" -s -o ../put.log -w '%{http_code}'                    -X PUT --upload-file "$1" "$base/$2") || true
+            echo "PUT $2 -> ${code:-no response}"
+            case "$code" in
+              201) : ;;
+              409) rm -f "$cfg"; echo "REFUSED: $crate $ver already has $2; a published version is immutable"; exit 1 ;;
+              *) rm -f "$cfg"; echo "upload failed"; head -c 300 ../put.log; exit 1 ;;
+            esac
+            got=$(timeout 120 curl -sS -o "../got-$2" -w '%{http_code}' "$base/$2")
+            cmp -s "$1" "../got-$2" || { rm -f "$cfg"; echo "the served $2 is not the file we built"; exit 1; }
+            echo "  read back anonymously -> $got, byte-identical"
+            published=$((published + 1))
+          }
           for f in target/release/*; do
             [ -f "$f" ] && [ -x "$f" ] || continue
             case "$f" in *.d|*.rlib|*.rmeta) continue ;; esac
-            b=$(basename "$f")
-            name="$b-$ver-x86_64-unknown-freebsd"
-            code=$(timeout 300 curl --config "$cfg" -s -o ../put.log -w '%{http_code}' \
-                   -X PUT --upload-file "$f" "$base/$name") || rc=$?
-            echo "PUT $name -> ${code:-no response}"
-            case "$code" in
-              201) : ;;
-              409) rm -f "$cfg"; echo "REFUSED: $crate $ver already has $name; a published version is immutable"; exit 1 ;;
-              *) rm -f "$cfg"; echo "upload failed"; head -c 300 ../put.log; exit 1 ;;
-            esac
-            got=$(timeout 120 curl -sS -o "../got-$name" -w '%{http_code}' "$base/$name")
-            cmp -s "$f" "../got-$name" || { rm -f "$cfg"; echo "the served file is not the file we built"; exit 1; }
-            echo "  read back anonymously -> $got, byte-identical"
-            published=$((published + 1))
+            put "$f" "$(basename "$f")-$ver-x86_64-unknown-freebsd"
           done
           # The module is the same file on every platform, so its name
           # carries no target.
-          f=target/wasm32-unknown-unknown/release/isolex_wasm.wasm
-          name="$crate-$ver.wasm"
-          code=$(timeout 300 curl --config "$cfg" -s -o ../put.log -w '%{http_code}'                  -X PUT --upload-file "$f" "$base/$name") || rc=$?
-          echo "PUT $name -> ${code:-no response}"
-          case "$code" in
-            201) : ;;
-            409) rm -f "$cfg"; echo "REFUSED: $crate $ver already has $name; a published version is immutable"; exit 1 ;;
-            *) rm -f "$cfg"; echo "upload failed"; head -c 300 ../put.log; exit 1 ;;
-          esac
-          got=$(timeout 120 curl -sS -o "../got-$name" -w '%{http_code}' "$base/$name")
-          cmp -s "$f" "../got-$name" || { rm -f "$cfg"; echo "the served file is not the file we built"; exit 1; }
-          echo "  read back anonymously -> $got, byte-identical"
-          published=$((published + 1))
+          put target/wasm32-unknown-unknown/release/isolex_wasm.wasm "$crate-$ver.wasm"
+          # The license and notice go with every release (Apache-2.0 §4),
+          # so whoever takes a binary or the module from here has them.
+          put LICENSE LICENSE
+          put NOTICE NOTICE
           rm -f "$cfg"
           echo "published $published file(s) under $base"
           [ "$published" -ge 1 ] || { echo "nothing was published"; exit 1; }
