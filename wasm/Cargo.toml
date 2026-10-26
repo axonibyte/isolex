@@ -1,6 +1,6 @@
 [package]
 name = "isolex-wasm"
-version = "0.3.1"
+version = "0.4.0"
 edition = "2021"
 rust-version = "1.97"
 description = "The isolex compiler as a WebAssembly module: JSON in, JSON out, nothing imported."
