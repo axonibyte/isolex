@@ -31,7 +31,8 @@ icon "switch-l3" {
 ```
 
 The language is small on purpose: arithmetic expressions, `repeat`,
-`when` guards, fragments — and nothing Turing-shaped. Compilation is
+`when` guards, fragments, transforms and quarter-turns — and nothing
+Turing-shaped. Compilation is
 total, pure, and byte-deterministic. See [SPEC.md](SPEC.md).
 
 ```sh
@@ -60,7 +61,8 @@ publishes it as `isolex-<version>.wasm`.
 
 - [docs/guide.md](docs/guide.md) — a task-oriented walk through authoring
   a lexicon: your first icon, parts, inheritance & late binding,
-  fragments, screen-space paths, `repeat`/`when`, axes, expressions.
+  fragments, screen-space paths, `repeat`/`when`, axes, transforms and
+  turns, expressions.
 - [docs/primitives.md](docs/primitives.md) — every geometry node, with an
   example of each.
 - [docs/cookbook.md](docs/cookbook.md) — worked patterns from a real

@@ -62,13 +62,18 @@ pub enum IrShape {
         #[serde(skip_serializing_if = "Option::is_none")]
         dash: Option<String>,
     },
-    /// A placed sub-icon (badge composition). Renderers wrap the child
-    /// shapes in a group with the given translate/scale — path data is
-    /// never rewritten.
+    /// Shapes drawn through an affine map: a transform's, or a badge's,
+    /// or both multiplied out, so groups never nest. Renderers wrap the
+    /// child shapes in the matrix; path data is never rewritten. `clip`,
+    /// a convex polygon in the coordinates the group is drawn in, cuts
+    /// what is drawn to it; `strokes: "fixed"` keeps stroke widths as
+    /// written rather than scaled by the matrix.
     Group {
-        tx: f64,
-        ty: f64,
-        scale: f64,
+        matrix: [f64; 6],
+        #[serde(skip_serializing_if = "Option::is_none")]
+        clip: Option<Vec<[f64; 2]>>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        strokes: Option<String>,
         shapes: Vec<IrShape>,
     },
 }
@@ -95,7 +100,9 @@ pub struct IrDocument {
     pub icons: Vec<IrIcon>,
 }
 
-pub const IR_VERSION: u32 = 1;
+/// 2: groups carry a matrix, a clip and fixed strokes, where version 1
+/// had a badge's translate and scale.
+pub const IR_VERSION: u32 = 2;
 
 /// The formatting rule (SPEC §7), the one formatter for every number a
 /// toolchain prints into output text: path data at compile time,

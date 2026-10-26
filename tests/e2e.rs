@@ -106,7 +106,8 @@ fn ir_carries_axis_expansion_and_badge_groups() {
         group["shapes"].as_array().unwrap().len() >= 2,
         "badge group carries the target icon's shapes"
     );
-    assert_eq!(group["scale"], 0.5);
+    assert_eq!(group["matrix"][0], 0.5);
+    assert_eq!(group["matrix"][3], 0.5);
 }
 
 #[test]
@@ -862,4 +863,259 @@ fn check_failures_render_file_line_col_and_exit_nonzero() {
         stderr.contains("bad.ilx:1:1: 'x' extends unknown definition 'nope'"),
         "{stderr}"
     );
+}
+
+// --- transforms (#43) ---------------------------------------------------
+
+/// The transforms fixture compiled and rendered in-process: its files,
+/// the IR, and each icon's SVG.
+fn transforms() -> Vec<(String, String)> {
+    vec![(
+        "transforms.ilx".to_string(),
+        include_str!("fixtures/transforms.ilx").to_string(),
+    )]
+}
+
+fn sample() -> Vec<(String, String)> {
+    vec![(
+        "sample.ilx".to_string(),
+        include_str!("fixtures/sample.ilx").to_string(),
+    )]
+}
+
+/// Golden bytes, rewritten with UPDATE_GOLDENS=1.
+fn golden(name: &str, got: &str) {
+    let path = format!("{}/tests/fixtures/{name}", env!("CARGO_MANIFEST_DIR"));
+    if std::env::var("UPDATE_GOLDENS").is_ok() {
+        std::fs::write(&path, got).unwrap();
+    }
+    let want = std::fs::read_to_string(&path)
+        .expect("golden missing: run with UPDATE_GOLDENS=1 once, then review the diff");
+    assert_eq!(got, want, "{name} drifted from the golden");
+}
+
+#[test]
+fn transforms_match_their_goldens_and_are_deterministic() {
+    let compile = || {
+        let c = isolex::compile(&transforms());
+        assert!(c.errors.is_empty(), "{:?}", c.errors);
+        c.doc
+    };
+    let ir = serde_json::to_string_pretty(&compile()).unwrap();
+    assert_eq!(ir, serde_json::to_string_pretty(&compile()).unwrap());
+    golden("transforms.ir.golden.json", &format!("{ir}\n"));
+
+    let palette = isolex::render::Palette::default();
+    let svgs: String = compile()
+        .icons
+        .iter()
+        .map(|icon| {
+            format!(
+                "<!-- {} -->\n{}",
+                icon.name,
+                isolex::render::render_icon(icon, &palette)
+            )
+        })
+        .collect();
+    golden("transforms.svg.golden", &svgs);
+}
+
+/// Every shape a golden draws, drawn through its group's matrix and cut
+/// by its clip, lies inside its icon's viewBox: whatever a transform's
+/// bounds, the viewBox is the drawing's true extent.
+#[test]
+fn every_golden_draws_inside_its_viewbox() {
+    use isolex::affine::{shape_extent, Extent, IDENTITY};
+    for files in [sample(), transforms()] {
+        let c = isolex::compile(&files);
+        assert!(c.errors.is_empty(), "{:?}", c.errors);
+        for icon in &c.doc.icons {
+            let frame = Extent::of_viewbox(icon.viewbox);
+            for shape in &icon.shapes {
+                if let Some(e) = shape_extent(shape, &IDENTITY).unwrap() {
+                    assert!(
+                        e.within(&frame),
+                        "icon '{}' draws {e:?} outside its viewBox {:?}: {shape:?}",
+                        icon.name,
+                        icon.viewbox
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// SPEC §7: path data is formatted once, at compile time, and passes
+/// through rendering unchanged, groups and transforms included.
+#[test]
+fn every_path_passes_through_render_byte_for_byte() {
+    use isolex::ir::IrShape;
+    fn paths<'a>(shapes: &'a [IrShape], out: &mut Vec<&'a str>) {
+        for s in shapes {
+            match s {
+                IrShape::Path { d, .. } => out.push(d),
+                IrShape::Group { shapes, .. } => paths(shapes, out),
+                _ => {}
+            }
+        }
+    }
+    let palette = isolex::render::Palette::default();
+    let mut seen = 0;
+    for files in [sample(), transforms()] {
+        let c = isolex::compile(&files);
+        for icon in &c.doc.icons {
+            let svg = isolex::render::render_icon(icon, &palette);
+            let mut ds = Vec::new();
+            paths(&icon.shapes, &mut ds);
+            for d in ds {
+                seen += 1;
+                assert!(
+                    svg.contains(&format!("d=\"{d}\"")),
+                    "{}: {d}\n{svg}",
+                    icon.name
+                );
+            }
+        }
+    }
+    assert!(seen > 10, "the goldens draw paths: {seen}");
+}
+
+#[test]
+fn a_transform_that_leaves_its_frame_is_an_error_unless_its_bounds_say() {
+    let icon = |bounds: &str, default: &str| {
+        format!(
+            "icon \"t\" {{ category \"c\"; canvas 24 24{default}\n  part \"p\" {{\n    transform translate=\"10 0\"{bounds} {{\n      at 0 0 0 {{ rect 4 4 16 16 fill=\"ink\" }}\n    }}\n  }}\n}}\n"
+        )
+    };
+    let (ok, stderr) = check_files("bounds-error", &[("t.ilx", &icon("", ""))]);
+    assert!(!ok);
+    assert!(
+        stderr.contains("t.ilx:3:5: icon 't' draws this transform out to 14.00 4.00 to 30.00 20.00, outside its frame, 0.00 0.00 to 24.00 24.00; set bounds=\"grow\""),
+        "{stderr}"
+    );
+    // the icon's default applies, and the transform's own wins over it
+    let (ok, stderr) = check_files(
+        "bounds-default",
+        &[("t.ilx", &icon("", "\n  transform-bounds \"clip\""))],
+    );
+    assert!(ok, "{stderr}");
+    let (ok, stderr) = check_files(
+        "bounds-own",
+        &[(
+            "t.ilx",
+            &icon(" bounds=\"error\"", "\n  transform-bounds \"clip\""),
+        )],
+    );
+    assert!(!ok && stderr.contains("outside its frame"), "{stderr}");
+    // inside its frame, a transform needs no bounds at all
+    let (ok, stderr) = check_files(
+        "bounds-inside",
+        &[("t.ilx", "icon \"t\" { category \"c\"; canvas 24 24\n  part \"p\" { transform translate=\"2 0\" { at 0 0 0 { rect 4 4 16 16 } } }\n}\n")],
+    );
+    assert!(ok, "{stderr}");
+}
+
+#[test]
+fn a_skew_of_ninety_degrees_is_an_error_where_it_is_written() {
+    let (ok, stderr) = check_files(
+        "skew-90",
+        &[("t.ilx", "icon \"t\" { category \"c\"; canvas 24 24\n  part \"p\" {\n    transform skew-x=90 { at 0 0 0 { rect 4 4 16 16 } }\n  }\n}\n")],
+    );
+    assert!(!ok);
+    assert!(
+        stderr.contains("t.ilx:3:5: icon 't' transforms by a matrix that is not finite"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn turns_take_quarter_turns_and_views_need_a_footprint() {
+    let (ok, stderr) = check_files(
+        "turn-45",
+        &[("t.ilx", "icon \"t\" { category \"c\"; footprint 1 1 1\n  part \"p\" {\n    turn 45 { box 0 0 0 1 1 1 }\n  }\n}\n")],
+    );
+    assert!(!ok);
+    assert!(
+        stderr.contains("t.ilx:3:5: turn takes a quarter-turn, 0, 90, 180 or 270 degrees, got 45"),
+        "{stderr}"
+    );
+    let (ok, stderr) = check_files(
+        "view-canvas",
+        &[("t.ilx", "icon \"t\" { category \"c\"; canvas 24 24; view 90\n  part \"p\" { at 0 0 0 { circle 4 4 2 } }\n}\n")],
+    );
+    assert!(!ok);
+    assert!(
+        stderr.contains("icon 't' has a view but no footprint"),
+        "{stderr}"
+    );
+    // any multiple of 90, from a param, both ways round
+    let (ok, stderr) = check_files(
+        "turn-param",
+        &[("t.ilx", "icon \"t\" { category \"c\"; footprint 1 1 1; param q -1; view \"q * 450\"\n  part \"p\" { turn \"q * -90\" origin=\"0.5 0.5\" { box 0 0 0 1 1 1 } }\n}\n")],
+    );
+    assert!(ok, "{stderr}");
+}
+
+#[test]
+fn a_chain_of_transforms_stops_at_its_transform_chain() {
+    let src = |limit: &str| {
+        format!(
+            "fragment \"f\" {{ part \"p\" {{ transform rotate=1 scale=1 {{ tile 0 0 0 1 1 }} }} }}\n\
+             icon \"t\" {{ category \"c\"; footprint 1 1 1{limit}\n  part \"p\" {{\n    transform rotate=0 {{ insert \"f\" }}\n  }}\n}}\n"
+        )
+    };
+    let (ok, stderr) = check_files("chain-2", &[("t.ilx", &src("; transform-chain 2"))]);
+    assert!(!ok);
+    assert!(
+        stderr.contains("icon 't' draws shapes through 3 transform steps here past its transform-chain of 2 (steps, set by 't')"),
+        "{stderr}"
+    );
+    let (ok, stderr) = check_files("chain-3", &[("t.ilx", &src("; transform-chain 3"))]);
+    assert!(ok, "{stderr}");
+}
+
+#[test]
+fn deep_transforms_never_overflow_the_stack() {
+    // transforms nest as markers in a flat list: deep nesting costs
+    // memory, never the call stack
+    const N: usize = 50_000;
+    let src = format!(
+        "lexicon {{ transform-chain #null }}\nicon \"deep\" {{ category \"c\"; footprint 1 1 1; part \"p\" {{\n{}tile 0 0 0 1 1\n{} }} }}\n",
+        "transform translate=\"0 0\" {\n".repeat(N),
+        "}\n".repeat(N)
+    );
+    let (ok, stderr, ir) = compile_src("deep-transforms", &src);
+    assert!(ok, "{}", &stderr[..stderr.len().min(300)]);
+    // translating by nothing is no transform: the tile, ungrouped
+    assert_eq!(ir["icons"][0]["shapes"][0]["kind"], "polygon");
+}
+
+#[test]
+fn groups_never_nest_and_badges_fold_into_their_transforms() {
+    let c = isolex::compile(&transforms());
+    let badged = c.doc.icons.iter().find(|i| i.name == "badged").unwrap();
+    let groups: Vec<_> = badged
+        .shapes
+        .iter()
+        .filter_map(|s| match s {
+            isolex::ir::IrShape::Group { matrix, shapes, .. } => Some((matrix, shapes)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(groups.len(), 2, "the badge, and the badge turned");
+    // the turned badge's matrix is the turn times the badge's
+    assert_eq!(groups[1].0[0], -groups[0].0[0]);
+    for icon in &c.doc.icons {
+        for s in &icon.shapes {
+            if let isolex::ir::IrShape::Group { shapes, .. } = s {
+                assert!(
+                    !shapes
+                        .iter()
+                        .any(|s| matches!(s, isolex::ir::IrShape::Group { .. })),
+                    "icon '{}' nests a group",
+                    icon.name
+                );
+            }
+        }
+    }
 }

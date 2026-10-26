@@ -1,6 +1,7 @@
 //! isolex — reference compiler library for the Isolex icon-definition
 //! language. See SPEC.md for the normative language definition.
 
+pub mod affine;
 pub mod ast;
 pub mod expand;
 pub mod expr;

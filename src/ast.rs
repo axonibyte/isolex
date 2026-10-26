@@ -173,6 +173,119 @@ pub enum Node {
         when: Option<Num>,
         span: Span,
     },
+
+    /// A screen-space transform around its children, in either dimension:
+    /// they are drawn through its matrix, in a group of their own.
+    Transform {
+        spec: TransformSpec,
+        children: Vec<Node>,
+        when: Option<Num>,
+        span: Span,
+    },
+    /// A tile-space quarter-turn or diagonal mirror of 3-D children,
+    /// applied before projection.
+    Turn {
+        by: TurnBy,
+        origin: Option<[Num; 2]>,
+        children: Vec<Node>,
+        when: Option<Num>,
+        span: Span,
+    },
+}
+
+/// What a `transform` does: its steps, applied to its shapes in order,
+/// each but `translate` and `matrix` about its origin; then, with `onto`,
+/// the map that lays the result on a face of a box.
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+pub struct TransformSpec {
+    pub origin: Option<[Num; 2]>,
+    pub steps: Vec<Step>,
+    pub onto: Option<(OntoFace, [Num; 6])>,
+    pub bounds: Option<Bounds>,
+    pub strokes: Option<Strokes>,
+}
+
+/// One step of a transform. Angles are degrees, clockwise on the screen
+/// as SVG turns them.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub enum Step {
+    Translate([Num; 2]),
+    Rotate(Num),
+    Scale([Num; 2]),
+    SkewX(Num),
+    SkewY(Num),
+    Mirror(MirrorAxis),
+    /// a b c d e f, as SVG's matrix(); applied as written, not about the
+    /// origin
+    Matrix(Box<[Num; 6]>),
+}
+
+impl Step {
+    pub fn name(&self) -> &'static str {
+        match self {
+            Step::Translate(_) => "translate",
+            Step::Rotate(_) => "rotate",
+            Step::Scale(_) => "scale",
+            Step::SkewX(_) => "skew-x",
+            Step::SkewY(_) => "skew-y",
+            Step::Mirror(_) => "mirror",
+            Step::Matrix(_) => "matrix",
+        }
+    }
+}
+
+/// `mirror="across"` flips left for right; `"down"` top for bottom.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub enum MirrorAxis {
+    Across,
+    Down,
+}
+
+/// The face of a box `onto` lays flat content on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub enum OntoFace {
+    Top,
+    Front,
+    Right,
+}
+
+/// What a transform does when what it draws leaves the icon's frame.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub enum Bounds {
+    Error,
+    Grow,
+    Scale,
+    Clip,
+}
+
+impl Bounds {
+    pub const NAMES: [&'static str; 4] = ["error", "grow", "scale", "clip"];
+
+    pub fn named(name: &str) -> Option<Bounds> {
+        match name {
+            "error" => Some(Bounds::Error),
+            "grow" => Some(Bounds::Grow),
+            "scale" => Some(Bounds::Scale),
+            "clip" => Some(Bounds::Clip),
+            _ => None,
+        }
+    }
+}
+
+/// Whether strokes scale with a transform (the default) or keep the
+/// width written.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub enum Strokes {
+    Scale,
+    Fixed,
+}
+
+/// A tile-space turn: a quarter-turn by an angle, or a mirror across the
+/// diagonal x = y.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub enum TurnBy {
+    Angle(Num),
+    MirrorDiagonal,
 }
 
 impl Node {
@@ -183,7 +296,9 @@ impl Node {
             Node::Poly3d { children, .. }
             | Node::At { children, .. }
             | Node::Poly2d { children, .. }
-            | Node::Repeat { children, .. } => children,
+            | Node::Repeat { children, .. }
+            | Node::Transform { children, .. }
+            | Node::Turn { children, .. } => children,
             _ => &[],
         }
     }
@@ -193,7 +308,9 @@ impl Node {
             Node::Poly3d { children, .. }
             | Node::At { children, .. }
             | Node::Poly2d { children, .. }
-            | Node::Repeat { children, .. } => Some(children),
+            | Node::Repeat { children, .. }
+            | Node::Transform { children, .. }
+            | Node::Turn { children, .. } => Some(children),
             _ => None,
         }
     }
@@ -230,6 +347,8 @@ impl Node {
             At { args, when, span }
             Poly2d { style, when, span }
             Repeat { count, var, when, span }
+            Transform { spec, when, span }
+            Turn { by, origin, when, span }
         )
     }
 }
@@ -360,6 +479,11 @@ pub const DEFAULT_EXPRESSION_DEPTH: u64 = build_default(
     256,
     "ISOLEX_DEFAULT_EXPRESSION_DEPTH must be a positive whole number",
 );
+pub const DEFAULT_TRANSFORM_CHAIN: u64 = build_default(
+    option_env!("ISOLEX_DEFAULT_TRANSFORM_CHAIN"),
+    64,
+    "ISOLEX_DEFAULT_TRANSFORM_CHAIN must be a positive whole number",
+);
 
 const fn build_default(set: Option<&str>, fallback: u64, complaint: &str) -> u64 {
     match set {
@@ -392,15 +516,19 @@ pub enum LimitKind {
     /// How deeply one expression nests.
     #[serde(rename = "expression-depth")]
     ExpressionDepth,
+    /// How many transform steps one shape is drawn through.
+    #[serde(rename = "transform-chain")]
+    TransformChain,
 }
 
 impl LimitKind {
-    pub const ALL: [LimitKind; 5] = [
+    pub const ALL: [LimitKind; 6] = [
         LimitKind::Shapes,
         LimitKind::Repeats,
         LimitKind::InsertDepth,
         LimitKind::Icons,
         LimitKind::ExpressionDepth,
+        LimitKind::TransformChain,
     ];
 
     /// The directive that sets it.
@@ -411,6 +539,7 @@ impl LimitKind {
             LimitKind::InsertDepth => "insert-depth",
             LimitKind::Icons => "icon-limit",
             LimitKind::ExpressionDepth => "expression-depth",
+            LimitKind::TransformChain => "transform-chain",
         }
     }
 
@@ -423,6 +552,7 @@ impl LimitKind {
             LimitKind::InsertDepth => DEFAULT_INSERT_DEPTH,
             LimitKind::Icons => DEFAULT_ICON_LIMIT,
             LimitKind::ExpressionDepth => DEFAULT_EXPRESSION_DEPTH,
+            LimitKind::TransformChain => DEFAULT_TRANSFORM_CHAIN,
         }
     }
 
@@ -455,6 +585,13 @@ pub struct DefBody {
     pub parts: Vec<PartDecl>,
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub limits: Limits,
+    /// The corner the icon is drawn from: a quarter-turn of everything in
+    /// its footprint.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub view: Option<Num>,
+    /// What its transforms do when they leave its frame, unless one says.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transform_bounds: Option<Bounds>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]

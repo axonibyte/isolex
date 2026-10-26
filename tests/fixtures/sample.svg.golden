@@ -75,11 +75,11 @@
   <ellipse cx="0.00" cy="7.20" rx="12.74" ry="7.35" fill="#e4e7eb" stroke="#1f2933" stroke-width="1.20"/>
   <path d="M -12.74,-2.80 L -12.74,5.20 A 12.74 7.35 0 0 0 12.74,5.20 L 12.74,-2.80 Z" fill="#9aa5b1" stroke="#1f2933" stroke-width="1.20"/>
   <ellipse cx="0.00" cy="-2.80" rx="12.74" ry="7.35" fill="#e4e7eb" stroke="#1f2933" stroke-width="1.20"/>
-  <g transform="translate(63.28 -17.20) scale(0.50)">
+  <g transform="matrix(0.50 0.00 0.00 0.50 63.28 -17.20)">
     <polygon points="7.00,2.00 17.00,2.00 22.00,7.00 22.00,17.00 17.00,22.00 7.00,22.00 2.00,17.00 2.00,7.00" fill="#d64545" stroke="none"/>
     <path d="M8,8 L16,16 M16,8 L8,16" fill="none" stroke="#1f2933" stroke-width="2.20"/>
   </g>
-  <g transform="translate(63.28 -17.20) scale(0.50)">
+  <g transform="matrix(0.50 0.00 0.00 0.50 63.28 -17.20)">
     <polygon points="7.00,2.00 17.00,2.00 22.00,7.00 22.00,17.00 17.00,22.00 7.00,22.00 2.00,17.00 2.00,7.00" fill="#d64545" stroke="none"/>
     <path d="M8,8 L16,16 M16,8 L8,16" fill="none" stroke="#1f2933" stroke-width="2.20"/>
   </g>
@@ -111,11 +111,11 @@
   <ellipse cx="0.00" cy="7.20" rx="12.74" ry="7.35" fill="#e4e7eb" stroke="#1f2933" stroke-width="1.20"/>
   <path d="M -12.74,-2.80 L -12.74,5.20 A 12.74 7.35 0 0 0 12.74,5.20 L 12.74,-2.80 Z" fill="#9aa5b1" stroke="#1f2933" stroke-width="1.20"/>
   <ellipse cx="0.00" cy="-2.80" rx="12.74" ry="7.35" fill="#e4e7eb" stroke="#1f2933" stroke-width="1.20"/>
-  <g transform="translate(63.28 -17.20) scale(0.50)">
+  <g transform="matrix(0.50 0.00 0.00 0.50 63.28 -17.20)">
     <polygon points="7.00,2.00 17.00,2.00 22.00,7.00 22.00,17.00 17.00,22.00 7.00,22.00 2.00,17.00 2.00,7.00" fill="#d64545" stroke="none"/>
     <path d="M8,8 L16,16 M16,8 L8,16" fill="none" stroke="#1f2933" stroke-width="2.20"/>
   </g>
-  <g transform="translate(63.28 -17.20) scale(0.50)">
+  <g transform="matrix(0.50 0.00 0.00 0.50 63.28 -17.20)">
     <rect x="3.00" y="3.00" width="18.00" height="18.00" rx="3.00" fill="none" stroke="#7b8794" stroke-width="1.50" stroke-dasharray="3 2.5"/>
   </g>
 </svg>
@@ -146,7 +146,7 @@
   <ellipse cx="0.00" cy="7.20" rx="12.74" ry="7.35" fill="#e4e7eb" stroke="#1f2933" stroke-width="1.20"/>
   <path d="M -12.74,-2.80 L -12.74,5.20 A 12.74 7.35 0 0 0 12.74,5.20 L 12.74,-2.80 Z" fill="#9aa5b1" stroke="#1f2933" stroke-width="1.20"/>
   <ellipse cx="0.00" cy="-2.80" rx="12.74" ry="7.35" fill="#e4e7eb" stroke="#1f2933" stroke-width="1.20"/>
-  <g transform="translate(63.28 -17.20) scale(0.50)">
+  <g transform="matrix(0.50 0.00 0.00 0.50 63.28 -17.20)">
     <polygon points="7.00,2.00 17.00,2.00 22.00,7.00 22.00,17.00 17.00,22.00 7.00,22.00 2.00,17.00 2.00,7.00" fill="#d64545" stroke="none"/>
     <path d="M8,8 L16,16 M16,8 L8,16" fill="none" stroke="#1f2933" stroke-width="2.20"/>
   </g>

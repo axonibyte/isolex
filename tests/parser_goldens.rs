@@ -44,6 +44,15 @@ fn fixtures_are_checked_out_with_lf() {
             "sample.ir.golden.json",
             include_str!("fixtures/sample.ir.golden.json"),
         ),
+        ("transforms.ilx", include_str!("fixtures/transforms.ilx")),
+        (
+            "transforms.ir.golden.json",
+            include_str!("fixtures/transforms.ir.golden.json"),
+        ),
+        (
+            "transforms.svg.golden",
+            include_str!("fixtures/transforms.svg.golden"),
+        ),
     ] {
         assert!(
             !text.contains('\r'),
@@ -297,6 +306,112 @@ fn diagnostics_name_the_problem_and_the_place() {
             3,
             &["fill takes a string"],
         ),
+
+        (
+            "icon \"x\" {\n  part \"p\" {\n    transform rotat=90 { box 0 0 0 1 1 1 }\n  }\n}",
+            3,
+            &["unknown property 'rotat' on transform", "did you mean 'rotate'?"],
+        ),
+        (
+            "icon \"x\" {\n  part \"p\" {\n    transform { box 0 0 0 1 1 1 }\n  }\n}",
+            3,
+            &["transform needs something to do"],
+        ),
+        (
+            "icon \"x\" {\n  part \"p\" {\n    transform 90 { box 0 0 0 1 1 1 }\n  }\n}",
+            3,
+            &["transform takes properties, not arguments"],
+        ),
+        (
+            "icon \"x\" {\n  part \"p\" {\n    transform rotate=90 {\n      steps { scale 2 }\n    }\n  }\n}",
+            4,
+            &["its properties or a steps block, not both"],
+        ),
+        (
+            "icon \"x\" {\n  part \"p\" {\n    transform {\n      steps { spin 90 }\n    }\n  }\n}",
+            4,
+            &["unknown step 'spin'"],
+        ),
+        (
+            "icon \"x\" {\n  part \"p\" {\n    transform {\n      steps { translate 1 }\n    }\n  }\n}",
+            4,
+            &["translate takes two numbers"],
+        ),
+        (
+            "icon \"x\" {\n  part \"p\" {\n    transform matrix=\"1 0 0 1 0 0\" origin=\"1 1\" { }\n  }\n}",
+            3,
+            &["origin has nothing to do"],
+        ),
+        (
+            "icon \"x\" {\n  part \"p\" {\n    transform matrix=\"1 0 0 1 0 0\" rotate=4 { }\n  }\n}",
+            3,
+            &["matrix stands alone"],
+        ),
+        (
+            "icon \"x\" {\n  part \"p\" {\n    transform origin=\"1\" rotate=4 { }\n  }\n}",
+            3,
+            &["origin takes 2 number(s)"],
+        ),
+        (
+            "icon \"x\" {\n  part \"p\" {\n    transform origin=\"w / 2 0\" rotate=4 { }\n  }\n}",
+            3,
+            &["origin takes 2 number(s)", "in parentheses"],
+        ),
+        (
+            "icon \"x\" {\n  part \"p\" {\n    transform onto=\"top\" { }\n  }\n}",
+            3,
+            &["onto needs of"],
+        ),
+        (
+            "icon \"x\" {\n  part \"p\" {\n    transform onto=\"side\" of=\"box 0 0 0 1 1 1\" { }\n  }\n}",
+            3,
+            &["onto is \"top\", \"front\" or \"right\""],
+        ),
+        (
+            "icon \"x\" {\n  part \"p\" {\n    transform onto=\"top\" of=\"box 0 0 0 1 1\" { }\n  }\n}",
+            3,
+            &["of names a box"],
+        ),
+        (
+            "icon \"x\" {\n  part \"p\" {\n    transform rotate=4 bounds=\"crop\" { }\n  }\n}",
+            3,
+            &["bounds is \"error\", \"grow\", \"scale\" or \"clip\""],
+        ),
+        (
+            "icon \"x\" {\n  part \"p\" {\n    transform rotate=4 strokes=\"thin\" { }\n  }\n}",
+            3,
+            &["strokes is \"scale\" (the default) or \"fixed\""],
+        ),
+        (
+            "icon \"x\" {\n  part \"p\" {\n    transform mirror=\"sideways\" { }\n  }\n}",
+            3,
+            &["mirror is \"across\""],
+        ),
+        (
+            "icon \"x\" {\n  part \"p\" {\n    at 0 0 0 {\n      turn 90 { }\n    }\n  }\n}",
+            4,
+            &["'turn' is a 3-D node", "cannot appear inside 'at'"],
+        ),
+        (
+            "icon \"x\" {\n  part \"p\" {\n    mirror-diagonal 1 { }\n  }\n}",
+            3,
+            &["mirror-diagonal takes 0 positional argument(s)"],
+        ),
+        (
+            "icon \"x\" {\n  transform-bounds \"wrap\"\n}",
+            2,
+            &["transform-bounds is \"error\""],
+        ),
+        (
+            "icon \"x\" {\n  view 90 180\n}",
+            2,
+            &["view takes one angle"],
+        ),
+        (
+            "fragment \"f\" {\n  view 90\n}",
+            2,
+            &["set view on that icon"],
+        ),
     ];
 
     for (src, line, fragments) in cases {
@@ -348,8 +463,31 @@ fn every_property_a_node_reads_is_accepted() {
       poly fill="ink" stroke="ink" width=1.2 dash="2 1" opacity=0.5 when="1 == 1" {
         pt 0 0
       }
+      transform origin="x y" rotate=1 when="1 == 1" { circle 0 0 1 }
     }
+    transform origin="1 2" translate="1 2" rotate=3 scale="1 2" skew-x=1 skew-y=1 mirror="down" onto="front" of="box 0 0 0 1 1 1" bounds="clip" strokes="fixed" when="1 == 1" {
+      tile 0 0 0 1 1
+    }
+    transform matrix="1 0 0 1 (w / 2) 0" { tile 0 0 0 1 1 }
+    transform origin="1 1" {
+      steps {
+        translate 1 2
+        rotate 3
+        scale 2
+        scale 1 2
+        skew-x 1
+        skew-y 1
+        mirror "across"
+        matrix 1 0 0 1 0 0
+      }
+      tile 0 0 0 1 1
+    }
+    turn 90 origin="1 1" when="1 == 1" { box 0 0 0 1 1 1 }
+    mirror-diagonal origin="1 1" when="1 == 1" { box 0 0 0 1 1 1 }
   }
+  view 90
+  transform-bounds "grow"
+  transform-chain 8
   grant "accent" reason="it is a warning"
 }"#;
     let outcome = parse_one("t.ilx", src);

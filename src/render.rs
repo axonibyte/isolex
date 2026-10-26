@@ -2,8 +2,9 @@
 //! the formatting rule the compiler does not apply, numbers printed at
 //! render time, made concrete: every number this writes has exactly two
 //! decimal places, ties to even, as `{:.2}` formats them. Path data is
-//! already formatted and passes through unchanged; a badge is a group
-//! with a translate and scale, its target's shapes untouched.
+//! already formatted and passes through unchanged; a group (a badge, a
+//! transform, or both multiplied out) wraps its shapes in its matrix,
+//! clipped by its clip path if it has one, its shapes untouched.
 //!
 //! Theme tokens become colors through a palette: a built-in one for the
 //! tokens the compiler paints with by default and a few common ones,
@@ -147,30 +148,75 @@ pub fn render_icon(icon: &IrIcon, palette: &Palette) -> String {
         fmt(h)
     );
     let _ = writeln!(out, "<title>{}</title>", escape(&icon.name));
-    shapes(&mut out, &icon.shapes, palette, 1);
+    let mut clips = 0;
+    shapes(
+        &mut out,
+        &icon.shapes,
+        palette,
+        1,
+        &icon.name,
+        &mut clips,
+        false,
+    );
     out.push_str("</svg>\n");
     out
 }
 
-fn shapes(out: &mut String, shapes_: &[IrShape], palette: &Palette, depth: usize) {
+/// The shapes, indented `depth` deep. A group with a clip declares its
+/// clip path where it stands, named for the icon and numbered in order
+/// (`clips` counts them), and clips a group around its matrix, so the
+/// clip is in the coordinates the group is drawn in. In a group with
+/// fixed strokes, each stroke keeps its width (`fixed`).
+fn shapes(
+    out: &mut String,
+    shapes_: &[IrShape],
+    palette: &Palette,
+    depth: usize,
+    icon: &str,
+    clips: &mut usize,
+    fixed: bool,
+) {
     let indent = "  ".repeat(depth);
+    let paint = |fill: &str, opacity: f64, stroke: &str, width: f64, dash: &Option<String>| {
+        let mut p = paint(palette, fill, opacity, stroke, width, dash);
+        if fixed && stroke != "none" {
+            p.push_str(" vector-effect=\"non-scaling-stroke\"");
+        }
+        p
+    };
     for shape in shapes_ {
         match shape {
             IrShape::Group {
-                tx,
-                ty,
-                scale,
+                matrix,
+                clip,
+                strokes,
                 shapes: inner,
             } => {
-                let _ = writeln!(
-                    out,
-                    "{indent}<g transform=\"translate({} {}) scale({})\">",
-                    fmt(*tx),
-                    fmt(*ty),
-                    fmt(*scale)
-                );
-                shapes(out, inner, palette, depth + 1);
-                let _ = writeln!(out, "{indent}</g>");
+                let mut inside = indent.clone();
+                if let Some(clip) = clip {
+                    *clips += 1;
+                    let id = escape(&format!("clip-{icon}-{clips}"));
+                    let points: Vec<String> = clip
+                        .iter()
+                        .map(|[x, y]| format!("{},{}", fmt(*x), fmt(*y)))
+                        .collect();
+                    let _ = writeln!(
+                        out,
+                        "{indent}<clipPath id=\"{id}\"><polygon points=\"{}\"/></clipPath>",
+                        points.join(" ")
+                    );
+                    let _ = writeln!(out, "{indent}<g clip-path=\"url(#{id})\">");
+                    inside.push_str("  ");
+                }
+                let m: Vec<String> = matrix.iter().map(|v| fmt(*v)).collect();
+                let _ = writeln!(out, "{inside}<g transform=\"matrix({})\">", m.join(" "));
+                let fixed = strokes.as_deref() == Some("fixed");
+                let deeper = depth + 1 + usize::from(clip.is_some());
+                shapes(out, inner, palette, deeper, icon, clips, fixed);
+                let _ = writeln!(out, "{inside}</g>");
+                if clip.is_some() {
+                    let _ = writeln!(out, "{indent}</g>");
+                }
             }
             IrShape::Polygon {
                 points,
@@ -188,7 +234,7 @@ fn shapes(out: &mut String, shapes_: &[IrShape], palette: &Palette, depth: usize
                     out,
                     "{indent}<polygon points=\"{}\"{}/>",
                     points.join(" "),
-                    paint(palette, fill, *fill_opacity, stroke, *stroke_width, dash)
+                    paint(fill, *fill_opacity, stroke, *stroke_width, dash)
                 );
             }
             IrShape::Path {
@@ -203,7 +249,7 @@ fn shapes(out: &mut String, shapes_: &[IrShape], palette: &Palette, depth: usize
                     out,
                     "{indent}<path d=\"{}\"{}/>",
                     escape(d),
-                    paint(palette, fill, *fill_opacity, stroke, *stroke_width, dash)
+                    paint(fill, *fill_opacity, stroke, *stroke_width, dash)
                 );
             }
             IrShape::Ellipse {
@@ -224,7 +270,7 @@ fn shapes(out: &mut String, shapes_: &[IrShape], palette: &Palette, depth: usize
                     fmt(*cy),
                     fmt(*rx),
                     fmt(*ry),
-                    paint(palette, fill, *fill_opacity, stroke, *stroke_width, dash)
+                    paint(fill, *fill_opacity, stroke, *stroke_width, dash)
                 );
             }
             IrShape::Circle {
@@ -243,7 +289,7 @@ fn shapes(out: &mut String, shapes_: &[IrShape], palette: &Palette, depth: usize
                     fmt(*cx),
                     fmt(*cy),
                     fmt(*r),
-                    paint(palette, fill, *fill_opacity, stroke, *stroke_width, dash)
+                    paint(fill, *fill_opacity, stroke, *stroke_width, dash)
                 );
             }
             IrShape::Rect {
@@ -270,7 +316,7 @@ fn shapes(out: &mut String, shapes_: &[IrShape], palette: &Palette, depth: usize
                     fmt(*y),
                     fmt(*w),
                     fmt(*h),
-                    paint(palette, fill, *fill_opacity, stroke, *stroke_width, dash)
+                    paint(fill, *fill_opacity, stroke, *stroke_width, dash)
                 );
             }
         }
@@ -373,9 +419,9 @@ mod tests {
                     dash: Some("3 2.5".to_string()),
                 },
                 IrShape::Group {
-                    tx: 10.0,
-                    ty: -2.0,
-                    scale: 0.5,
+                    matrix: [0.5, 0.0, 0.0, 0.5, 10.0, -2.0],
+                    clip: None,
+                    strokes: None,
                     shapes: vec![IrShape::Rect {
                         x: 3.0,
                         y: 3.0,
@@ -397,7 +443,7 @@ mod tests {
              <title>t</title>\n\
              \x20 <polygon points=\"0.12,1.00 2.00,3.38\" fill=\"#d64545\" fill-opacity=\"0.55\" stroke=\"none\"/>\n\
              \x20 <path d=\"M1.00,2.00 L3.00,4.00\" fill=\"none\" stroke=\"#1f2933\" stroke-width=\"1.40\" stroke-dasharray=\"3 2.5\"/>\n\
-             \x20 <g transform=\"translate(10.00 -2.00) scale(0.50)\">\n\
+             \x20 <g transform=\"matrix(0.50 0.00 0.00 0.50 10.00 -2.00)\">\n\
              \x20   <rect x=\"3.00\" y=\"3.00\" width=\"18.00\" height=\"18.00\" rx=\"3.00\" fill=\"none\" stroke=\"#7b8794\" stroke-width=\"1.50\"/>\n\
              \x20 </g>\n\
              </svg>\n"

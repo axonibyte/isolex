@@ -13,8 +13,8 @@
 //! The generator covers what the language has: inheritance with replace
 //! and remove, axes, 3-D nodes and `at` with 2-D nodes and paths,
 //! fragments in either dimension, parameter expressions with functions
-//! and `if`, `when` guards, badges, and a declared vocabulary with a
-//! reserved token.
+//! and `if`, `when` guards, badges, transforms and turns, and a declared
+//! vocabulary with a reserved token.
 //!
 //! Usage: battery [--isolex <path>] [--seeds <file>] [--rounds <n>]
 //! Env: SEED=<n> runs a single seed.
@@ -183,6 +183,31 @@ fn gen_part(rng: &mut Rng, frags: &Frags, src: &mut String, indent: &str) -> usi
     count
 }
 
+/// A part body, perhaps inside a transform, which draws everything in it
+/// as one group, or a turn, which draws as many shapes, turned.
+fn gen_body(rng: &mut Rng, frags: &Frags, src: &mut String, indent: &str) -> usize {
+    match rng.below(5) {
+        0 => {
+            let angle = [90, 180, 270, 45][rng.below(4)];
+            let _ = writeln!(
+                src,
+                "{indent}transform rotate={angle} origin=\"0 0\" bounds=\"grow\" {{"
+            );
+            gen_part(rng, frags, src, &format!("{indent}  "));
+            let _ = writeln!(src, "{indent}}}");
+            1
+        }
+        1 => {
+            let angle = [90, 180, 270][rng.below(3)];
+            let _ = writeln!(src, "{indent}turn {angle} origin=\"1 0.5\" {{");
+            let count = gen_part(rng, frags, src, &format!("{indent}  "));
+            let _ = writeln!(src, "{indent}}}");
+            count
+        }
+        _ => gen_part(rng, frags, src, indent),
+    }
+}
+
 fn generate(seed: u64) -> Gen {
     let mut rng = Rng::new(seed);
     let mut g = Gen {
@@ -295,7 +320,7 @@ fn generate(seed: u64) -> Gen {
         for p in 0..n_parts {
             let pname = format!("p{p}");
             let _ = writeln!(g.src, "  part \"{pname}\" {{");
-            let count = gen_part(&mut rng, &frags, &mut g.src, "    ");
+            let count = gen_body(&mut rng, &frags, &mut g.src, "    ");
             let _ = writeln!(g.src, "  }}");
             parts.insert(pname, count);
         }
@@ -321,7 +346,7 @@ fn generate(seed: u64) -> Gen {
                 keys[rng.below(keys.len())].clone()
             };
             let _ = writeln!(g.src, "  replace \"{target}\" {{");
-            let count = gen_part(&mut rng, &frags, &mut g.src, "    ");
+            let count = gen_body(&mut rng, &frags, &mut g.src, "    ");
             let _ = writeln!(g.src, "  }}");
             parts.insert(target, count);
         }
@@ -338,7 +363,7 @@ fn generate(seed: u64) -> Gen {
         if rng.chance(60) {
             let pname = format!("own{i}");
             let _ = writeln!(g.src, "  part \"{pname}\" {{");
-            let count = gen_part(&mut rng, &frags, &mut g.src, "    ");
+            let count = gen_body(&mut rng, &frags, &mut g.src, "    ");
             let _ = writeln!(g.src, "  }}");
             parts.insert(pname, count);
         }
@@ -407,7 +432,8 @@ fn check_census(shadow: &Shadow, ir: &serde_json::Value) -> Vec<String> {
 /// Rules any IR from a successful compile keeps, whatever the lexicon:
 /// no null anywhere (serde_json writes a non-finite number as null, and
 /// nothing else in the IR is optional), every icon name once, and every
-/// badge group filled. Self-tested below without any compiler run.
+/// group filled, with a matrix of six numbers, and never inside another.
+/// Self-tested below without any compiler run.
 fn check_structure(ir: &serde_json::Value) -> Vec<String> {
     fn nulls(v: &serde_json::Value, path: &str, out: &mut Vec<String>) {
         match v {
@@ -430,9 +456,14 @@ fn check_structure(ir: &serde_json::Value) -> Vec<String> {
             if s["kind"] == "group" {
                 let inner = s["shapes"].as_array().cloned().unwrap_or_default();
                 if inner.is_empty() {
-                    out.push(format!("icon '{icon}' has an empty badge group"));
+                    out.push(format!("icon '{icon}' has an empty group"));
                 }
-                empty_groups(&inner, icon, out);
+                if s["matrix"].as_array().map(|m| m.len()) != Some(6) {
+                    out.push(format!("icon '{icon}' has a group without a matrix of six"));
+                }
+                if inner.iter().any(|s| s["kind"] == "group") {
+                    out.push(format!("icon '{icon}' nests a group"));
+                }
             }
         }
     }
@@ -767,9 +798,9 @@ mod tests {
     /// about IR a broken engine would produce, and only that.
     #[test]
     fn structure_checker_fires_on_doctored_ir() {
-        let clean = serde_json::json!({"ir_version": 1, "icons": [
+        let clean = serde_json::json!({"ir_version": 2, "icons": [
             {"name": "a", "viewbox": [0.0, 0.0, 1.0, 1.0], "shapes": [
-                {"kind": "group", "tx": 0.0, "ty": 0.0, "scale": 0.5, "shapes": [
+                {"kind": "group", "matrix": [0.5, 0.0, 0.0, 0.5, 0.0, 0.0], "shapes": [
                     {"kind": "circle", "cx": 1.0}
                 ]}
             ]},
@@ -801,9 +832,23 @@ mod tests {
         ir["icons"][0]["shapes"][0]["shapes"] = serde_json::json!([]);
         let p = check_structure(&ir);
         assert!(
-            p.iter().any(|m| m.contains("'a' has an empty badge group")),
+            p.iter().any(|m| m.contains("'a' has an empty group")),
             "{p:?}"
         );
+
+        // a group with no matrix, or inside another
+        let mut ir = clean.clone();
+        ir["icons"][0]["shapes"][0]["matrix"] = serde_json::json!([1.0]);
+        let p = check_structure(&ir);
+        assert!(
+            p.iter()
+                .any(|m| m.contains("'a' has a group without a matrix of six")),
+            "{p:?}"
+        );
+        let mut ir = clean.clone();
+        ir["icons"][0]["shapes"][0]["shapes"][0] = ir["icons"][0]["shapes"][0].clone();
+        let p = check_structure(&ir);
+        assert!(p.iter().any(|m| m.contains("'a' nests a group")), "{p:?}");
     }
 
     /// The generator really emits each construct it is meant to cover,
@@ -832,6 +877,8 @@ mod tests {
             "emit-base #false",
             "replace \"",
             "remove \"",
+            "transform rotate=",
+            "turn ",
         ] {
             assert!(all.contains(construct), "no seed generates {construct}");
         }

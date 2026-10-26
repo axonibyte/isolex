@@ -244,6 +244,27 @@ icon "compute-server-1u" {
 viewBox corner — the state badges are ordinary flat `canvas` icons reused
 as overlays.
 
+## Turning, mirroring and laying flat
+
+A part that is the same thing turned need not be written turned. On the
+screen, a `transform` rotates, mirrors, skews or scales what it holds,
+or lays flat artwork onto a face of a box; in tile space, `turn` and
+`mirror-diagonal` turn geometry before it is projected, so a turned
+chassis shows the walls it now faces. `view` on an icon draws all of it
+from another corner; in an axis variant, one source draws an object
+from both sides:
+
+```kdl
+axis "side" {
+  variant "back" { view 180 }
+}
+```
+
+A transform must keep what it draws inside the icon's frame; if it
+cannot, `bounds="grow"`, `"scale"` or `"clip"` says what to do. See
+[the primitives reference](primitives.md) for every
+property.
+
 ## The expression language
 
 Wherever a number is expected, a quoted string is evaluated. It is a

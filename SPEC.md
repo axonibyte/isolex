@@ -93,10 +93,25 @@ child node (`extends "y"`); declaring both is an error.
   Fragments cannot grant: their shapes belong to the icon they are
   inserted into, which grants for them.
 - `badge "icon-name" corner="ne" scale=0.5` — places another icon's
-  compiled shapes at a viewBox corner (`ne` default; `nw`/`se`/`sw`;
-  scale default 0.5). A badge target must not itself contain a badge.
+  compiled shapes at a corner of the icon's frame, the viewBox of its
+  footprint or canvas before any transform grows it (`ne` default;
+  `nw`/`se`/`sw`; scale default 0.5). A badge target must not itself
+  contain a badge; it may contain transforms, which are multiplied into
+  the badge's map (§7).
+- `view 90` — the corner the icon is drawn from: everything in its
+  footprint turned in place, as `turn` turns it (§4), by a quarter-turn
+  (0, 90, 180 or 270 degrees, or an expression of params that is one),
+  so one source draws an object from more than one side. The footprint
+  is turned with it: on a quarter-turn its width and depth trade places,
+  and the IR's `footprint` is the footprint as drawn. It needs a
+  footprint; on a canvas icon it is an error. Child value wins; an axis
+  variant can set it. Not in fragments.
+- `transform-bounds "grow"` — what this definition's transforms do when
+  what they draw leaves its frame, unless a transform says (§4):
+  `error`, `grow`, `scale` or `clip`. Child value wins. Not in
+  fragments.
 - `shape-limit n`, `repeat-limit n`, `insert-depth n`,
-  `expression-depth n` — this definition's
+  `expression-depth n`, `transform-chain n` — this definition's
   limits (§9); child value wins. Not in fragments, whose work counts
   toward the icon they are inserted into.
 
@@ -133,9 +148,112 @@ exists to give you `x`/`y`):
 
 Context-polymorphic: `repeat count "var" { … }` and
 `insert "fragment" arg=… { }` work in both dimensions and inside poly
-bodies; `pt` only inside `poly`/`poly3d`. Fragment part bodies parse
-permissively in either dimension; the insertion site decides validity at
-expansion.
+bodies; `transform … { … }` works in both dimensions; `pt` only inside
+`poly`/`poly3d`. Fragment part bodies parse permissively in either
+dimension; the insertion site decides validity at expansion.
+
+### Screen-space transforms
+
+`transform … { … }` draws its children through a 2-D affine map, after
+projection: rotated, mirrored, skewed, scaled unevenly, or laid flat on
+a face of a box. It stands in either dimension, around whatever is legal
+where it stands. Its properties:
+
+- `origin="cx cy"` — the point the steps turn, scale, skew and mirror
+  about, in output units (inside `at`, `x` and `y` are in scope).
+  Default `"0 0"`.
+- The steps, as properties: `mirror="across"` (left for right) or
+  `"down"` (top for bottom), `scale=s` or `scale="sx sy"`, `skew-y=deg`,
+  `skew-x=deg`, `rotate=deg` and `translate="tx ty"`, applied to the
+  shapes in that order, each but `translate` about the origin. Angles
+  are degrees, clockwise on the screen, as SVG turns them (y runs down).
+- Or a `steps { … }` block: the same steps as nodes with arguments
+  (`rotate 90`, `skew-x -12`, `translate 2 0`, `scale 2` or `scale 2 1`,
+  `skew-y 5`, `mirror "across"`, and `matrix a b c d e f`), applied in
+  the order written. A transform takes steps as properties or as a
+  block, never both.
+- `matrix="a b c d e f"` — the whole map at once, as SVG's `matrix()`:
+  a point (x, y) goes to (a·x + c·y + e, b·x + d·y + f). It takes no
+  other step, and no origin, which it would ignore.
+- `onto="top"|"front"|"right" of="box x y z w d h"` — after the steps,
+  the map that lays flat content onto that face of that box (tile
+  units), so artwork drawn flat, in output units, lies on the face, 40 to
+  a tile along its edges. The flat origin is the face's top-left corner
+  as seen; `front` is the +y wall and `right` the +x wall, as for
+  `facerect`. The maps, with P of §7:
+  `top` is `[COS, SIN, −COS, SIN, P(x, y, z+h)]` (u along +x, v along
+  +y); `front` is `[COS, SIN, 0, 1, P(x, y+d, z+h)]` (u along +x, v
+  down); `right` is `[COS, −SIN, 0, 1, P(x+w, y+d, z+h)]` (u along −y,
+  v down).
+- `bounds="error"|"grow"|"scale"|"clip"` and `strokes="scale"|"fixed"`,
+  below; and `when`.
+
+A property that holds several numbers holds them in one string, apart
+by spaces, each a number or an expression; an expression with spaces of
+its own is written in parentheses: `origin="(w / 2) 0"`.
+
+A transform needs at least one step or `onto`. Everything about it is
+worked out when the lexicon compiles: every property, expression and
+param is evaluated, `cos` and `sin` are the portable ones of §7
+(quantized, so a right angle is exact), a skew's tangent is their
+quotient, and the IR carries six finished numbers (§7). A map that is
+not finite (a skew of ±90°) is an error at the transform. Nothing is
+rewritten: shapes keep their coordinates and path data, and the map
+is carried around them.
+
+**Strokes** scale with the map, as in SVG; `strokes="fixed"` keeps them
+at the width written, whatever the map does. The nearest transform that
+says decides. The stroke-width allowlist (§2) checks widths as written.
+
+**Bounds.** What a transform draws must stay in its icon's frame, the
+viewBox of the footprint or canvas: the geometry of its shapes (their
+points, centers and radii, and path data with its curves and arcs, not
+stroke widths), drawn through every map around them, at the precision
+output is printed at (§7). It is checked at each outermost transform,
+with everything in it, nested transforms, fragments and badges
+included; a transform inside another is held by the outer one. One that
+leaves the frame is an error at the transform, unless `bounds=` on it,
+or else the icon's `transform-bounds` (§3), says what to do:
+
+- `grow` widens the viewBox to take what it draws;
+- `scale` folds into its map a uniform scale, never above 1, about the
+  middle of what it draws, and the least shift that brings it inside the
+  frame;
+- `clip` cuts what it draws to the frame;
+- `error`, the default, may be written to override an icon's default.
+
+So the IR's viewBox contains everything drawn, whichever applies:
+grown by `grow`, and unchanged by `scale` and `clip`, whose drawing
+stays inside it. Hosts size and place icons by the viewBox alone.
+
+### Tile-space turns
+
+`turn 90 { … }` and `mirror-diagonal { … }` turn their children's
+geometry in tile space, before projection, so a turned part shows the
+faces it now turns toward. They stand among 3-D nodes, around 3-D
+nodes.
+
+- `turn a origin="x y"` turns about a vertical axis through `origin`
+  (tile units, default `"0 0"`) by a quarter-turn: `a` is 0, 90, 180 or
+  270 degrees, or any multiple of 90, or an expression that is one; a
+  quarter-turn carries +x onto +y. Anything else is an error.
+- `mirror-diagonal origin="x y"` reflects across the diagonal through
+  `origin`, x − ox = y − oy, trading x for y.
+- Turned, a `box` or `tile` is the same box turned (on a quarter-turn or
+  mirror its width and depth trade places), a `cylinder` or `shadow`
+  moves (a shadow's rx and ry trade places with the axes), and `poly3d`
+  and `seg` points and `at` anchors turn. A `facerect` faces +y (front)
+  or +x (right); turned, it moves to the wall it now faces, and is
+  dropped if that wall faces −x or −y, since only the faces isolex draws
+  are seen. The 2-D content of an `at`, badges and screen transforms
+  stay as they are, but for the box `onto` lays content on: that box is
+  turned, and a transform whose face is turned away draws nothing.
+- Turns nest and compose, through fragments too, and every point is
+  turned exactly, by sums and differences alone.
+- Painter order stays document order: what stands in front after a turn
+  is not moved later.
+- Arbitrary angles are out of scope: a box turned 30° shows faces that
+  depend on the angle, which painter order cannot sort.
 
 Style properties everywhere applicable: `fill`, `stroke` (theme tokens
 or `none`), `width`, `dash` ("3 2.5"), `opacity`, and the `when` guard.
@@ -218,7 +336,8 @@ Single `extends` chain, walked root-first, merged child-over-parent:
    deletes. Redeclaring an inherited name with `part` is an error;
    replacing or removing an unknown name is an error with a
    nearest-name suggestion.
-3. `category`/`footprint`/`canvas`: child wins. `describe` concatenates.
+3. `category`/`footprint`/`canvas`/`view`/`transform-bounds`: child
+   wins. `describe` concatenates.
    `axes` union (first-seen order). `grant`s union by token, in
    first-seen order; a child granting a token its ancestor granted keeps
    that slot and replaces the reason.
@@ -265,19 +384,38 @@ Projection keeps every number finite too: an icon whose geometry
 overflows once projected to output units (its viewBox, a point, a
 radius, a number in path data) is a compile-time error naming the icon,
 reported at the node that overflowed (the anchor, for 2-D nodes inside
-`at`; the `badge`, for a badge placed out of range).
-No value in the IR is ever infinite or NaN.
+`at`; the `badge`, for a badge placed out of range; the transform, for
+a map out of range). No value in the IR is ever infinite or NaN.
 
-The IR is JSON: `{ "ir_version": 1, "icons": [ … ] }`, each icon
+The IR is JSON: `{ "ir_version": 2, "icons": [ … ] }`, each icon
 carrying `name`, `category`, `footprint`/`canvas`, `viewbox`
 `[minx, miny, w, h]`, `describe`, `grants`, and `shapes` — a flat,
 ordered list of primitives tagged by `kind`:
 `polygon` (points), `path` (d), `ellipse`, `circle`, `rect`, and
-`group` (tx, ty, scale, shapes — badge composition; renderers wrap the
-child shapes in a transform and never rewrite path data). Paints are
-unresolved theme tokens; positional values are raw f64 (renderers apply
-the formatting rule below); numbers **inside** path `d` strings are
-already formatted.
+`group`. Paints are unresolved theme tokens; positional values are raw
+f64 (renderers apply the formatting rule below); numbers **inside** path
+`d` strings are already formatted.
+
+A **group** is shapes drawn through an affine map: a transform's (§4),
+a badge's, or both multiplied out. It carries `matrix`, six numbers
+`[a, b, c, d, e, f]` as SVG's `matrix()`; optionally `clip`, a convex
+polygon (its points) in the coordinates the group is drawn in, which
+cuts what is drawn to it; optionally `strokes: "fixed"`, which keeps
+stroke widths as written instead of scaled by the matrix; and its
+`shapes`. Groups never nest: where maps meet (a transform inside
+another, or in a fragment inserted in one, or a badge in a transform,
+or a badge whose target has transforms), the compiler multiplies them
+out, in f64, into one matrix around each run of shapes: those of one
+transform, or one badge, or one group of a badge's target. Clips are
+intersected the same way. A shape drawn with no map, clip or fixed
+strokes is not in a group. A badge's map is `[s, 0, 0, s, tx, ty]`.
+
+Renderers wrap a group's shapes in its matrix and never rewrite path
+data; nor does the compiler, which carries a transform around its
+shapes rather than into them. A group's clip is a clip path in the
+coordinates the group is drawn in, and fixed strokes are SVG's
+`vector-effect="non-scaling-stroke"`, or a stroke drawn in device space
+in formats without it.
 
 **The formatting rule**: every number a conforming toolchain prints into
 output text (path data at compile time; coordinates at render time) is
@@ -287,10 +425,13 @@ number's exact binary value: 0.125 is `0.12` and 0.375 `0.38`, while
 never `-0.00`, whether the value is −0.0 or rounds to zero from below
 (−0.001). `isolex render` (§10) is
 the reference for the render-time half: each icon an SVG document whose
-viewBox, coordinates, radii, widths, opacities and badge transforms
+viewBox, coordinates, radii, widths, opacities, matrices and clips
 follow this rule, whose path data passes through unchanged, and whose
-badges are a `<g transform="translate(tx ty) scale(s)">` around the
-target's shapes.
+groups are a `<g transform="matrix(a b c d e f)">` around their shapes.
+A group with a clip declares `<clipPath id="clip-<icon>-<n>">` (its
+polygon, numbered in document order) just before it and is wrapped in
+`<g clip-path="url(#clip-<icon>-<n>)">`; in a group with fixed strokes,
+every stroked shape carries `vector-effect="non-scaling-stroke"`.
 
 Determinism: identical lexicon bytes must produce identical IR bytes.
 Platform maths libraries disagree in the last bit of `cos` and `sin`
@@ -323,8 +464,9 @@ IR.
 Nothing in the language is Turing-shaped, but a few constructs multiply:
 nested `repeat`s, fragments inserted inside repeats or other fragments,
 and axes, whose product grows with each one an icon opts into. A small
-source can therefore ask for an output too large to build. Four limits
-keep a mistake from exhausting the machine. Each has a generous default,
+source can therefore ask for an output too large to build, and
+transforms chain through one another. These limits keep a mistake from
+exhausting the machine. Each has a generous default,
 and each can be raised, lowered, or switched off by an author who means
 it:
 
@@ -335,6 +477,7 @@ it:
 | `insert-depth` | how deeply fragment insertions nest | 32 | lexicon block, definition |
 | `icon-limit` | icons the lexicon emits, after axis products | 100 000 | lexicon block |
 | `expression-depth` | how deeply one expression nests (§5) | 256 | lexicon block, definition |
+| `transform-chain` | transform steps one shape is drawn through, in every transform around it, through fragments, and a badge one more | 64 | lexicon block, definition |
 
 Each takes a positive whole number, or `#null` for no limit. A
 definition's value wins over the lexicon block's, which wins over the
@@ -350,8 +493,9 @@ before any combination is built.
 
 The defaults are the values above unless the compiler was built with
 `ISOLEX_DEFAULT_SHAPE_LIMIT`, `ISOLEX_DEFAULT_REPEAT_LIMIT`,
-`ISOLEX_DEFAULT_INSERT_DEPTH`, `ISOLEX_DEFAULT_ICON_LIMIT` or
-`ISOLEX_DEFAULT_EXPRESSION_DEPTH` set. Such a
+`ISOLEX_DEFAULT_INSERT_DEPTH`, `ISOLEX_DEFAULT_ICON_LIMIT`,
+`ISOLEX_DEFAULT_EXPRESSION_DEPTH` or `ISOLEX_DEFAULT_TRANSFORM_CHAIN`
+set. Such a
 build accepts or rejects a lexicon differently but never compiles it to
 different IR; a lexicon that needs more than the values above should
 say so with a directive.

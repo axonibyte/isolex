@@ -36,6 +36,10 @@ pub struct ResolvedDef {
     /// Limits set along the chain, child over parent, each with the name
     /// of the definition (or variant) that set it.
     pub limits: BTreeMap<LimitKind, (Limit, String)>,
+    /// The corner it is drawn from, and what its transforms do past its
+    /// frame: child over parent.
+    pub view: Option<Num>,
+    pub transform_bounds: Option<Bounds>,
     pub span: Span,
 }
 
@@ -270,6 +274,8 @@ fn resolve_one(
         grants: Vec::new(),
         parts: Vec::new(),
         limits: BTreeMap::new(),
+        view: None,
+        transform_bounds: None,
         span: leaf.span,
     };
 
@@ -290,6 +296,12 @@ fn merge_body(ctx: &mut Ctx, r: &mut ResolvedDef, body: &DefBody, whose: &str) {
     }
     if let Some(c) = &body.canvas {
         r.canvas = Some(c.clone());
+    }
+    if let Some(v) = &body.view {
+        r.view = Some(v.clone());
+    }
+    if let Some(b) = body.transform_bounds {
+        r.transform_bounds = Some(b);
     }
     r.describe.extend(body.describe.iter().cloned());
     for (name, value, _) in &body.params {

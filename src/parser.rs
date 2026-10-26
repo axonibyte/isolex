@@ -321,6 +321,9 @@ const BODY_NODES: &[&str] = &[
     "repeat-limit",
     "insert-depth",
     "expression-depth",
+    "transform-chain",
+    "view",
+    "transform-bounds",
 ];
 
 fn limit_kind(name: &str) -> Option<LimitKind> {
@@ -530,6 +533,37 @@ fn parse_body_child(ctx: &mut FileCtx, ch: kdl::NodeRef, kind: DefKind, def: &mu
             Some(kdl::Value::Bool(b)) => def.emit_base = *b,
             _ => ctx.diag(off, "emit-base takes #true or #false"),
         },
+        "view" | "transform-bounds" if kind == DefKind::Fragment => ctx.diag(
+            off,
+            format!(
+                "a fragment is drawn as part of the icon it is inserted into; set {} on that icon",
+                ch.name().value()
+            ),
+        ),
+        "view" => {
+            let args: Vec<&kdl::Entry> =
+                ch.entries().iter().filter(|e| e.name().is_none()).collect();
+            match args.as_slice() {
+                [e] => def.body.view = parse_num_entry(ctx, e),
+                _ => ctx.diag(off, "view takes one angle, a quarter-turn: view 90"),
+            }
+        }
+        "transform-bounds" => match first_string_arg(ctx, ch).as_deref() {
+            Some(name) => match Bounds::named(name) {
+                Some(b) => def.body.transform_bounds = Some(b),
+                None => ctx.diag(
+                    off,
+                    format!(
+                        "transform-bounds is \"error\", \"grow\", \"scale\" or \"clip\"{}",
+                        suggest(name, Bounds::NAMES.into_iter())
+                    ),
+                ),
+            },
+            None => ctx.diag(
+                off,
+                "transform-bounds takes \"error\", \"grow\", \"scale\" or \"clip\"",
+            ),
+        },
         other if limit_kind(other).is_some() => {
             let limit = limit_kind(other).expect("checked");
             if limit.lexicon_wide() {
@@ -608,15 +642,22 @@ fn parse_geometry_children(ctx: &mut FileCtx, node: kdl::NodeRef, gctx: Ctx) -> 
             };
             // the context its own children are read in, if it has any
             let inner = match n {
-                Node::Repeat { .. } => Some(gctx),
+                Node::Repeat { .. } | Node::Transform { .. } => Some(gctx),
+                Node::Turn { .. } if gctx == Ctx::AnyD => Some(Ctx::AnyD),
+                Node::Turn { .. } => Some(Ctx::ThreeD),
                 Node::Poly3d { .. } => Some(Ctx::PolyPts3),
                 Node::At { .. } => Some(Ctx::TwoD),
                 Node::Poly2d { .. } => Some(Ctx::PolyPts2),
                 _ => None,
             };
+            // a transform's steps block is read with the transform
+            let mut children = kids(ch);
+            if matches!(n, Node::Transform { .. }) {
+                children.retain(|k| k.name().value() != "steps");
+            }
             match inner {
                 Some(inner) => stack.push(Frame {
-                    kids: kids(ch),
+                    kids: children,
                     next: 0,
                     gctx: inner,
                     built: Vec::new(),
@@ -641,11 +682,32 @@ fn parse_geometry_children(ctx: &mut FileCtx, node: kdl::NodeRef, gctx: Ctx) -> 
 }
 
 const NODES_3D: &[&str] = &[
-    "box", "tile", "cylinder", "facerect", "poly3d", "shadow", "seg", "at", "repeat", "insert",
+    "box",
+    "tile",
+    "cylinder",
+    "facerect",
+    "poly3d",
+    "shadow",
+    "seg",
+    "at",
+    "repeat",
+    "insert",
     "badge",
+    "transform",
+    "turn",
+    "mirror-diagonal",
 ];
 const NODES_2D: &[&str] = &[
-    "line", "circle", "ellipse", "rect", "arc", "path", "poly", "repeat", "insert",
+    "line",
+    "circle",
+    "ellipse",
+    "rect",
+    "arc",
+    "path",
+    "poly",
+    "repeat",
+    "insert",
+    "transform",
 ];
 
 fn parse_geometry(ctx: &mut FileCtx, ch: kdl::NodeRef, gctx: Ctx) -> Option<Node> {
@@ -903,6 +965,32 @@ fn parse_geometry(ctx: &mut FileCtx, ch: kdl::NodeRef, gctx: Ctx) -> Option<Node
                 span,
             })
         }
+        "transform" => Some(Node::Transform {
+            spec: transform_spec(ctx, ch)?,
+            children: Vec::new(),
+            when,
+            span,
+        }),
+        "turn" => {
+            let [angle] = num_args::<1>(ctx, ch)?;
+            Some(Node::Turn {
+                by: TurnBy::Angle(angle),
+                origin: list_prop(ctx, ch, "origin", &[2])?.map(pair),
+                children: Vec::new(),
+                when,
+                span,
+            })
+        }
+        "mirror-diagonal" => {
+            num_args::<0>(ctx, ch)?;
+            Some(Node::Turn {
+                by: TurnBy::MirrorDiagonal,
+                origin: list_prop(ctx, ch, "origin", &[2])?.map(pair),
+                children: Vec::new(),
+                when,
+                span,
+            })
+        }
         _ => unreachable!("validated against the context's node list"),
     }
 }
@@ -1128,6 +1216,22 @@ fn geometry_props(name: &str) -> &'static [&'static str] {
         "rect" => &["fill", "stroke", "width", "dash", "opacity", "rx", "when"],
         "path" => &["fill", "stroke", "width", "dash", "opacity", "d", "when"],
         "badge" => &["corner", "scale", "when"],
+        "transform" => &[
+            "origin",
+            "translate",
+            "rotate",
+            "scale",
+            "skew-x",
+            "skew-y",
+            "mirror",
+            "matrix",
+            "onto",
+            "of",
+            "bounds",
+            "strokes",
+            "when",
+        ],
+        "turn" | "mirror-diagonal" => &["origin", "when"],
         "shadow" | "at" | "repeat" => &["when"],
         "pt" => &[],
         _ => STYLE,
@@ -1200,4 +1304,437 @@ fn fills_prop(ctx: &mut FileCtx, node: kdl::NodeRef) -> Option<Option<String>> {
             None
         }
     }
+}
+
+// --- transforms ------------------------------------------------------------
+
+/// A list of numbers in one string, as `origin="cx cy"` writes two:
+/// values apart by spaces, each a number or an expression, one with
+/// spaces of its own in parentheses (`"(w / 2) 0"`). A plain number is a
+/// list of one.
+fn parse_num_list(
+    ctx: &mut FileCtx,
+    e: &kdl::Entry,
+    what: &str,
+    counts: &[usize],
+) -> Option<Vec<Num>> {
+    let off = e.span().offset();
+    let want = match counts {
+        [n] => format!("{n}"),
+        [a, b] => format!("{a} or {b}"),
+        _ => unreachable!("one or two counts"),
+    };
+    let complaint = format!(
+        "{what} takes {want} number(s) apart by spaces; write an expression with spaces of its own in parentheses: \"(w / 2) 0\""
+    );
+    let values = match e.value().as_string() {
+        None => vec![parse_num_entry(ctx, e)?],
+        Some(text) => {
+            let mut pieces = Vec::new();
+            let mut depth = 0i32;
+            let mut piece = String::new();
+            for c in text.chars() {
+                match c {
+                    '(' => depth += 1,
+                    ')' => depth -= 1,
+                    _ => {}
+                }
+                if c.is_whitespace() && depth == 0 {
+                    if !piece.is_empty() {
+                        pieces.push(std::mem::take(&mut piece));
+                    }
+                } else {
+                    piece.push(c);
+                }
+            }
+            if !piece.is_empty() {
+                pieces.push(piece);
+            }
+            // the count first: `w / 2 0` is four pieces, not a bad `/`
+            if !counts.contains(&pieces.len()) {
+                ctx.diag(off, complaint);
+                return None;
+            }
+            let mut values = Vec::new();
+            for piece in pieces {
+                match expr::parse_num(&piece) {
+                    Ok(ast) => values.push(Num::Expr { src: piece, ast }),
+                    Err(err) => {
+                        ctx.diag(off, format!("in {what} value '{piece}': {}", err.message));
+                        return None;
+                    }
+                }
+            }
+            values
+        }
+    };
+    if !counts.contains(&values.len()) {
+        ctx.diag(off, complaint);
+        return None;
+    }
+    Some(values)
+}
+
+/// A property holding a list of numbers, if it is there; `None` within
+/// for one that is not, and an outer `None` for one that is wrong.
+fn list_prop(
+    ctx: &mut FileCtx,
+    node: kdl::NodeRef,
+    name: &str,
+    counts: &[usize],
+) -> Option<Option<Vec<Num>>> {
+    let Some(e) = node
+        .entries()
+        .iter()
+        .find(|e| e.name().map(|n| n.value()) == Some(name))
+    else {
+        return Some(None);
+    };
+    parse_num_list(ctx, e, name, counts).map(Some)
+}
+
+fn pair(v: Vec<Num>) -> [Num; 2] {
+    let mut it = v.into_iter();
+    let a = it.next().expect("two");
+    [a, it.next().expect("two")]
+}
+
+/// One value, or two: `scale=2` is `scale="2 2"`.
+fn both(v: Vec<Num>) -> [Num; 2] {
+    if v.len() == 1 {
+        [v[0].clone(), v[0].clone()]
+    } else {
+        pair(v)
+    }
+}
+
+fn mirror_axis(ctx: &mut FileCtx, off: usize, value: Option<&str>) -> Option<MirrorAxis> {
+    match value {
+        Some("across") => Some(MirrorAxis::Across),
+        Some("down") => Some(MirrorAxis::Down),
+        other => {
+            ctx.diag(
+                off,
+                format!(
+                    "mirror is \"across\" (left for right) or \"down\" (top for bottom){}",
+                    other
+                        .map(|s| suggest(s, ["across", "down"].into_iter()))
+                        .unwrap_or_default()
+                ),
+            );
+            None
+        }
+    }
+}
+
+const STEP_NAMES: [&str; 7] = [
+    "translate",
+    "rotate",
+    "scale",
+    "skew-x",
+    "skew-y",
+    "mirror",
+    "matrix",
+];
+
+/// One step of a `steps` block: its name and positional arguments.
+fn parse_step(ctx: &mut FileCtx, node: kdl::NodeRef) -> Option<Step> {
+    let off = node.span().offset();
+    let name = node.name().value();
+    only_props(ctx, node, &[]);
+    let args: Vec<&kdl::Entry> = node
+        .entries()
+        .iter()
+        .filter(|e| e.name().is_none())
+        .collect();
+    let count = |ctx: &mut FileCtx, counts: &[usize], usage: &str| -> bool {
+        if counts.contains(&args.len()) {
+            true
+        } else {
+            ctx.diag(
+                off,
+                format!("{name} takes {usage}, found {} argument(s)", args.len()),
+            );
+            false
+        }
+    };
+    let nums = |ctx: &mut FileCtx| -> Option<Vec<Num>> {
+        let mut out = Vec::new();
+        for e in &args {
+            out.push(parse_num_entry(ctx, e)?);
+        }
+        Some(out)
+    };
+    match name {
+        "translate" if count(ctx, &[2], "two numbers: translate 2 0") => {
+            Some(Step::Translate(pair(nums(ctx)?)))
+        }
+        "rotate" if count(ctx, &[1], "an angle in degrees: rotate 90") => {
+            Some(Step::Rotate(nums(ctx)?.remove(0)))
+        }
+        "scale" if count(ctx, &[1, 2], "one number or two: scale 2, scale 2 1") => {
+            Some(Step::Scale(both(nums(ctx)?)))
+        }
+        "skew-x" if count(ctx, &[1], "an angle in degrees: skew-x -12") => {
+            Some(Step::SkewX(nums(ctx)?.remove(0)))
+        }
+        "skew-y" if count(ctx, &[1], "an angle in degrees: skew-y 12") => {
+            Some(Step::SkewY(nums(ctx)?.remove(0)))
+        }
+        "mirror" if count(ctx, &[1], "\"across\" or \"down\"") => {
+            let value = args[0].value().as_string();
+            Some(Step::Mirror(mirror_axis(
+                ctx,
+                args[0].span().offset(),
+                value,
+            )?))
+        }
+        "matrix" if count(ctx, &[6], "six numbers: matrix 1 0 0 1 0 0") => {
+            let v = nums(ctx)?;
+            Some(Step::Matrix(Box::new(v.try_into().ok()?)))
+        }
+        "translate" | "rotate" | "scale" | "skew-x" | "skew-y" | "mirror" | "matrix" => None,
+        other => {
+            ctx.diag(
+                off,
+                format!(
+                    "unknown step '{other}'; a step is translate, rotate, scale, skew-x, skew-y, mirror or matrix{}",
+                    suggest(other, STEP_NAMES.into_iter())
+                ),
+            );
+            None
+        }
+    }
+}
+
+/// A `transform`'s properties and steps block. Steps written as
+/// properties apply in one order: mirror, scale, skew-y, skew-x, rotate,
+/// then translate.
+fn transform_spec(ctx: &mut FileCtx, ch: kdl::NodeRef) -> Option<TransformSpec> {
+    let off = ch.span().offset();
+    let prop = |name: &str| {
+        ch.entries()
+            .iter()
+            .find(|e| e.name().map(|n| n.value()) == Some(name))
+    };
+    if ch.entries().iter().any(|e| e.name().is_none()) {
+        ctx.diag(
+            off,
+            "transform takes properties, not arguments: transform rotate=90 { … }",
+        );
+        return None;
+    }
+    let mut spec = TransformSpec {
+        origin: list_prop(ctx, ch, "origin", &[2])?.map(pair),
+        ..TransformSpec::default()
+    };
+
+    // as properties, in their fixed order
+    if let Some(e) = prop("mirror") {
+        let value = e.value().as_string();
+        spec.steps
+            .push(Step::Mirror(mirror_axis(ctx, e.span().offset(), value)?));
+    }
+    if let Some(v) = list_prop(ctx, ch, "scale", &[1, 2])? {
+        spec.steps.push(Step::Scale(both(v)));
+    }
+    if let Some(v) = num_prop(ctx, ch, "skew-y") {
+        spec.steps.push(Step::SkewY(v));
+    }
+    if let Some(v) = num_prop(ctx, ch, "skew-x") {
+        spec.steps.push(Step::SkewX(v));
+    }
+    if let Some(v) = num_prop(ctx, ch, "rotate") {
+        spec.steps.push(Step::Rotate(v));
+    }
+    if let Some(v) = list_prop(ctx, ch, "translate", &[2])? {
+        spec.steps.push(Step::Translate(pair(v)));
+    }
+    let matrix = list_prop(ctx, ch, "matrix", &[6])?;
+
+    // or as a steps block, in its own order
+    let blocks: Vec<kdl::NodeRef> = ch
+        .children()
+        .map(|c| c.nodes().filter(|n| n.name().value() == "steps").collect())
+        .unwrap_or_default();
+    if let Some(extra) = blocks.get(1) {
+        ctx.diag(extra.span().offset(), "a transform has one steps block");
+        return None;
+    }
+    if let Some(block) = blocks.first() {
+        only_props(ctx, *block, &[]);
+        if block.entries().iter().any(|e| e.name().is_none()) {
+            ctx.diag(
+                block.span().offset(),
+                "steps takes no arguments, only a block of steps",
+            );
+            return None;
+        }
+        if !spec.steps.is_empty() || matrix.is_some() {
+            ctx.diag(
+                block.span().offset(),
+                "a transform's steps are its properties or a steps block, not both",
+            );
+            return None;
+        }
+        let nodes: Vec<kdl::NodeRef> = block
+            .children()
+            .map(|c| c.nodes().collect())
+            .unwrap_or_default();
+        if nodes.is_empty() {
+            ctx.diag(
+                block.span().offset(),
+                "an empty steps block; give it a step, or remove it",
+            );
+            return None;
+        }
+        for node in nodes {
+            spec.steps.push(parse_step(ctx, node)?);
+        }
+    }
+    if let Some(m) = matrix {
+        if !spec.steps.is_empty() {
+            ctx.diag(
+                off,
+                "matrix stands alone: it is the whole map, so give it no other steps",
+            );
+            return None;
+        }
+        if spec.origin.is_some() {
+            ctx.diag(
+                off,
+                "matrix is applied as written, so origin has nothing to do; remove it",
+            );
+            return None;
+        }
+        spec.steps.push(Step::Matrix(Box::new(m.try_into().ok()?)));
+    }
+
+    // laid on a face
+    match (prop("onto"), prop("of")) {
+        (Some(onto), Some(of)) => {
+            let face = match onto.value().as_string() {
+                Some("top") => OntoFace::Top,
+                Some("front") => OntoFace::Front,
+                Some("right") => OntoFace::Right,
+                other => {
+                    ctx.diag(
+                        onto.span().offset(),
+                        format!(
+                            "onto is \"top\", \"front\" or \"right\", a face of the box `of` names{}",
+                            other
+                                .map(|s| suggest(s, ["top", "front", "right"].into_iter()))
+                                .unwrap_or_default()
+                        ),
+                    );
+                    return None;
+                }
+            };
+            let usage = "of names a box as box does: of=\"box 0 0 0 1 1 1\"";
+            let Some(text) = of.value().as_string() else {
+                ctx.diag(of.span().offset(), usage);
+                return None;
+            };
+            let Some(rest) = text.trim_start().strip_prefix("box ") else {
+                ctx.diag(of.span().offset(), usage);
+                return None;
+            };
+            // the six numbers after `box`, read as a list
+            let mut values = Vec::new();
+            let mut depth = 0i32;
+            let mut piece = String::new();
+            for c in rest.chars().chain(std::iter::once(' ')) {
+                match c {
+                    '(' => depth += 1,
+                    ')' => depth -= 1,
+                    _ => {}
+                }
+                if c.is_whitespace() && depth == 0 {
+                    if !piece.is_empty() {
+                        match expr::parse_num(&piece) {
+                            Ok(ast) => values.push(Num::Expr {
+                                src: std::mem::take(&mut piece),
+                                ast,
+                            }),
+                            Err(err) => {
+                                ctx.diag(
+                                    of.span().offset(),
+                                    format!("in of value '{piece}': {}", err.message),
+                                );
+                                return None;
+                            }
+                        }
+                    }
+                } else {
+                    piece.push(c);
+                }
+            }
+            let Ok(values) = <[Num; 6]>::try_from(values) else {
+                ctx.diag(of.span().offset(), format!("{usage}: x y z w d h"));
+                return None;
+            };
+            spec.onto = Some((face, values));
+        }
+        (Some(e), None) => {
+            ctx.diag(
+                e.span().offset(),
+                "onto needs of, the box whose face it is: of=\"box 0 0 0 1 1 1\"",
+            );
+            return None;
+        }
+        (None, Some(e)) => {
+            ctx.diag(
+                e.span().offset(),
+                "of names the box for onto; give onto too, or remove it",
+            );
+            return None;
+        }
+        (None, None) => {}
+    }
+
+    if let Some(e) = prop("bounds") {
+        let value = e.value().as_string();
+        match value.and_then(Bounds::named) {
+            Some(b) => spec.bounds = Some(b),
+            None => {
+                ctx.diag(
+                    e.span().offset(),
+                    format!(
+                        "bounds is \"error\", \"grow\", \"scale\" or \"clip\"{}",
+                        value
+                            .map(|s| suggest(s, Bounds::NAMES.into_iter()))
+                            .unwrap_or_default()
+                    ),
+                );
+                return None;
+            }
+        }
+    }
+    if let Some(e) = prop("strokes") {
+        match e.value().as_string() {
+            Some("scale") => spec.strokes = Some(Strokes::Scale),
+            Some("fixed") => spec.strokes = Some(Strokes::Fixed),
+            other => {
+                ctx.diag(
+                    e.span().offset(),
+                    format!(
+                        "strokes is \"scale\" (the default) or \"fixed\"{}",
+                        other
+                            .map(|s| suggest(s, ["scale", "fixed"].into_iter()))
+                            .unwrap_or_default()
+                    ),
+                );
+                return None;
+            }
+        }
+    }
+    if spec.steps.is_empty() && spec.onto.is_none() {
+        ctx.diag(
+            off,
+            "transform needs something to do: translate, rotate, scale, skew-x, skew-y, mirror or matrix, \
+             a steps block, or onto",
+        );
+        return None;
+    }
+    Some(spec)
 }

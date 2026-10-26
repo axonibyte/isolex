@@ -9,7 +9,10 @@ use std::rc::Rc;
 
 use serde::Serialize;
 
-use crate::ast::{Face, Limit, LimitKind, Limits, Node, Num, PartDecl, PathPiece, Span, Style};
+use crate::ast::{
+    Bounds, Face, Limit, LimitKind, Limits, MirrorAxis, Node, Num, OntoFace, PartDecl, PathPiece,
+    Span, Step, Strokes, Style, TransformSpec, TurnBy,
+};
 use crate::expr::{self, Expr};
 use crate::resolve::{apply_variant, Resolved, ResolvedDef, SpanDiag};
 
@@ -136,6 +139,134 @@ pub enum Shape2 {
         style: EvStyle,
         span: Span,
     },
+    /// The shapes up to the matching end are drawn through this
+    /// transform. Transforms nest as markers in one flat list, never as a
+    /// tree, so how deeply they nest costs no call stack.
+    TransformStart {
+        tf: EvTransform,
+        span: Span,
+    },
+    TransformEnd,
+}
+
+/// A transform with its values evaluated, except those that need the
+/// anchor's screen position, which projection supplies.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct EvTransform {
+    pub origin: [EvNum; 2],
+    pub steps: Vec<EvStep>,
+    /// The face map `onto` gives, worked out from the box once it is
+    /// turned.
+    pub onto: Option<[f64; 6]>,
+    pub bounds: Option<Bounds>,
+    pub strokes: Option<Strokes>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub enum EvStep {
+    Translate([EvNum; 2]),
+    Rotate(EvNum),
+    Scale([EvNum; 2]),
+    SkewX(EvNum),
+    SkewY(EvNum),
+    Mirror(MirrorAxis),
+    Matrix(Box<[EvNum; 6]>),
+}
+
+/// A tile-space turn (SPEC §4): a quarter-turn or a mirror across a
+/// diagonal, and a shift. A point (x, y) maps to (a0·x + a1·y + t0,
+/// a2·x + a3·y + t1), each `a` 0, 1 or −1, so turning is exact.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+pub struct Turn {
+    a: [i8; 4],
+    t: [f64; 2],
+}
+
+impl Turn {
+    pub const NONE: Turn = Turn {
+        a: [1, 0, 0, 1],
+        t: [0.0, 0.0],
+    };
+    /// A quarter-turn carries +x onto +y.
+    const QUARTER: [i8; 4] = [0, -1, 1, 0];
+    const DIAGONAL: [i8; 4] = [0, 1, 1, 0];
+
+    fn mul_a(m: [i8; 4], n: [i8; 4]) -> [i8; 4] {
+        [
+            m[0] * n[0] + m[1] * n[2],
+            m[0] * n[1] + m[1] * n[3],
+            m[2] * n[0] + m[3] * n[2],
+            m[2] * n[1] + m[3] * n[3],
+        ]
+    }
+
+    fn quarters(q: u8) -> [i8; 4] {
+        (0..q).fold([1, 0, 0, 1], |a, _| Turn::mul_a(Turn::QUARTER, a))
+    }
+
+    fn lin(a: [i8; 4], [x, y]: [f64; 2]) -> [f64; 2] {
+        // a sum of the terms that are there, so nothing is multiplied by 0
+        let term = |k: i8, v: f64| match k {
+            1 => v,
+            -1 => -v,
+            _ => 0.0,
+        };
+        [term(a[0], x) + term(a[1], y), term(a[2], x) + term(a[3], y)]
+    }
+
+    /// `a` about a point rather than the origin.
+    fn about(a: [i8; 4], o: [f64; 2]) -> Turn {
+        let ao = Turn::lin(a, o);
+        Turn {
+            a,
+            t: [o[0] - ao[0], o[1] - ao[1]],
+        }
+    }
+
+    /// This after `inner`: a point goes through `inner`, then this.
+    fn then(&self, inner: &Turn) -> Turn {
+        let t = Turn::lin(self.a, inner.t);
+        Turn {
+            a: Turn::mul_a(self.a, inner.a),
+            t: [t[0] + self.t[0], t[1] + self.t[1]],
+        }
+    }
+
+    pub fn pt(&self, x: f64, y: f64) -> (f64, f64) {
+        let [px, py] = Turn::lin(self.a, [x, y]);
+        (px + self.t[0], py + self.t[1])
+    }
+
+    /// Width and depth trade places.
+    pub fn swaps(&self) -> bool {
+        self.a[0] == 0
+    }
+
+    /// A rectangle on the floor, turned: still one, its corner nearest
+    /// the origin first.
+    fn rect(&self, x: f64, y: f64, w: f64, d: f64) -> (f64, f64, f64, f64) {
+        let (x0, y0) = self.pt(x, y);
+        let (x1, y1) = self.pt(x + w, y + d);
+        (x0.min(x1), y0.min(y1), (x1 - x0).abs(), (y1 - y0).abs())
+    }
+
+    /// The face a wall facing +y (front) or +x (right) faces once turned,
+    /// or none when it faces away, since only those two are seen.
+    fn face(&self, face: Face) -> Option<Face> {
+        let normal = match face {
+            Face::Front => [0, 1],
+            Face::Right => [1, 0],
+        };
+        let n = [
+            self.a[0] * normal[0] + self.a[1] * normal[1],
+            self.a[2] * normal[0] + self.a[3] * normal[1],
+        ];
+        match n {
+            [0, 1] => Some(Face::Front),
+            [1, 0] => Some(Face::Right),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -213,17 +344,26 @@ pub enum Shape {
         scale: Option<f64>,
         span: Span,
     },
+    /// See [`Shape2::TransformStart`].
+    TransformStart {
+        tf: EvTransform,
+        span: Span,
+    },
+    TransformEnd,
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ExpandedIcon {
     pub name: String,
     pub category: String,
+    /// As drawn: turned with the icon's view.
     pub footprint: Option<[f64; 3]>,
     pub canvas: Option<[f64; 2]>,
     pub describe: Vec<String>,
     pub grants: Vec<(String, String)>,
     pub shapes: Vec<Shape>,
+    /// What its transforms do past its frame, unless one says.
+    pub transform_bounds: Option<Bounds>,
     /// The icon's definition, for errors projection finds.
     pub span: Span,
 }
@@ -238,6 +378,9 @@ struct Ctx<'a> {
     repeats: (InForce, u64),
     insert_depth: InForce,
     expression_depth: InForce,
+    transform_chain: InForce,
+    /// Transform steps around what is being expanded now.
+    chain: u64,
     /// A limit was passed: expansion of this icon stops everywhere.
     exhausted: bool,
 }
@@ -258,6 +401,8 @@ impl<'a> Ctx<'a> {
         self.repeats = (in_force(LimitKind::Repeats, &def.limits, lexicon), 0);
         self.insert_depth = in_force(LimitKind::InsertDepth, &def.limits, lexicon);
         self.expression_depth = in_force(LimitKind::ExpressionDepth, &def.limits, lexicon);
+        self.transform_chain = in_force(LimitKind::TransformChain, &def.limits, lexicon);
+        self.chain = 0;
         self.exhausted = false;
     }
 
@@ -304,7 +449,9 @@ pub fn expand(resolved: &Resolved) -> (Vec<ExpandedIcon>, Vec<SpanDiag>) {
         shapes: (unset.clone(), 0),
         repeats: (unset.clone(), 0),
         insert_depth: unset.clone(),
-        expression_depth: unset,
+        expression_depth: unset.clone(),
+        transform_chain: unset,
+        chain: 0,
         exhausted: false,
     };
     let mut out = Vec::new();
@@ -461,10 +608,33 @@ fn expand_one(ctx: &mut Ctx, def: &ResolvedDef, name: String) -> Option<Expanded
         None => None,
     };
 
+    // the view turns everything in place, in its footprint
+    let mut turn = Turn::NONE;
+    let mut footprint = footprint;
+    if let Some(v) = &def.view {
+        let angle = eval_full(ctx, v, &env, def.span)?;
+        let q = quarter(ctx, angle, "view", def.span)?;
+        if q != 0 {
+            let Some([w, d, h]) = footprint else {
+                ctx.diag(
+                    def.span,
+                    format!("icon '{name}' has a view but no footprint; a canvas icon is drawn flat, from no corner"),
+                );
+                return None;
+            };
+            let a = Turn::quarters(q);
+            let (x, y, _, _) = Turn { a, t: [0.0, 0.0] }.rect(0.0, 0.0, w, d);
+            turn = Turn { a, t: [-x, -y] };
+            if turn.swaps() {
+                footprint = Some([d, w, h]);
+            }
+        }
+    }
+
     let mut shapes = Vec::new();
     let env: Env = Rc::new(env);
     for (_pname, nodes) in &def.parts {
-        run(ctx, nodes, env.clone(), &mut shapes);
+        run(ctx, nodes, env.clone(), turn, &mut shapes);
     }
 
     Some(ExpandedIcon {
@@ -479,8 +649,120 @@ fn expand_one(ctx: &mut Ctx, def: &ResolvedDef, name: String) -> Option<Expanded
             .map(|g| (g.token.clone(), g.reason.clone()))
             .collect(),
         shapes,
+        transform_bounds: def.transform_bounds,
         span: def.span,
     })
+}
+
+/// An angle as quarter-turns, 0 to 3; anything but a multiple of 90° is
+/// an error.
+fn quarter(ctx: &mut Ctx, angle: f64, what: &str, span: Span) -> Option<u8> {
+    if angle % 90.0 != 0.0 {
+        ctx.diag(
+            span,
+            format!("{what} takes a quarter-turn, 0, 90, 180 or 270 degrees, got {angle}"),
+        );
+        return None;
+    }
+    Some(((angle / 90.0).rem_euclid(4.0)) as u8)
+}
+
+/// A value of a transform: in 2-D, it may wait for the anchor.
+fn eval_tf(
+    ctx: &mut Ctx,
+    num: &Num,
+    env: &BTreeMap<String, f64>,
+    span: Span,
+    two_d: bool,
+) -> Option<EvNum> {
+    if two_d {
+        eval_2d(ctx, num, env, span)
+    } else {
+        eval_full(ctx, num, env, span).map(EvNum::Lit)
+    }
+}
+
+/// A transform's values, and with `onto`, its face map, from the box as
+/// turned. None when its face is turned away: then nothing in it is
+/// drawn, as a face rect on a wall turned away is not.
+fn eval_transform(
+    ctx: &mut Ctx,
+    spec: &TransformSpec,
+    env: &BTreeMap<String, f64>,
+    turn: &Turn,
+    span: Span,
+    two_d: bool,
+) -> Option<EvTransform> {
+    let ev = |ctx: &mut Ctx, n: &Num| eval_tf(ctx, n, env, span, two_d);
+    let origin = match &spec.origin {
+        Some([x, y]) => [ev(ctx, x)?, ev(ctx, y)?],
+        None => [EvNum::Lit(0.0), EvNum::Lit(0.0)],
+    };
+    let mut steps = Vec::new();
+    for step in &spec.steps {
+        steps.push(match step {
+            Step::Translate([x, y]) => EvStep::Translate([ev(ctx, x)?, ev(ctx, y)?]),
+            Step::Rotate(a) => EvStep::Rotate(ev(ctx, a)?),
+            Step::Scale([x, y]) => EvStep::Scale([ev(ctx, x)?, ev(ctx, y)?]),
+            Step::SkewX(a) => EvStep::SkewX(ev(ctx, a)?),
+            Step::SkewY(a) => EvStep::SkewY(ev(ctx, a)?),
+            Step::Mirror(axis) => EvStep::Mirror(*axis),
+            Step::Matrix(m) => {
+                let mut out: [EvNum; 6] = core::array::from_fn(|_| EvNum::Lit(0.0));
+                for (i, v) in m.iter().enumerate() {
+                    out[i] = ev(ctx, v)?;
+                }
+                EvStep::Matrix(Box::new(out))
+            }
+        });
+    }
+    let onto = match &spec.onto {
+        None => None,
+        Some((face, args)) => {
+            let mut v = [0.0; 6];
+            for (i, a) in args.iter().enumerate() {
+                v[i] = eval_full(ctx, a, env, span)?;
+            }
+            let (x, y, w, d) = turn.rect(v[0], v[1], v[3], v[4]);
+            let (z, h) = (v[2], v[5]);
+            use crate::project::{p, COS, SIN};
+            Some(match face {
+                OntoFace::Top => {
+                    let (ox, oy) = p(x, y, z + h);
+                    [COS, SIN, -COS, SIN, ox, oy]
+                }
+                OntoFace::Front | OntoFace::Right => {
+                    let wall = if *face == OntoFace::Front {
+                        Face::Front
+                    } else {
+                        Face::Right
+                    };
+                    match turn.face(wall)? {
+                        Face::Front => {
+                            let (ox, oy) = p(x, y + d, z + h);
+                            [COS, SIN, 0.0, 1.0, ox, oy]
+                        }
+                        Face::Right => {
+                            let (ox, oy) = p(x + w, y + d, z + h);
+                            [COS, -SIN, 0.0, 1.0, ox, oy]
+                        }
+                    }
+                }
+            })
+        }
+    };
+    Some(EvTransform {
+        origin,
+        steps,
+        onto,
+        bounds: spec.bounds,
+        strokes: spec.strokes,
+    })
+}
+
+/// How long a chain a transform adds: a step each, and `onto` one more.
+fn chain_length(tf: &EvTransform) -> u64 {
+    tf.steps.len() as u64 + u64::from(tf.onto.is_some())
 }
 
 // --- evaluation helpers --------------------------------------------------
@@ -652,6 +934,7 @@ fn expand_node_3d<'a: 'n, 'n>(
     ctx: &mut Ctx<'a>,
     node: &'n Node,
     env: &BTreeMap<String, f64>,
+    turn: &Turn,
     out: &mut Vec<Shape>,
 ) -> Option<Open<'n>> {
     macro_rules! evs {
@@ -687,12 +970,13 @@ fn expand_node_3d<'a: 'n, 'n>(
             if !ctx.spend(LimitKind::Shapes, *span) {
                 return None;
             }
+            let (x, y, w, d) = turn.rect(v[0], v[1], v[3], v[4]);
             out.push(Shape::Box3 {
-                x: v[0],
-                y: v[1],
+                x,
+                y,
                 z: v[2],
-                w: v[3],
-                d: v[4],
+                w,
+                d,
                 h: v[5],
                 fills: fills.clone(),
                 opacity,
@@ -713,12 +997,13 @@ fn expand_node_3d<'a: 'n, 'n>(
             if !ctx.spend(LimitKind::Shapes, *span) {
                 return None;
             }
+            let (x, y, w, d) = turn.rect(v[0], v[1], v[3], v[4]);
             out.push(Shape::Tile {
-                x: v[0],
-                y: v[1],
+                x,
+                y,
                 z: v[2],
-                w: v[3],
-                d: v[4],
+                w,
+                d,
                 style,
                 span: *span,
             });
@@ -739,9 +1024,10 @@ fn expand_node_3d<'a: 'n, 'n>(
             if !ctx.spend(LimitKind::Shapes, *span) {
                 return None;
             }
+            let (cx, cy) = turn.pt(v[0], v[1]);
             out.push(Shape::Cylinder {
-                cx: v[0],
-                cy: v[1],
+                cx,
+                cy,
                 z: v[2],
                 r: v[3],
                 h: v[4],
@@ -767,10 +1053,21 @@ fn expand_node_3d<'a: 'n, 'n>(
             if !ctx.spend(LimitKind::Shapes, *span) {
                 return None;
             }
+            // to the wall it now lies on, or nowhere if that is turned away
+            let now = turn.face(*face)?;
+            let (end_a, end_b) = match face {
+                Face::Front => ((v[0], v[1]), (v[0] + v[3], v[1])),
+                Face::Right => ((v[0], v[1]), (v[0], v[1] + v[3])),
+            };
+            let (p, q) = (turn.pt(end_a.0, end_a.1), turn.pt(end_b.0, end_b.1));
+            let (a, b) = match now {
+                Face::Front => (p.0.min(q.0), p.1),
+                Face::Right => (p.0, p.1.min(q.1)),
+            };
             out.push(Shape::FaceRect {
-                face: *face,
-                a: v[0],
-                b: v[1],
+                face: now,
+                a,
+                b,
                 z: v[2],
                 extent: v[3],
                 h: v[4],
@@ -803,11 +1100,17 @@ fn expand_node_3d<'a: 'n, 'n>(
             if !ctx.spend(LimitKind::Shapes, *span) {
                 return None;
             }
+            let (cx, cy) = turn.pt(v[0], v[1]);
+            let (rx, ry) = if turn.swaps() {
+                (v[3], v[2])
+            } else {
+                (v[2], v[3])
+            };
             out.push(Shape::Shadow {
-                cx: v[0],
-                cy: v[1],
-                rx: v[2],
-                ry: v[3],
+                cx,
+                cy,
+                rx,
+                ry,
                 span: *span,
             });
         }
@@ -825,9 +1128,11 @@ fn expand_node_3d<'a: 'n, 'n>(
             if !ctx.spend(LimitKind::Shapes, *span) {
                 return None;
             }
+            let (ax, ay) = turn.pt(v[0], v[1]);
+            let (bx, by) = turn.pt(v[3], v[4]);
             out.push(Shape::Seg {
-                a: [v[0], v[1], v[2]],
-                b: [v[3], v[4], v[5]],
+                a: [ax, ay, v[2]],
+                b: [bx, by, v[5]],
                 style,
                 span: *span,
             });
@@ -842,8 +1147,9 @@ fn expand_node_3d<'a: 'n, 'n>(
                 return None;
             }
             let v = evs!(args, *span, 3);
+            let (x, y) = turn.pt(v[0], v[1]);
             return Some(Open::At {
-                at: v,
+                at: [x, y, v[2]],
                 children,
                 span: *span,
             });
@@ -877,6 +1183,51 @@ fn expand_node_3d<'a: 'n, 'n>(
             }
             return open_insert(ctx, fragment, args, env, *span);
         }
+        Node::Transform {
+            spec,
+            children,
+            when,
+            span,
+        } => {
+            if !when_passes(ctx, when, env, *span) {
+                return None;
+            }
+            let tf = eval_transform(ctx, spec, env, turn, *span, false)?;
+            return Some(Open::Transform {
+                tf,
+                children,
+                span: *span,
+            });
+        }
+        Node::Turn {
+            by,
+            origin,
+            children,
+            when,
+            span,
+        } => {
+            if !when_passes(ctx, when, env, *span) {
+                return None;
+            }
+            let o = match origin {
+                Some([x, y]) => [
+                    eval_full(ctx, x, env, *span)?,
+                    eval_full(ctx, y, env, *span)?,
+                ],
+                None => [0.0, 0.0],
+            };
+            let a = match by {
+                TurnBy::Angle(angle) => {
+                    let angle = eval_full(ctx, angle, env, *span)?;
+                    Turn::quarters(quarter(ctx, angle, "turn", *span)?)
+                }
+                TurnBy::MirrorDiagonal => Turn::DIAGONAL,
+            };
+            return Some(Open::Turn {
+                turn: turn.then(&Turn::about(a, o)),
+                children,
+            });
+        }
         Node::Badge {
             icon,
             corner,
@@ -895,6 +1246,11 @@ fn expand_node_3d<'a: 'n, 'n>(
                 return None;
             }
             let scale = scale.as_ref().and_then(|s| eval_full(ctx, s, env, *span));
+            // a badge in a transform is one more step for its shapes
+            let chain = ctx.chain;
+            if chain > 0 && !within_chain(ctx, chain + 1, *span) {
+                return None;
+            }
             if !ctx.spend(LimitKind::Shapes, *span) {
                 return None;
             }
@@ -921,6 +1277,7 @@ fn collect_pt3<'a: 'n, 'n>(
     ctx: &mut Ctx<'a>,
     node: &'n Node,
     env: &BTreeMap<String, f64>,
+    turn: &Turn,
     out: &mut Vec<[f64; 3]>,
 ) -> Option<Open<'n>> {
     match node {
@@ -934,7 +1291,8 @@ fn collect_pt3<'a: 'n, 'n>(
                 }
             }
             if ok && ctx.spend(LimitKind::Shapes, *span) {
-                out.push(v);
+                let (x, y) = turn.pt(v[0], v[1]);
+                out.push([x, y, v[2]]);
             }
             None
         }
@@ -970,6 +1328,7 @@ fn expand_node_2d<'a: 'n, 'n>(
     ctx: &mut Ctx<'a>,
     node: &'n Node,
     env: &BTreeMap<String, f64>,
+    turn: &Turn,
     out: &mut Vec<Shape2>,
 ) -> Option<Open<'n>> {
     macro_rules! evs2 {
@@ -1186,6 +1545,22 @@ fn expand_node_2d<'a: 'n, 'n>(
             }
             return open_insert(ctx, fragment, args, env, *span);
         }
+        Node::Transform {
+            spec,
+            children,
+            when,
+            span,
+        } => {
+            if !when_passes(ctx, when, env, *span) {
+                return None;
+            }
+            let tf = eval_transform(ctx, spec, env, turn, *span, true)?;
+            return Some(Open::Transform {
+                tf,
+                children,
+                span: *span,
+            });
+        }
         other => ctx.diag(
             node_span(other),
             "3-D node reached 2-D expansion (parser context bug or a fragment inserted in the wrong context)",
@@ -1347,6 +1722,15 @@ enum Open<'n> {
         parts: &'n [PartDecl],
         env: Env,
     },
+    Transform {
+        tf: EvTransform,
+        children: &'n [Node],
+        span: Span,
+    },
+    Turn {
+        turn: Turn,
+        children: &'n [Node],
+    },
 }
 
 /// Where what is expanded goes: shapes in 3-D or 2-D, or a polygon's
@@ -1360,8 +1744,8 @@ enum Sink {
 
 /// A step of expansion.
 enum Task<'n> {
-    /// Expand a node, into whatever sink is on top.
-    Node(&'n Node, Env),
+    /// Expand a node, turned, into whatever sink is on top.
+    Node(&'n Node, Env, Turn),
     /// Iteration `i` of a repeat's `n`.
     Repeat {
         var: &'n str,
@@ -1369,6 +1753,7 @@ enum Task<'n> {
         i: usize,
         n: usize,
         env: Env,
+        turn: Turn,
         span: Span,
     },
     /// The children of an `at` are done: its shape, from the sink on top.
@@ -1387,6 +1772,11 @@ enum Task<'n> {
     },
     /// A fragment's parts are done.
     PopInsert,
+    /// A transform's children are done: the end of its run, and of its
+    /// steps in the chain.
+    CloseTransform {
+        steps: u64,
+    },
 }
 
 /// Expand `nodes` into `out` with an explicit stack of tasks and sinks
@@ -1395,26 +1785,32 @@ enum Task<'n> {
 /// recursive expansion visited nodes, so diagnostics, limits and the
 /// shapes themselves come out in the same order; a node with children is
 /// counted toward the shape-limit after them, as it was.
-fn run<'a: 'n, 'n>(ctx: &mut Ctx<'a>, nodes: &'n [Node], env: Env, out: &mut Vec<Shape>) {
+fn run<'a: 'n, 'n>(
+    ctx: &mut Ctx<'a>,
+    nodes: &'n [Node],
+    env: Env,
+    turn: Turn,
+    out: &mut Vec<Shape>,
+) {
     let mut tasks: Vec<Task<'n>> = nodes
         .iter()
         .rev()
-        .map(|node| Task::Node(node, env.clone()))
+        .map(|node| Task::Node(node, env.clone(), turn))
         .collect();
     let mut sinks = vec![Sink::Shapes(std::mem::take(out))];
     while let Some(task) = tasks.pop() {
         match task {
-            Task::Node(node, env) => {
+            Task::Node(node, env, turn) => {
                 let opened = match sinks.last_mut().expect("a sink") {
                     // once a limit is passed, no more shapes are expanded
                     Sink::Shapes(_) | Sink::Shapes2(_) if ctx.exhausted => None,
-                    Sink::Shapes(out) => expand_node_3d(ctx, node, &env, out),
-                    Sink::Shapes2(out) => expand_node_2d(ctx, node, &env, out),
-                    Sink::Pts3(out) => collect_pt3(ctx, node, &env, out),
+                    Sink::Shapes(out) => expand_node_3d(ctx, node, &env, &turn, out),
+                    Sink::Shapes2(out) => expand_node_2d(ctx, node, &env, &turn, out),
+                    Sink::Pts3(out) => collect_pt3(ctx, node, &env, &turn, out),
                     Sink::Pts2(out) => collect_pt2(ctx, node, &env, out),
                 };
                 if let Some(open) = opened {
-                    open_children(ctx, open, env, &mut tasks, &mut sinks);
+                    open_children(ctx, open, env, turn, &mut tasks, &mut sinks);
                 }
             }
             Task::Repeat {
@@ -1423,6 +1819,7 @@ fn run<'a: 'n, 'n>(ctx: &mut Ctx<'a>, nodes: &'n [Node], env: Env, out: &mut Vec
                 i,
                 n,
                 env,
+                turn,
                 span,
             } => {
                 if i >= n || !ctx.spend(LimitKind::Repeats, span) {
@@ -1434,11 +1831,12 @@ fn run<'a: 'n, 'n>(ctx: &mut Ctx<'a>, nodes: &'n [Node], env: Env, out: &mut Vec
                     i: i + 1,
                     n,
                     env: env.clone(),
+                    turn,
                     span,
                 });
                 let mut env2 = (*env).clone();
                 env2.insert(var.to_string(), i as f64);
-                push_nodes(&mut tasks, children, Rc::new(env2));
+                push_nodes(&mut tasks, children, Rc::new(env2), turn);
             }
             Task::CloseAt { at, span } => {
                 let Some(Sink::Shapes2(children)) = sinks.pop() else {
@@ -1482,6 +1880,14 @@ fn run<'a: 'n, 'n>(ctx: &mut Ctx<'a>, nodes: &'n [Node], env: Env, out: &mut Vec
             Task::PopInsert => {
                 ctx.insert_stack.pop();
             }
+            Task::CloseTransform { steps } => {
+                ctx.chain -= steps;
+                match sinks.last_mut() {
+                    Some(Sink::Shapes(out)) => out.push(Shape::TransformEnd),
+                    Some(Sink::Shapes2(out)) => out.push(Shape2::TransformEnd),
+                    _ => unreachable!("a transform stands among shapes"),
+                }
+            }
         }
     }
     let Some(Sink::Shapes(shapes)) = sinks.pop() else {
@@ -1490,8 +1896,33 @@ fn run<'a: 'n, 'n>(ctx: &mut Ctx<'a>, nodes: &'n [Node], env: Env, out: &mut Vec
     *out = shapes;
 }
 
-fn push_nodes<'n>(tasks: &mut Vec<Task<'n>>, nodes: &'n [Node], env: Env) {
-    tasks.extend(nodes.iter().rev().map(|node| Task::Node(node, env.clone())));
+fn push_nodes<'n>(tasks: &mut Vec<Task<'n>>, nodes: &'n [Node], env: Env, turn: Turn) {
+    tasks.extend(
+        nodes
+            .iter()
+            .rev()
+            .map(|node| Task::Node(node, env.clone(), turn)),
+    );
+}
+
+/// A chain of `length` steps against the icon's transform-chain (SPEC §9).
+fn within_chain(ctx: &mut Ctx, length: u64, span: Span) -> bool {
+    match ctx.transform_chain.limit {
+        Some(limit) if length > limit => {
+            let message = past_limit(
+                format!(
+                    "icon '{}' draws shapes through {length} transform steps here",
+                    ctx.icon
+                ),
+                LimitKind::TransformChain,
+                limit,
+                &format!("steps, {}", ctx.transform_chain.from),
+            );
+            ctx.diag(span, message);
+            false
+        }
+        _ => true,
+    }
 }
 
 /// Set up what a node opened: a sink for its children where they are
@@ -1500,6 +1931,7 @@ fn open_children<'n>(
     ctx: &mut Ctx,
     open: Open<'n>,
     env: Env,
+    turn: Turn,
     tasks: &mut Vec<Task<'n>>,
     sinks: &mut Vec<Sink>,
 ) {
@@ -1507,8 +1939,28 @@ fn open_children<'n>(
         Open::At { at, children, span } => {
             tasks.push(Task::CloseAt { at, span });
             sinks.push(Sink::Shapes2(Vec::new()));
-            push_nodes(tasks, children, env);
+            push_nodes(tasks, children, env, turn);
         }
+        Open::Transform { tf, children, span } => {
+            let steps = chain_length(&tf);
+            let chain = ctx.chain + steps;
+            if !within_chain(ctx, chain, span) || !ctx.spend(LimitKind::Shapes, span) {
+                return;
+            }
+            ctx.chain += steps;
+            match sinks.last_mut() {
+                Some(Sink::Shapes(out)) => out.push(Shape::TransformStart { tf, span }),
+                Some(Sink::Shapes2(out)) => out.push(Shape2::TransformStart { tf, span }),
+                _ => {
+                    ctx.chain -= steps;
+                    ctx.diag(span, "only pt and repeat belong inside a polygon");
+                    return;
+                }
+            }
+            tasks.push(Task::CloseTransform { steps });
+            push_nodes(tasks, children, env, turn);
+        }
+        Open::Turn { turn, children } => push_nodes(tasks, children, env, turn),
         Open::Poly3d {
             style,
             children,
@@ -1516,7 +1968,7 @@ fn open_children<'n>(
         } => {
             tasks.push(Task::ClosePoly3d { style, span });
             sinks.push(Sink::Pts3(Vec::new()));
-            push_nodes(tasks, children, env);
+            push_nodes(tasks, children, env, turn);
         }
         Open::Poly2d {
             style,
@@ -1525,7 +1977,7 @@ fn open_children<'n>(
         } => {
             tasks.push(Task::ClosePoly2d { style, span });
             sinks.push(Sink::Pts2(Vec::new()));
-            push_nodes(tasks, children, env);
+            push_nodes(tasks, children, env, turn);
         }
         Open::Repeat {
             var,
@@ -1538,6 +1990,7 @@ fn open_children<'n>(
             i: 0,
             n,
             env,
+            turn,
             span,
         }),
         Open::Insert {
@@ -1550,7 +2003,7 @@ fn open_children<'n>(
             ctx.insert_stack.push(fragment.to_string());
             tasks.push(Task::PopInsert);
             for part in parts.iter().rev() {
-                push_nodes(tasks, &part.nodes, env.clone());
+                push_nodes(tasks, &part.nodes, env.clone(), turn);
             }
         }
     }
@@ -1577,6 +2030,8 @@ fn node_span(node: &Node) -> Span {
         | Node::Pt2 { span, .. }
         | Node::Repeat { span, .. }
         | Node::Insert { span, .. }
-        | Node::Badge { span, .. } => *span,
+        | Node::Badge { span, .. }
+        | Node::Transform { span, .. }
+        | Node::Turn { span, .. } => *span,
     }
 }
