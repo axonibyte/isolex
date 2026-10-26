@@ -4,6 +4,21 @@ https://forge.axonibyte.com/axonibyte/isolex
 
 Licensed under the Apache License, Version 2.0 (LICENSE).
 
+The command line's font converter (the font-tools feature) includes
+ttf-parser (Copyright 2018 Yevhenii Reizner), miniz_oxide (Copyright
+2013-2014 RAD Game Tools and Valve Software, 2010-2014 Rich Geldreich
+and Tenacious Software LLC, 2017 Frommi, 2017-2024 oyvindln) and adler2
+(Copyright Jonas Schievink), each offered under several licenses,
+which isolex takes under the Apache License, Version 2.0. The library's
+code does not use them, and the WebAssembly module is built without
+them.
+
+tests/fixtures/fonts/noto-sans holds subsets of Noto Sans, Copyright 2022
+The Noto Project Authors, licensed under the SIL Open Font License,
+Version 1.1 (see its OFL.txt and README.md), and the isolex fonts
+converted from them, which that license covers too; they are test data,
+and no part of isolex. Noto is a trademark of Google LLC.
+
 tests/kdl-suite holds the official KDL test suite, which is the KDL
 contributors' and licensed under CC BY-SA 4.0 (see its README.md and
 LICENSE.md); it is test data, and no part of isolex.

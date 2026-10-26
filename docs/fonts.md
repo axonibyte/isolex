@@ -172,6 +172,41 @@ right-to-left scripts, combining marks, and scripts whose letters change
 shape with their neighbors. So are control characters, since text is
 one line.
 
+## Converting fonts
+
+A TrueType, OpenType or WOFF font becomes an isolex font, and an isolex
+font becomes one of those, or a UFO source for a font editor:
+
+```sh
+isolex font import NotoSans-Regular.ttf --out fonts/noto-sans.ilx \
+    --style weight.bold=NotoSans-Bold.ttf
+isolex font import NotoSans[wdth,wght].ttf --chars ascii --style weight.bold=wght:700
+isolex font export src/ --font plain --style "bold italic" --otf plain-bold-italic.ttf
+isolex font export src/ --font plain --ufo plain.ufo
+```
+
+- **Import** keeps Latin-1 unless `--chars` says otherwise (`ascii`,
+  `all`, or the characters themselves). Glyph outlines become filled
+  paths on the font's own grid. Advances, kerning and `liga`
+  ligatures come along.
+  - Each `--style` makes a style from another file, or from the same
+    variable font at other axis values. It draws only what differs from
+    the regular.
+- **Licenses come first.** A font whose embedding bits say it is
+  restricted is not converted. One that may not be subset is converted
+  only whole (`--chars all`). Its copyright, trademark and license are
+  copied into the file, as comments and as `describe` lines, and export
+  writes those back into the font it makes. **The converted file is a
+  derivative of the font, under the font's license**, not under your
+  lexicon's.
+- **Export** draws each glyph as text would.
+  - A stroke-built font's strokes become outlines, as SVG draws them. A
+    slant is sheared in.
+  - TrueType holds only quadratic curves, so cubics are approximated,
+    to within an em/2000 unless `--tolerance` says otherwise.
+  - A UFO keeps every curve as drawn.
+  - Each style is its own face: export bold and italic one at a time.
+
 ## Values known only when one thing is drawn
 
 A host drawing an icon for one asset can set its params for that one

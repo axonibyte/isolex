@@ -603,6 +603,223 @@ pub fn path_extent(d: &str, m: &Mat) -> Result<Option<Extent>, String> {
     Ok(out)
 }
 
+/// A piece of an outline, in absolute coordinates: a contour starts with
+/// a move, and may close back to its start.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Seg {
+    Move([f64; 2]),
+    Line([f64; 2]),
+    /// control point, end
+    Quad([f64; 2], [f64; 2]),
+    /// two control points, end
+    Cubic([f64; 2], [f64; 2], [f64; 2]),
+    Close,
+}
+
+/// Path data as an outline: every command made absolute, H and V as
+/// lines, S and T with their reflected controls, and each arc as cubics of
+/// a quarter-turn or less, the usual approximation (its error under
+/// 0.03% of the radius). What converts a drawing to a font's outlines.
+pub fn path_segments(d: &str) -> Result<Vec<Seg>, String> {
+    let mut r = PathReader {
+        b: d.as_bytes(),
+        i: 0,
+    };
+    let mut out = Vec::new();
+    let mut cur = [0.0, 0.0];
+    let mut start = [0.0, 0.0];
+    let mut last_cubic: Option<[f64; 2]> = None;
+    let mut last_quad: Option<[f64; 2]> = None;
+    let mut cmd: Option<u8> = None;
+    loop {
+        r.skip();
+        let Some(&c) = r.b.get(r.i) else { break };
+        let command = if c.is_ascii_alphabetic() {
+            r.i += 1;
+            c
+        } else {
+            match cmd {
+                Some(b'M') => b'L',
+                Some(b'm') => b'l',
+                Some(prev) if !matches!(prev, b'Z' | b'z') => prev,
+                _ => {
+                    return Err(format!(
+                        "path data must begin with a command, at offset {}",
+                        r.i
+                    ))
+                }
+            }
+        };
+        let rel = command.is_ascii_lowercase();
+        let base = if rel { cur } else { [0.0, 0.0] };
+        let pt = |r: &mut PathReader| -> Result<[f64; 2], String> {
+            let x = r.number()?;
+            let y = r.number()?;
+            Ok([base[0] + x, base[1] + y])
+        };
+        let (mut cubic_ctrl, mut quad_ctrl) = (None, None);
+        match command.to_ascii_uppercase() {
+            b'M' => {
+                cur = pt(&mut r)?;
+                start = cur;
+                out.push(Seg::Move(cur));
+            }
+            b'L' => {
+                cur = pt(&mut r)?;
+                out.push(Seg::Line(cur));
+            }
+            b'H' => {
+                cur = [r.number()? + if rel { cur[0] } else { 0.0 }, cur[1]];
+                out.push(Seg::Line(cur));
+            }
+            b'V' => {
+                cur = [cur[0], r.number()? + if rel { cur[1] } else { 0.0 }];
+                out.push(Seg::Line(cur));
+            }
+            b'C' | b'S' => {
+                let c1 = if command.eq_ignore_ascii_case(&b'C') {
+                    pt(&mut r)?
+                } else {
+                    match last_cubic {
+                        Some(q) => [2.0 * cur[0] - q[0], 2.0 * cur[1] - q[1]],
+                        None => cur,
+                    }
+                };
+                let c2 = pt(&mut r)?;
+                cur = pt(&mut r)?;
+                out.push(Seg::Cubic(c1, c2, cur));
+                cubic_ctrl = Some(c2);
+            }
+            b'Q' | b'T' => {
+                let q = if command.eq_ignore_ascii_case(&b'Q') {
+                    pt(&mut r)?
+                } else {
+                    match last_quad {
+                        Some(q) => [2.0 * cur[0] - q[0], 2.0 * cur[1] - q[1]],
+                        None => cur,
+                    }
+                };
+                cur = pt(&mut r)?;
+                out.push(Seg::Quad(q, cur));
+                quad_ctrl = Some(q);
+            }
+            b'A' => {
+                let rx = r.number()?;
+                let ry = r.number()?;
+                let phi = r.number()?;
+                let large = r.flag()?;
+                let sweep = r.flag()?;
+                let p = pt(&mut r)?;
+                arc_cubics(&mut out, cur, rx, ry, phi, large, sweep, p);
+                cur = p;
+            }
+            b'Z' => {
+                out.push(Seg::Close);
+                cur = start;
+            }
+            _ => return Err(format!("'{}' is not a path command", char::from(command))),
+        }
+        last_cubic = cubic_ctrl;
+        last_quad = quad_ctrl;
+        cmd = Some(command);
+        if matches!(command, b'Z' | b'z') && r.at_number() {
+            return Err(format!("numbers after a closepath, at offset {}", r.i));
+        }
+    }
+    Ok(out)
+}
+
+/// An arc in SVG's endpoint form (appendix F.6.5) as cubics, each a
+/// quarter-turn or less; a line when a radius is 0, nothing when its ends
+/// meet.
+#[allow(clippy::too_many_arguments)]
+fn arc_cubics(
+    out: &mut Vec<Seg>,
+    from: [f64; 2],
+    rx: f64,
+    ry: f64,
+    phi_degrees: f64,
+    large: bool,
+    sweep: bool,
+    to: [f64; 2],
+) {
+    if from == to {
+        return;
+    }
+    let (mut rx, mut ry) = (rx.abs(), ry.abs());
+    if rx == 0.0 || ry == 0.0 {
+        out.push(Seg::Line(to));
+        return;
+    }
+    let phi = phi_degrees.to_radians();
+    let (cos_phi, sin_phi) = (libm::cos(phi), libm::sin(phi));
+    let dx = (from[0] - to[0]) / 2.0;
+    let dy = (from[1] - to[1]) / 2.0;
+    let x1 = cos_phi * dx + sin_phi * dy;
+    let y1 = -sin_phi * dx + cos_phi * dy;
+    let lambda = (x1 * x1) / (rx * rx) + (y1 * y1) / (ry * ry);
+    if lambda > 1.0 {
+        let k = lambda.sqrt();
+        rx *= k;
+        ry *= k;
+    }
+    let num = rx * rx * ry * ry - rx * rx * y1 * y1 - ry * ry * x1 * x1;
+    let den = rx * rx * y1 * y1 + ry * ry * x1 * x1;
+    let mut coef = if den == 0.0 {
+        0.0
+    } else {
+        (num / den).max(0.0).sqrt()
+    };
+    if large == sweep {
+        coef = -coef;
+    }
+    let cx1 = coef * rx * y1 / ry;
+    let cy1 = -coef * ry * x1 / rx;
+    let center = [
+        cos_phi * cx1 - sin_phi * cy1 + (from[0] + to[0]) / 2.0,
+        sin_phi * cx1 + cos_phi * cy1 + (from[1] + to[1]) / 2.0,
+    ];
+    let theta1 = libm::atan2((y1 - cy1) / ry, (x1 - cx1) / rx);
+    let theta2 = libm::atan2((-y1 - cy1) / ry, (-x1 - cx1) / rx);
+    let tau = std::f64::consts::TAU;
+    let mut delta = theta2 - theta1;
+    if sweep && delta < 0.0 {
+        delta += tau;
+    } else if !sweep && delta > 0.0 {
+        delta -= tau;
+    }
+    let at = |t: f64| {
+        let (ct, st) = (libm::cos(t), libm::sin(t));
+        [
+            center[0] + rx * ct * cos_phi - ry * st * sin_phi,
+            center[1] + rx * ct * sin_phi + ry * st * cos_phi,
+        ]
+    };
+    let slope = |t: f64| {
+        let (ct, st) = (libm::cos(t), libm::sin(t));
+        [
+            -rx * st * cos_phi - ry * ct * sin_phi,
+            -rx * st * sin_phi + ry * ct * cos_phi,
+        ]
+    };
+    let pieces = (delta.abs() / (std::f64::consts::FRAC_PI_2 + 1e-9))
+        .ceil()
+        .max(1.0) as usize;
+    let step = delta / pieces as f64;
+    let k = 4.0 / 3.0 * libm::tan(step / 4.0);
+    for i in 0..pieces {
+        let (a, b) = (theta1 + step * i as f64, theta1 + step * (i + 1) as f64);
+        let (pa, pb) = (at(a), at(b));
+        let (da, db) = (slope(a), slope(b));
+        let end = if i + 1 == pieces { to } else { pb };
+        out.push(Seg::Cubic(
+            [pa[0] + k * da[0], pa[1] + k * da[1]],
+            [pb[0] - k * db[0], pb[1] - k * db[1]],
+            end,
+        ));
+    }
+}
+
 /// The part of a convex polygon inside another (Sutherland–Hodgman):
 /// both in the same coordinates, either winding. Nothing in common is an
 /// empty list.
@@ -638,6 +855,68 @@ pub fn clip_convex(subject: &[[f64; 2]], clip: &[[f64; 2]]) -> Vec<[f64; 2]> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn path_segments_reads_every_command_absolute() {
+        let segs =
+            path_segments("M1,2 h3 v4 l-1,1 q1 1 2 0 t2 0 c1 1 2 1 3 0 s2 -1 3 0 z").unwrap();
+        assert_eq!(
+            segs,
+            vec![
+                Seg::Move([1.0, 2.0]),
+                Seg::Line([4.0, 2.0]),
+                Seg::Line([4.0, 6.0]),
+                Seg::Line([3.0, 7.0]),
+                Seg::Quad([4.0, 8.0], [5.0, 7.0]),
+                Seg::Quad([6.0, 6.0], [7.0, 7.0]),
+                Seg::Cubic([8.0, 8.0], [9.0, 8.0], [10.0, 7.0]),
+                Seg::Cubic([11.0, 6.0], [12.0, 6.0], [13.0, 7.0]),
+                Seg::Close,
+            ]
+        );
+        assert!(path_segments("1 2").is_err());
+    }
+
+    #[test]
+    fn an_arc_is_cubics_of_a_quarter_turn_that_stay_on_it() {
+        // a half circle of radius 10 about (10, 0): two quarter cubics
+        let segs = path_segments("M0,0 A10 10 0 0 1 20,0").unwrap();
+        assert_eq!(segs.len(), 3);
+        let Seg::Cubic(_, _, end) = segs[2] else {
+            panic!("{segs:?}")
+        };
+        assert_eq!(end, [20.0, 0.0]);
+        let Seg::Cubic(c1, c2, mid) = segs[1] else {
+            panic!("{segs:?}")
+        };
+        // the middle of the first quarter cubic is within 0.03% of the circle
+        let p0 = [0.0, 0.0];
+        let at = |t: f64| {
+            let u = 1.0 - t;
+            [
+                u * u * u * p0[0]
+                    + 3.0 * u * u * t * c1[0]
+                    + 3.0 * u * t * t * c2[0]
+                    + t * t * t * mid[0],
+                u * u * u * p0[1]
+                    + 3.0 * u * u * t * c1[1]
+                    + 3.0 * u * t * t * c2[1]
+                    + t * t * t * mid[1],
+            ]
+        };
+        let m = at(0.5);
+        let r = ((m[0] - 10.0).powi(2) + m[1].powi(2)).sqrt();
+        assert!((r - 10.0).abs() < 0.003, "{r}");
+        assert!(
+            (mid[0] - 10.0).abs() < 1e-9 && (mid[1].abs() - 10.0).abs() < 1e-9,
+            "{mid:?}"
+        );
+        // a radius of 0 is a line
+        assert_eq!(
+            path_segments("M0,0 A0 5 0 0 1 4,0").unwrap()[1],
+            Seg::Line([4.0, 0.0])
+        );
+    }
+
     use super::*;
 
     fn close(a: f64, b: f64) -> bool {

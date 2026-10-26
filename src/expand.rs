@@ -10,9 +10,9 @@ use std::rc::Rc;
 use serde::Serialize;
 
 use crate::ast::{
-    Baseline, Bounds, Face, Limit, LimitKind, Limits, MirrorAxis, Node, Num, OntoFace, Param,
-    PartDecl, PathPiece, Span, Step, Strokes, Style, TextAnchor, TextSpec, TransformSpec, TurnBy,
-    Variant,
+    Baseline, Bounds, Face, FontKind, Limit, LimitKind, Limits, MirrorAxis, Node, Num, OntoFace,
+    Param, PartDecl, PathPiece, Span, Step, Strokes, Style, TextAnchor, TextSpec, TransformSpec,
+    TurnBy, Variant,
 };
 use crate::expr::{self, Expr};
 use crate::resolve::{apply_variant, style_font, suggest, Resolved, ResolvedDef, SpanDiag};
@@ -507,15 +507,12 @@ pub fn expand_only(
     }
 }
 
-fn expand_with(
-    resolved: &Resolved,
-    only: Option<&Only>,
-) -> (Vec<ExpandedIcon>, Vec<SpanDiag>, Option<String>) {
+fn new_ctx(resolved: &Resolved) -> Ctx<'_> {
     let unset = InForce {
         limit: None,
         from: String::new(),
     };
-    let mut ctx = Ctx {
+    Ctx {
         resolved,
         diags: Vec::new(),
         insert_stack: Vec::new(),
@@ -531,7 +528,14 @@ fn expand_with(
         in_glyph: 0,
         exhausted: false,
         fonts: BTreeMap::new(),
-    };
+    }
+}
+
+fn expand_with(
+    resolved: &Resolved,
+    only: Option<&Only>,
+) -> (Vec<ExpandedIcon>, Vec<SpanDiag>, Option<String>) {
+    let mut ctx = new_ctx(resolved);
     let mut out = Vec::new();
     // with one icon asked for, every emitted icon, to choose from
     let mut candidates: Vec<(ResolvedDef, String)> = Vec::new();
@@ -2405,6 +2409,7 @@ fn node_span(node: &Node) -> Span {
 /// advances and kerning evaluated, and its glyphs by the text they draw.
 struct FontInst<'a> {
     name: String,
+    kind: Option<FontKind>,
     em: f64,
     ascent: f64,
     descent: f64,
@@ -2601,6 +2606,7 @@ fn build_font<'a>(ctx: &mut Ctx<'a>, spec: &TextSpec, span: Span) -> Option<Font
     }
     Some(FontInst {
         name: font.name.clone(),
+        kind: styled.kind,
         em,
         ascent,
         descent,
@@ -2610,6 +2616,139 @@ fn build_font<'a>(ctx: &mut Ctx<'a>, spec: &TextSpec, span: Span) -> Option<Font
         longest,
         notdef,
         kerns,
+    })
+}
+
+/// A font in some of its styles, for a tool that converts it: its
+/// metrics, kerning, and each glyph's shapes, expanded in the font's scope
+/// as text would draw them, one icon to a glyph.
+#[derive(Debug)]
+pub struct ExpandedFont {
+    pub name: String,
+    pub describe: Vec<String>,
+    pub kind: FontKind,
+    pub em: f64,
+    pub ascent: f64,
+    pub descent: f64,
+    pub slant: f64,
+    /// Each glyph by name, in name order, with its advance.
+    pub glyphs: Vec<(String, f64, ExpandedIcon)>,
+    pub notdef: Option<(f64, ExpandedIcon)>,
+    /// (left, right, space), in name order.
+    pub kerns: Vec<(String, String, f64)>,
+}
+
+/// A font in the styles named, every glyph expanded; or the errors that
+/// stop it, the font's own or an unknown font or style.
+pub fn expand_font(
+    resolved: &Resolved,
+    font: &str,
+    styles: &[String],
+) -> Result<ExpandedFont, Vec<SpanDiag>> {
+    let mut ctx = new_ctx(resolved);
+    let Some(def) = resolved.fonts.get(font) else {
+        // no node names it: the request is at fault, said at the start
+        let span = Span {
+            file: 0,
+            start: 0,
+            len: 0,
+        };
+        return Err(vec![SpanDiag {
+            span,
+            message: format!(
+                "the lexicon has no font '{font}'{}",
+                suggest(font, resolved.fonts.keys().map(|k| k.as_str()))
+            ),
+        }]);
+    };
+    let spec = TextSpec {
+        font: font.to_string(),
+        styles: styles.to_vec(),
+        size: Num::Lit(1.0),
+        anchor: TextAnchor::Start,
+        baseline: Baseline::Alphabetic,
+        fill: None,
+        max_width: None,
+        bounds: None,
+    };
+    // the font's limits are its own, set nowhere on an icon
+    let host = ResolvedDef {
+        name: font.to_string(),
+        kind: crate::ast::DefKind::Font,
+        category: None,
+        footprint: None,
+        canvas: None,
+        describe: Vec::new(),
+        params: Vec::new(),
+        axes: Vec::new(),
+        grants: Vec::new(),
+        parts: Vec::new(),
+        limits: BTreeMap::new(),
+        view: None,
+        transform_bounds: None,
+        span: def.span,
+    };
+    ctx.begin(font, &host);
+    let Some(inst) = font_instance(&mut ctx, &spec, def.span) else {
+        return Err(ctx.diags);
+    };
+    let draw = |ctx: &mut Ctx, name: &str, nodes: &[Node]| -> ExpandedIcon {
+        ctx.begin(&format!("{font} glyph {name}"), &host);
+        ctx.in_glyph = 1;
+        // drawn as if inside `at 0 0 0`, whose anchor is the origin
+        let at = Node::At {
+            args: [Num::Lit(0.0), Num::Lit(0.0), Num::Lit(0.0)],
+            children: nodes.to_vec(),
+            when: None,
+            span: def.span,
+        };
+        let mut shapes = Vec::new();
+        run(
+            ctx,
+            std::slice::from_ref(&at),
+            inst.env.clone(),
+            Turn::NONE,
+            &mut shapes,
+        );
+        ExpandedIcon {
+            name: name.to_string(),
+            category: String::new(),
+            footprint: None,
+            canvas: Some([0.0, 0.0]),
+            describe: Vec::new(),
+            grants: Vec::new(),
+            shapes,
+            // a glyph has no frame of its own
+            transform_bounds: Some(Bounds::Grow),
+            span: def.span,
+        }
+    };
+    let glyphs = inst
+        .glyphs
+        .iter()
+        .map(|(name, g)| (name.to_string(), g.advance, draw(&mut ctx, name, g.nodes)))
+        .collect();
+    let notdef = inst
+        .notdef
+        .map(|g| (g.advance, draw(&mut ctx, ".notdef", g.nodes)));
+    if !ctx.diags.is_empty() {
+        return Err(ctx.diags);
+    }
+    Ok(ExpandedFont {
+        name: inst.name.clone(),
+        describe: def.body.describe.clone(),
+        kind: inst.kind.unwrap_or(FontKind::Outline),
+        em: inst.em,
+        ascent: inst.ascent,
+        descent: inst.descent,
+        slant: inst.slant,
+        glyphs,
+        notdef,
+        kerns: inst
+            .kerns
+            .iter()
+            .map(|((l, r), by)| (l.to_string(), r.to_string(), *by))
+            .collect(),
     })
 }
 

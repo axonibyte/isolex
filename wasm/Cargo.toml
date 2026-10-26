@@ -13,4 +13,5 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-isolex = { path = ".." }
+# without font-tools: the module is the compiler alone
+isolex = { path = "..", default-features = false }

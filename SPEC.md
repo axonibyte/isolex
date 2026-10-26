@@ -658,6 +658,48 @@ that fails writes nothing. Diagnostics go to standard error,
 warnings first. Exit status: 0 clean (warnings included), 1 errors or
 I/O failure, 2 usage.
 
+**Fonts.** `isolex font import <font> [--out <file>]` writes an isolex
+font (§4) from a TrueType, OpenType (TrueType or CFF outlines) or WOFF
+1.0 font:
+
+- each glyph's outline as filled path data on the font's grid (its own
+  units per em, or `--em`), curves as they are, or as lines where
+  within `--tolerance` of them;
+- for the characters `--chars` names (`ascii`, `latin1`, the default,
+  `all`, or the characters themselves), less those text cannot set
+  (§4), and the ligatures GSUB `liga` makes of them, as glyphs named for
+  the characters they replace;
+- advances, ascent and descent, and kerning, GPOS pair adjustment of
+  the `kern` feature or else a `kern` table; and notdef;
+- `--style <axis>.<variant>=<source>` makes a style of another weight or
+  slope: a font file, or the same variable font at other axis values
+  (`wght:700,wdth:87.5`); the variant draws only what differs, on the
+  axis `<font>-<axis>`. A variable font is otherwise read at its default
+  instance, and its kerning always is.
+
+The font's license decides: one its OS/2 fsType marks restricted, or
+whose outlines may not be embedded, is not converted, and one that may
+not be subset is converted whole (`--chars all`) or not at all. Its
+copyright, trademark, license and license URL are copied, as comments
+and as `describe` lines (`Copyright: …`, `Trademark: …`, `License: …`,
+`License URL: …`, with `Family: …` and `Version: …`), and what is
+written compiles, in each of its styles, or nothing is.
+
+`isolex font export <dir> --font <name> [--style "<styles>"]` writes a
+font of the lexicon in those styles, `--otf <file>` as TrueType or
+`--ufo <dir>` as a UFO 3 source. Its glyphs are drawn as text draws
+them; filled shapes keep their outlines, strokes become outlines as SVG
+draws them (butt caps, miter joins to a limit of 4), the slant is
+sheared in, ligatures become GSUB `liga` and kerning a `kern` table (a
+UFO's `features.fea` and `kerning.plist`), and the `describe` notices
+become the font's names. TrueType's curves are quadratic, so cubics
+are approximated within `--tolerance` (an em/2000 by default), and its
+points are whole units of `--upm` to the em (the font's em when that is
+a whole number from 16 to 16384, else 1000). The same lexicon always
+writes the same bytes. These two need the `font-tools` feature, which
+the command line is built with by default and the WebAssembly module
+without.
+
 The same compilation is available without a file system: as the
 library function `isolex::compile`, and as a WebAssembly module that
 imports nothing and takes and returns JSON (`isolex::json`), whose IR is

@@ -1698,3 +1698,34 @@ fn compile_and_render_take_one_icon_on_the_command_line() {
     assert!(String::from_utf8_lossy(&out.stderr)
         .contains("isolex: param 'ports' of icon 'port-label' is a number; give it a number"));
 }
+
+/// What `isolex font export` draws a font from: every glyph as text draws
+/// it, in its em grid, in the styles asked for.
+#[test]
+fn font_outline_draws_every_glyph_in_its_styles() {
+    let regular = isolex::font_outline(&text(), "plain", &[]).unwrap();
+    assert_eq!(
+        (regular.em, regular.ascent, regular.descent, regular.slant),
+        (10.0, 7.0, 3.0, 0.0)
+    );
+    assert_eq!(regular.glyphs.len(), 20);
+    assert!(regular.notdef.is_some());
+    assert!(regular
+        .kerns
+        .contains(&("A".to_string(), "V".to_string(), -1.0)));
+    assert!(regular.describe[0].starts_with("A small stroke-built face"));
+    let width =
+        |f: &isolex::FontOutline| match &f.glyphs.iter().find(|g| g.name == "1").unwrap().shapes[0]
+        {
+            isolex::ir::IrShape::Path { stroke_width, .. } => *stroke_width,
+            other => panic!("{other:?}"),
+        };
+    assert_eq!(width(&regular), 1.0);
+    let styled = isolex::font_outline(&text(), "plain", &["bold".into(), "italic".into()]).unwrap();
+    assert_eq!((width(&styled), styled.slant), (1.8, -12.0));
+    let missing = isolex::font_outline(&text(), "plian", &[]).unwrap_err();
+    assert_eq!(
+        missing[0].message,
+        "the lexicon has no font 'plian' (did you mean 'plain'?)"
+    );
+}

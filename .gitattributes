@@ -6,3 +6,8 @@
 # tests/kdl-suite/README.md), kept byte for byte: some cases are about
 # CR LF and CR newlines, which the LF rule above would rewrite.
 tests/kdl-suite/** -text
+
+# Fonts are binary, whatever their bytes look like.
+*.ttf binary
+*.otf binary
+*.woff binary

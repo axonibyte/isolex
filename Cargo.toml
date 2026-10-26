@@ -14,6 +14,16 @@ repository = "https://github.com/axonibyte/isolex"
 libm = { version = "0.2.16", default-features = false, features = ["force-soft-floats"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
+# The font converter's, behind the font-tools feature, which only the
+# command line's code uses; the WebAssembly module is built without it.
+# Both are pure Rust; we take each under Apache-2.0 (NOTICE).
+ttf-parser = { version = "0.25", optional = true }
+miniz_oxide = { version = "0.9", optional = true, features = ["with-alloc"] }
+
+[features]
+default = ["font-tools"]
+# `isolex font import` and `isolex font export`
+font-tools = ["dep:ttf-parser", "dep:miniz_oxide"]
 
 [dev-dependencies]
 # goldens are plain file comparisons; no snapshot framework needed

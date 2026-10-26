@@ -407,6 +407,7 @@ pub struct FontStyled<'a> {
     pub ascent: Option<&'a Num>,
     pub descent: Option<&'a Num>,
     pub slant: Option<&'a Num>,
+    pub kind: Option<FontKind>,
     /// In first-seen order; a style's glyph replaces the font's in place.
     pub glyphs: Vec<&'a Glyph>,
     pub notdef: Option<&'a Glyph>,
@@ -430,6 +431,7 @@ pub fn style_font<'a>(
         ascent: None,
         descent: None,
         slant: None,
+        kind: None,
         glyphs: Vec::new(),
         notdef: None,
         kerns: Vec::new(),
@@ -457,6 +459,7 @@ pub fn style_font<'a>(
         out.ascent = f.ascent.as_ref().or(out.ascent);
         out.descent = f.descent.as_ref().or(out.descent);
         out.slant = f.slant.as_ref().or(out.slant);
+        out.kind = f.kind.or(out.kind);
         for g in &f.glyphs {
             match out.glyphs.iter_mut().find(|h| h.name == g.name) {
                 Some(slot) => *slot = g,

@@ -59,6 +59,10 @@ fn fixtures_are_checked_out_with_lf() {
             include_str!("fixtures/text.ir.golden.json"),
         ),
         ("text.svg.golden", include_str!("fixtures/text.svg.golden")),
+        (
+            "fonts/noto-sans/noto-sans-regular.ilx",
+            include_str!("fixtures/fonts/noto-sans/noto-sans-regular.ilx"),
+        ),
     ] {
         assert!(
             !text.contains('\r'),

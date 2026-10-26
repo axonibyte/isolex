@@ -4,6 +4,9 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+#[cfg(feature = "font-tools")]
+mod fonttools;
+
 use isolex::ir::IrDocument;
 use isolex::render::{missing_colors, render_icon, safe_file_name, Palette};
 use isolex::HostValue;
@@ -24,6 +27,15 @@ fn main() -> ExitCode {
             _ => usage(),
         },
         Some("docs") if args.len() == 2 => run(&args[1], Mode::Docs, None),
+        #[cfg(feature = "font-tools")]
+        Some("font") => fonttools::run(&args[1..]),
+        #[cfg(not(feature = "font-tools"))]
+        Some("font") => {
+            eprintln!(
+                "isolex: this isolex was built without font-tools, so it cannot convert fonts"
+            );
+            ExitCode::from(2)
+        }
         Some("render") => match args.as_slice() {
             [_, dir, flag, out, rest @ ..] if flag == "--svg" => {
                 let (palette, rest) = match rest {
@@ -57,6 +69,8 @@ fn usage() -> ExitCode {
     eprintln!(
         "       isolex render <lexicon-dir> --svg <out-dir> [--palette <palette.json>] [<one icon>]"
     );
+    #[cfg(feature = "font-tools")]
+    fonttools::usage();
     eprintln!("one icon: --icon <name> [--param <name>=<number>]… [--text <name>=<text>]…");
     ExitCode::from(2)
 }
@@ -132,27 +146,31 @@ fn collect_ilx(dir: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<()> {
     Ok(())
 }
 
-fn run(dir: &str, mode: Mode, only: Option<OneIcon>) -> ExitCode {
-    let root = Path::new(dir);
+/// Every `.ilx` file under `dir`, in the order a lexicon is read (SPEC
+/// §1), with its text.
+fn lexicon_files(dir: &str) -> Result<Vec<(String, String)>, String> {
     let mut paths = Vec::new();
-    if let Err(e) = collect_ilx(root, &mut paths) {
-        eprintln!("isolex: cannot read {dir}: {e}");
-        return ExitCode::FAILURE;
-    }
+    collect_ilx(Path::new(dir), &mut paths).map_err(|e| format!("cannot read {dir}: {e}"))?;
     if paths.is_empty() {
-        eprintln!("isolex: no .ilx files under {dir}");
-        return ExitCode::FAILURE;
+        return Err(format!("no .ilx files under {dir}"));
     }
     let mut files = Vec::new();
     for p in &paths {
-        match std::fs::read_to_string(p) {
-            Ok(text) => files.push((p.display().to_string(), text)),
-            Err(e) => {
-                eprintln!("isolex: cannot read {}: {e}", p.display());
-                return ExitCode::FAILURE;
-            }
-        }
+        let text =
+            std::fs::read_to_string(p).map_err(|e| format!("cannot read {}: {e}", p.display()))?;
+        files.push((p.display().to_string(), text));
     }
+    Ok(files)
+}
+
+fn run(dir: &str, mode: Mode, only: Option<OneIcon>) -> ExitCode {
+    let files = match lexicon_files(dir) {
+        Ok(f) => f,
+        Err(why) => {
+            eprintln!("isolex: {why}");
+            return ExitCode::FAILURE;
+        }
+    };
 
     let c = match &only {
         None => isolex::compile(&files),

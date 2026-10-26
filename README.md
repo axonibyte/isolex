@@ -41,6 +41,8 @@ isolex compile src/ --ir out.json
 isolex docs src/           # generate the lexicon's reference tables
 isolex render src/ --svg out/ [--palette palette.json]   # one SVG per icon
 isolex compile src/ --ir - --icon port-label --param ports=24   # one icon, params set
+isolex font import Font.ttf --out fonts/font.ilx                 # a standard font to isolex
+isolex font export src/ --font plain --otf plain.ttf             # and back
 ```
 
 ## Embedding
@@ -66,8 +68,9 @@ publishes it as `isolex-<version>.wasm`.
   a lexicon: your first icon, parts, inheritance & late binding,
   fragments, screen-space paths, `repeat`/`when`, axes, transforms and
   turns, text, expressions.
-- [docs/fonts.md](docs/fonts.md) — drawing a font, its styles, and
-  setting text in it.
+- [docs/fonts.md](docs/fonts.md) — drawing a font, its styles, setting
+  text in it, and converting fonts to and from TrueType, OpenType, WOFF
+  and UFO.
 - [docs/primitives.md](docs/primitives.md) — every geometry node, with an
   example of each.
 - [docs/cookbook.md](docs/cookbook.md) — worked patterns from a real
