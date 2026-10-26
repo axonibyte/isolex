@@ -13,7 +13,8 @@
 //! The generator covers what the language has: inheritance with replace
 //! and remove, axes, 3-D nodes and `at` with 2-D nodes and paths,
 //! fragments in either dimension, parameter expressions with functions
-//! and `if`, `when` guards, badges, transforms and turns, and a declared
+//! and `if`, `when` guards, badges, transforms and turns, a font with a
+//! ligature, notdef and a bold style, and text set in it, and a declared
 //! vocabulary with a reserved token.
 //!
 //! Usage: battery [--isolex <path>] [--seeds <file>] [--rounds <n>]
@@ -58,6 +59,8 @@ struct Shadow {
 struct Frags {
     rows: Vec<String>,
     glyphs: Vec<String>,
+    /// The font "bat" is there to set text in.
+    font: bool,
 }
 
 struct Gen {
@@ -68,9 +71,26 @@ struct Gen {
     axes: Vec<(String, Vec<String>, bool)>, // name, variants, emit_base
 }
 
-/// One 2-D node inside an `at`, and how many IR shapes it projects to.
-fn gen_2d(rng: &mut Rng, frags: &Frags, src: &mut String, indent: &str) -> usize {
-    match rng.below(5) {
+/// One 2-D node inside an `at`, and how many IR shapes it projects to. A
+/// text projects to a group for each glyph, so it is generated only where
+/// groups are counted one by one (`text`), not inside a transform.
+fn gen_2d(rng: &mut Rng, frags: &Frags, src: &mut String, indent: &str, text: bool) -> usize {
+    match rng.below(6) {
+        5 if text && frags.font => {
+            // what it says, and how many glyphs that is: interpolated, a
+            // ligature, and notdef for a character the font lacks
+            let (words, glyphs) = [("{round(3.7)}2A", 3), ("AB1", 2), ("Z9", 2)][rng.below(3)];
+            let style = if rng.chance(50) {
+                " style=\"bold\""
+            } else {
+                ""
+            };
+            let _ = writeln!(
+                src,
+                "{indent}text \"x - 6\" \"y\" \"{words}\" font=\"bat\" size=6 anchor=\"middle\" bounds=\"grow\"{style}"
+            );
+            glyphs
+        }
         0 => {
             let _ = writeln!(
                 src,
@@ -122,7 +142,7 @@ fn gen_2d(rng: &mut Rng, frags: &Frags, src: &mut String, indent: &str) -> usize
 /// One part body, and how many IR shapes it projects to. One box = 3
 /// primitives (left/right/top); a tile, and each 2-D node, 1; an `at`
 /// none of its own.
-fn gen_part(rng: &mut Rng, frags: &Frags, src: &mut String, indent: &str) -> usize {
+fn gen_part(rng: &mut Rng, frags: &Frags, src: &mut String, indent: &str, text: bool) -> usize {
     let mut count = 0;
     let n = 1 + rng.below(3);
     for _ in 0..n {
@@ -170,7 +190,7 @@ fn gen_part(rng: &mut Rng, frags: &Frags, src: &mut String, indent: &str) -> usi
             7 | 8 => {
                 let _ = writeln!(src, "{indent}at 0.5 0.5 \"u * 0.5\" {{");
                 for _ in 0..1 + rng.below(3) {
-                    count += gen_2d(rng, frags, src, &format!("{indent}  "));
+                    count += gen_2d(rng, frags, src, &format!("{indent}  "), text);
                 }
                 let _ = writeln!(src, "{indent}}}");
             }
@@ -193,18 +213,18 @@ fn gen_body(rng: &mut Rng, frags: &Frags, src: &mut String, indent: &str) -> usi
                 src,
                 "{indent}transform rotate={angle} origin=\"0 0\" bounds=\"grow\" {{"
             );
-            gen_part(rng, frags, src, &format!("{indent}  "));
+            gen_part(rng, frags, src, &format!("{indent}  "), false);
             let _ = writeln!(src, "{indent}}}");
             1
         }
         1 => {
             let angle = [90, 180, 270][rng.below(3)];
             let _ = writeln!(src, "{indent}turn {angle} origin=\"1 0.5\" {{");
-            let count = gen_part(rng, frags, src, &format!("{indent}  "));
+            let count = gen_part(rng, frags, src, &format!("{indent}  "), true);
             let _ = writeln!(src, "{indent}}}");
             count
         }
-        _ => gen_part(rng, frags, src, indent),
+        _ => gen_part(rng, frags, src, indent, true),
     }
 }
 
@@ -261,6 +281,40 @@ fn generate(seed: u64) -> Gen {
         let _ = writeln!(g.src, "  }}");
         let _ = writeln!(g.src, "}}");
         frags.glyphs.push(name);
+    }
+
+    // a stroke-built font, at the declared widths, with a bold style
+    if rng.chance(60) {
+        let _ = writeln!(g.src, "font \"bat\" {{");
+        let _ = writeln!(g.src, "  em 10; ascent 7; descent 3; kind \"stroke\"");
+        let _ = writeln!(g.src, "  param weight 1.2");
+        let _ = writeln!(g.src, "  axes \"bat-weight\"");
+        for d in 0..10 {
+            let _ = writeln!(
+                g.src,
+                "  glyph \"{d}\" advance=5 {{ path d=\"M0,0 L4,{}\" width=\"weight\" }}",
+                d % 7 + 1
+            );
+        }
+        let _ = writeln!(
+            g.src,
+            "  glyph \"A\" advance=5 {{ path d=\"M0,0 L2,7 L4,0\" width=\"weight\" }}"
+        );
+        let _ = writeln!(
+            g.src,
+            "  glyph \"AB\" advance=9 {{ path d=\"M0,0 L8,7\" width=\"weight\" }}"
+        );
+        let _ = writeln!(
+            g.src,
+            "  notdef advance=5 {{ poly stroke=\"ink\" width=\"weight\" {{ pt 0 0; pt 4 0; pt 4 7 }} }}"
+        );
+        let _ = writeln!(g.src, "  kern \"A\" \"1\" -0.5");
+        let _ = writeln!(g.src, "}}");
+        let _ = writeln!(
+            g.src,
+            "axis \"bat-weight\" {{ variant \"bold\" {{ param weight 1.4 }} }}"
+        );
+        frags.font = true;
     }
 
     // a flat mark for badges, painted with the (perhaps reserved) accent
@@ -879,6 +933,9 @@ mod tests {
             "remove \"",
             "transform rotate=",
             "turn ",
+            "font \"bat\"",
+            "text \"x",
+            "style=\"bold\"",
         ] {
             assert!(all.contains(construct), "no seed generates {construct}");
         }

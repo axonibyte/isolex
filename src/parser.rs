@@ -128,7 +128,7 @@ pub fn parse_lexicon(files: &[(String, String)]) -> ParseOutcome {
     ParseOutcome { lexicon, diags }
 }
 
-const TOP_NODES: &[&str] = &["lexicon", "base", "icon", "fragment", "axis"];
+const TOP_NODES: &[&str] = &["lexicon", "base", "icon", "fragment", "axis", "font"];
 
 fn parse_top(ctx: &mut FileCtx, node: kdl::NodeRef, out: &mut Lexicon) {
     let name = node.name().value();
@@ -216,7 +216,7 @@ fn parse_top(ctx: &mut FileCtx, node: kdl::NodeRef, out: &mut Lexicon) {
                 out.config = Some(cfg);
             }
         }
-        "base" | "icon" | "fragment" | "axis" => {
+        "base" | "icon" | "fragment" | "axis" | "font" => {
             if let Some(def) = parse_definition(ctx, node) {
                 out.defs.push(def);
             }
@@ -236,6 +236,7 @@ fn parse_definition(ctx: &mut FileCtx, node: kdl::NodeRef) -> Option<Definition>
         "base" => DefKind::Base,
         "icon" => DefKind::Icon,
         "fragment" => DefKind::Fragment,
+        "font" => DefKind::Font,
         _ => DefKind::Axis,
     };
     let Some(name) = first_string_arg(ctx, node) else {
@@ -258,6 +259,9 @@ fn parse_definition(ctx: &mut FileCtx, node: kdl::NodeRef) -> Option<Definition>
                 entry.span().offset(),
                 "an axis cannot extend: its variants overlay the icons that opt into it",
             ),
+            Some("extends") if kind == DefKind::Font => {
+                ctx.diag(entry.span().offset(), FONT_EXTENDS)
+            }
             Some("extends") => match entry.value().as_string() {
                 Some(s) => extends = Some(s.to_string()),
                 None => ctx.diag(
@@ -288,11 +292,13 @@ fn parse_definition(ctx: &mut FileCtx, node: kdl::NodeRef) -> Option<Definition>
 
     if let Some(children) = node.children() {
         for ch in children.nodes() {
-            parse_body_child(ctx, ch, kind, &mut def);
+            parse_body_child(ctx, ch, kind, false, &mut def);
         }
     }
     Some(def)
 }
+
+const FONT_EXTENDS: &str = "a font cannot extend: its weights and styles are variants of its axes";
 
 fn kindword(kind: DefKind) -> &'static str {
     match kind {
@@ -300,6 +306,7 @@ fn kindword(kind: DefKind) -> &'static str {
         DefKind::Icon => "icon",
         DefKind::Fragment => "fragment",
         DefKind::Axis => "axis",
+        DefKind::Font => "font",
     }
 }
 
@@ -322,8 +329,48 @@ const BODY_NODES: &[&str] = &[
     "insert-depth",
     "expression-depth",
     "transform-chain",
+    "text-length",
+    "text-limit",
+    "glyph-limit",
     "view",
     "transform-bounds",
+    "em",
+    "ascent",
+    "descent",
+    "slant",
+    "kind",
+    "glyph",
+    "notdef",
+    "kern",
+];
+
+/// What a font holds; everything else in one belongs in an icon.
+const FONT_NODES: &[&str] = &[
+    "describe",
+    "param",
+    "axes",
+    "em",
+    "ascent",
+    "descent",
+    "slant",
+    "kind",
+    "glyph",
+    "notdef",
+    "kern",
+    "glyph-limit",
+];
+
+/// What only a font holds, of the nodes above.
+const FONT_ONLY: &[&str] = &[
+    "em",
+    "ascent",
+    "descent",
+    "slant",
+    "kind",
+    "glyph",
+    "notdef",
+    "kern",
+    "glyph-limit",
 ];
 
 fn limit_kind(name: &str) -> Option<LimitKind> {
@@ -359,8 +406,48 @@ fn set_limit(ctx: &mut FileCtx, node: kdl::NodeRef, kind: LimitKind, limits: &mu
     }
 }
 
-fn parse_body_child(ctx: &mut FileCtx, ch: kdl::NodeRef, kind: DefKind, def: &mut Definition) {
+/// One node of a definition body. A variant's body (`in_variant`) may
+/// hold what an icon holds or what a font does, since an axis can
+/// overlay either; what does not fit is an error where it is applied.
+fn parse_body_child(
+    ctx: &mut FileCtx,
+    ch: kdl::NodeRef,
+    kind: DefKind,
+    in_variant: bool,
+    def: &mut Definition,
+) {
     let off = ch.span().offset();
+    let node_name = ch.name().value();
+    if kind == DefKind::Font && !FONT_NODES.contains(&node_name) {
+        ctx.diag(
+            off,
+            if node_name == "extends" {
+                FONT_EXTENDS.to_string()
+            } else if BODY_NODES.contains(&node_name) || node_name == "variant" {
+                format!(
+                    "a font holds em, ascent, descent, slant, kind, glyphs, notdef, kerns, \
+                     params, axes and describe; '{node_name}' belongs in an icon"
+                )
+            } else {
+                format!(
+                    "unknown node '{node_name}' in a font{}",
+                    suggest(node_name, FONT_NODES.iter().copied())
+                )
+            },
+        );
+        return;
+    }
+    if kind != DefKind::Font && !in_variant && FONT_ONLY.contains(&node_name) {
+        ctx.diag(
+            off,
+            format!(
+                "'{node_name}' belongs in a font, not in {} {}",
+                if kind == DefKind::Icon { "an" } else { "a" },
+                kindword(kind)
+            ),
+        );
+        return;
+    }
     // An axis is a set of overlays; anything else in it would be dropped.
     if kind == DefKind::Axis && !matches!(ch.name().value(), "variant" | "emit-base") {
         let name = ch.name().value();
@@ -380,10 +467,10 @@ fn parse_body_child(ctx: &mut FileCtx, ch: kdl::NodeRef, kind: DefKind, def: &mu
         only_props(
             ctx,
             ch,
-            if ch.name().value() == "grant" {
-                &["reason"]
-            } else {
-                &[]
+            match ch.name().value() {
+                "grant" => &["reason"],
+                "glyph" | "notdef" => &["advance"],
+                _ => &[],
             },
         );
     }
@@ -427,13 +514,16 @@ fn parse_body_child(ctx: &mut FileCtx, ch: kdl::NodeRef, kind: DefKind, def: &mu
                         ctx.diag(off, reserved(n, "param"));
                         return;
                     }
-                    if let Some(num) = parse_num_entry(ctx, v) {
+                    if let Some(param) = parse_param_entry(ctx, v) {
                         def.body
                             .params
-                            .push((n.to_string(), num, ctx.span(ch.span())));
+                            .push((n.to_string(), param, ctx.span(ch.span())));
                     }
                 }
-                _ => ctx.diag(off, "param takes a name and a default: param bays 2"),
+                _ => ctx.diag(
+                    off,
+                    "param takes a name and a default: param bays 2, or param label (text)\"U1\"",
+                ),
             }
         }
         "axes" => {
@@ -520,7 +610,7 @@ fn parse_body_child(ctx: &mut FileCtx, ch: kdl::NodeRef, kind: DefKind, def: &mu
                         );
                         continue;
                     }
-                    parse_body_child(ctx, gch, DefKind::Icon, &mut sub);
+                    parse_body_child(ctx, gch, DefKind::Icon, true, &mut sub);
                 }
             }
             def.variants.push(Variant {
@@ -564,12 +654,141 @@ fn parse_body_child(ctx: &mut FileCtx, ch: kdl::NodeRef, kind: DefKind, def: &mu
                 "transform-bounds takes \"error\", \"grow\", \"scale\" or \"clip\"",
             ),
         },
+        "em" | "ascent" | "descent" | "slant" => {
+            let args: Vec<&kdl::Entry> =
+                ch.entries().iter().filter(|e| e.name().is_none()).collect();
+            let [e] = args.as_slice() else {
+                ctx.diag(
+                    off,
+                    format!("{node_name} takes one number, in the font's em grid: {node_name} 8"),
+                );
+                return;
+            };
+            let value = parse_num_entry(ctx, e);
+            let font = &mut def.body.font;
+            match node_name {
+                "em" => font.em = value,
+                "ascent" => font.ascent = value,
+                "descent" => font.descent = value,
+                _ => font.slant = value,
+            }
+        }
+        "kind" => match first_string_arg(ctx, ch).as_deref() {
+            Some("stroke") => def.body.font.kind = Some(FontKind::Stroke),
+            Some("outline") => def.body.font.kind = Some(FontKind::Outline),
+            other => ctx.diag(
+                off,
+                format!(
+                    "kind is \"stroke\" (glyphs drawn along their middles) or \"outline\" \
+                     (filled outlines){}",
+                    other
+                        .map(|s| suggest(s, ["stroke", "outline"].into_iter()))
+                        .unwrap_or_default()
+                ),
+            ),
+        },
+        "glyph" | "notdef" => {
+            let name = if node_name == "glyph" {
+                match first_string_arg(ctx, ch) {
+                    Some(name) if !name.is_empty() => name,
+                    _ => {
+                        ctx.diag(
+                            off,
+                            "a glyph needs the text it draws: glyph \"A\" advance=6 { … }",
+                        );
+                        return;
+                    }
+                }
+            } else {
+                if ch.entries().iter().any(|e| e.name().is_none()) {
+                    ctx.diag(off, "notdef takes no name: it draws what no glyph does");
+                    return;
+                }
+                String::new()
+            };
+            let Some(advance) = num_prop(ctx, ch, "advance") else {
+                if !ch
+                    .entries()
+                    .iter()
+                    .any(|e| e.name().map(|n| n.value()) == Some("advance"))
+                {
+                    ctx.diag(
+                        off,
+                        format!("{node_name} needs advance=, how far it moves the pen"),
+                    );
+                }
+                return;
+            };
+            let glyph = Glyph {
+                name,
+                advance,
+                nodes: parse_geometry_children(ctx, ch, Ctx::TwoD),
+                span: ctx.span(ch.span()),
+            };
+            let font = &mut def.body.font;
+            if node_name == "notdef" {
+                if font.notdef.is_some() {
+                    ctx.diag(off, "notdef is drawn twice here; one is enough");
+                    return;
+                }
+                font.notdef = Some(glyph);
+            } else if font.glyphs.iter().any(|g| g.name == glyph.name) {
+                ctx.diag(
+                    off,
+                    format!("glyph \"{}\" is drawn twice in this font", glyph.name),
+                );
+            } else {
+                font.glyphs.push(glyph);
+            }
+        }
+        "kern" => {
+            let args: Vec<&kdl::Entry> =
+                ch.entries().iter().filter(|e| e.name().is_none()).collect();
+            let usage = "kern takes two glyphs and the space between them: kern \"A\" \"V\" -0.6";
+            let [l, r, by] = args.as_slice() else {
+                ctx.diag(off, usage);
+                return;
+            };
+            let (Some(left), Some(right)) = (l.value().as_string(), r.value().as_string()) else {
+                ctx.diag(off, usage);
+                return;
+            };
+            let Some(by) = parse_num_entry(ctx, by) else {
+                return;
+            };
+            let font = &mut def.body.font;
+            if font
+                .kerns
+                .iter()
+                .any(|k| k.left == left && k.right == right)
+            {
+                ctx.diag(
+                    off,
+                    format!("\"{left}\" \"{right}\" is kerned twice in this font"),
+                );
+                return;
+            }
+            font.kerns.push(Kern {
+                left: left.to_string(),
+                right: right.to_string(),
+                by,
+                span: ctx.span(ch.span()),
+            });
+        }
         other if limit_kind(other).is_some() => {
             let limit = limit_kind(other).expect("checked");
             if limit.lexicon_wide() {
                 ctx.diag(
                     off,
                     format!("{other} counts the whole lexicon; set it in the lexicon block"),
+                );
+            } else if kind == DefKind::Font && !limit.of_fonts() {
+                ctx.diag(
+                    off,
+                    format!(
+                        "{other} counts what an icon draws; set it on the icon or in the \
+                         lexicon block"
+                    ),
                 );
             } else if kind == DefKind::Fragment {
                 ctx.diag(
@@ -708,6 +927,7 @@ const NODES_2D: &[&str] = &[
     "repeat",
     "insert",
     "transform",
+    "text",
 ];
 
 fn parse_geometry(ctx: &mut FileCtx, ch: kdl::NodeRef, gctx: Ctx) -> Option<Node> {
@@ -772,7 +992,7 @@ fn parse_geometry(ctx: &mut FileCtx, ch: kdl::NodeRef, gctx: Ctx) -> Option<Node
                 if pname == "when" {
                     continue;
                 }
-                if let Some(v) = parse_num_entry(ctx, e) {
+                if let Some(v) = parse_param_entry(ctx, e) {
                     args.push((pname.to_string(), v));
                 }
             }
@@ -991,6 +1211,38 @@ fn parse_geometry(ctx: &mut FileCtx, ch: kdl::NodeRef, gctx: Ctx) -> Option<Node
                 span,
             })
         }
+        "text" => {
+            let args: Vec<&kdl::Entry> =
+                ch.entries().iter().filter(|e| e.name().is_none()).collect();
+            let [x, y, content] = args.as_slice() else {
+                ctx.diag(
+                    off,
+                    format!(
+                        "text takes where it starts and what it says, found {} argument(s): \
+                         text \"x\" \"y\" \"U{{u}}\" font=\"…\" size=6",
+                        args.len()
+                    ),
+                );
+                return None;
+            };
+            let (x, y) = (parse_num_entry(ctx, x), parse_num_entry(ctx, y));
+            let Some(words) = content.value().as_string() else {
+                ctx.diag(
+                    content.span().offset(),
+                    "text's third argument is what it says, a string",
+                );
+                return None;
+            };
+            let content = parse_text_template(ctx, args[2].span().offset(), words, "text")?;
+            let spec = text_spec(ctx, ch, style.fill)?;
+            Some(Node::Text {
+                args: [x?, y?],
+                content,
+                spec,
+                when,
+                span,
+            })
+        }
         _ => unreachable!("validated against the context's node list"),
     }
 }
@@ -1036,6 +1288,171 @@ fn parse_path_template(ctx: &mut FileCtx, off: usize, d: &str) -> Option<Vec<Pat
         pieces.push(PathPiece::Lit(lit));
     }
     Some(pieces)
+}
+
+/// Text with `{…}` interpolations, as text content and text params write
+/// it: each `{…}` an expression, or a text param's name; `{{` and `}}`
+/// are a brace of their own.
+fn parse_text_template(
+    ctx: &mut FileCtx,
+    off: usize,
+    text: &str,
+    what: &str,
+) -> Option<Vec<PathPiece>> {
+    let mut pieces = Vec::new();
+    let mut lit = String::new();
+    let mut rest = text;
+    while let Some(c) = rest.chars().next() {
+        if rest.starts_with("{{") {
+            lit.push('{');
+            rest = &rest[2..];
+        } else if rest.starts_with("}}") {
+            lit.push('}');
+            rest = &rest[2..];
+        } else if c == '{' {
+            let Some(end) = rest.find('}') else {
+                ctx.diag(
+                    off,
+                    format!("unclosed '{{' in {what}; write {{{{ for a brace of its own"),
+                );
+                return None;
+            };
+            let src = &rest[1..end];
+            match expr::parse_num(src) {
+                Ok(ast) => {
+                    if !lit.is_empty() {
+                        pieces.push(PathPiece::Lit(std::mem::take(&mut lit)));
+                    }
+                    pieces.push(PathPiece::Expr {
+                        src: src.to_string(),
+                        ast,
+                    });
+                }
+                Err(e) => {
+                    ctx.diag(off, format!("in {what} expression '{src}': {}", e.message));
+                    return None;
+                }
+            }
+            rest = &rest[end + 1..];
+        } else {
+            lit.push(c);
+            rest = &rest[c.len_utf8()..];
+        }
+    }
+    if !lit.is_empty() {
+        pieces.push(PathPiece::Lit(lit));
+    }
+    Some(pieces)
+}
+
+/// A param's value, a default or an insert's argument: a number or an
+/// expression, or text, annotated `(text)` since a string is otherwise an
+/// expression.
+fn parse_param_entry(ctx: &mut FileCtx, e: &kdl::Entry) -> Option<Param> {
+    match e.ty().map(|t| t.value()) {
+        None => parse_num_entry(ctx, e).map(Param::Num),
+        Some("text") => match e.value().as_string() {
+            Some(s) => parse_text_template(ctx, e.span().offset(), s, "text").map(Param::Text),
+            None => {
+                ctx.diag(e.span().offset(), "(text) takes a string: (text)\"U{u}\"");
+                None
+            }
+        },
+        Some(other) => {
+            ctx.diag(
+                e.span().offset(),
+                format!(
+                    "unknown type ({other}); a value is a number, an expression, or \
+                     (text)\"…\"{}",
+                    suggest(other, ["text"].into_iter())
+                ),
+            );
+            None
+        }
+    }
+}
+
+/// A `text` node's properties.
+fn text_spec(ctx: &mut FileCtx, ch: kdl::NodeRef, fill: Option<String>) -> Option<TextSpec> {
+    let off = ch.span().offset();
+    let Some(font) = string_prop(ctx, ch, "font") else {
+        ctx.diag(off, "text needs font=\"…\", the font it is set in");
+        return None;
+    };
+    let Some(size) = num_prop(ctx, ch, "size") else {
+        ctx.diag(off, "text needs size=, its font's em in output units");
+        return None;
+    };
+    let styles = string_prop(ctx, ch, "style")
+        .map(|s| s.split_whitespace().map(str::to_string).collect())
+        .unwrap_or_default();
+    let anchor = match string_prop(ctx, ch, "anchor").as_deref() {
+        None | Some("start") => TextAnchor::Start,
+        Some("middle") => TextAnchor::Middle,
+        Some("end") => TextAnchor::End,
+        Some(other) => {
+            ctx.diag(
+                off,
+                format!(
+                    "anchor is \"start\", \"middle\" or \"end\"{}",
+                    suggest(other, ["start", "middle", "end"].into_iter())
+                ),
+            );
+            return None;
+        }
+    };
+    const BASELINES: [&str; 4] = ["alphabetic", "top", "middle", "bottom"];
+    let baseline = match string_prop(ctx, ch, "baseline").as_deref() {
+        None | Some("alphabetic") => Baseline::Alphabetic,
+        Some("top") => Baseline::Top,
+        Some("middle") => Baseline::Middle,
+        Some("bottom") => Baseline::Bottom,
+        Some(other) => {
+            ctx.diag(
+                off,
+                format!(
+                    "baseline is \"alphabetic\", \"top\", \"middle\" or \"bottom\"{}",
+                    suggest(other, BASELINES.into_iter())
+                ),
+            );
+            return None;
+        }
+    };
+    let bounds = match ch
+        .entries()
+        .iter()
+        .find(|e| e.name().map(|n| n.value()) == Some("bounds"))
+    {
+        None => None,
+        Some(e) => {
+            let value = e.value().as_string();
+            match value.and_then(Bounds::named) {
+                Some(b) => Some(b),
+                None => {
+                    ctx.diag(
+                        e.span().offset(),
+                        format!(
+                            "bounds is \"error\", \"grow\", \"scale\" or \"clip\"{}",
+                            value
+                                .map(|s| suggest(s, Bounds::NAMES.into_iter()))
+                                .unwrap_or_default()
+                        ),
+                    );
+                    return None;
+                }
+            }
+        }
+    };
+    Some(TextSpec {
+        font,
+        styles,
+        size,
+        anchor,
+        baseline,
+        fill,
+        max_width: num_prop(ctx, ch, "max-width"),
+        bounds,
+    })
 }
 
 // --- entry helpers -------------------------------------------------------
@@ -1232,6 +1649,17 @@ fn geometry_props(name: &str) -> &'static [&'static str] {
             "when",
         ],
         "turn" | "mirror-diagonal" => &["origin", "when"],
+        "text" => &[
+            "font",
+            "style",
+            "size",
+            "anchor",
+            "baseline",
+            "fill",
+            "max-width",
+            "bounds",
+            "when",
+        ],
         "shadow" | "at" | "repeat" => &["when"],
         "pt" => &[],
         _ => STYLE,

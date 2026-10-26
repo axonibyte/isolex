@@ -10,11 +10,50 @@ use std::rc::Rc;
 use serde::Serialize;
 
 use crate::ast::{
-    Bounds, Face, Limit, LimitKind, Limits, MirrorAxis, Node, Num, OntoFace, PartDecl, PathPiece,
-    Span, Step, Strokes, Style, TransformSpec, TurnBy,
+    Baseline, Bounds, Face, Limit, LimitKind, Limits, MirrorAxis, Node, Num, OntoFace, Param,
+    PartDecl, PathPiece, Span, Step, Strokes, Style, TextAnchor, TextSpec, TransformSpec, TurnBy,
+    Variant,
 };
 use crate::expr::{self, Expr};
-use crate::resolve::{apply_variant, Resolved, ResolvedDef, SpanDiag};
+use crate::resolve::{apply_variant, style_font, suggest, Resolved, ResolvedDef, SpanDiag};
+
+/// What a node sees: the numbers of its params and loop variables, and
+/// its text params' text. It reads as its numbers, which are all an
+/// expression sees.
+#[derive(Debug, Clone, Default)]
+pub struct Scope {
+    nums: BTreeMap<String, f64>,
+    texts: BTreeMap<String, String>,
+}
+
+impl std::ops::Deref for Scope {
+    type Target = BTreeMap<String, f64>;
+    fn deref(&self) -> &Self::Target {
+        &self.nums
+    }
+}
+
+impl std::ops::DerefMut for Scope {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.nums
+    }
+}
+
+/// A param's value as a host gives it, compiling one icon (SPEC §10):
+/// taken as it is, never read as an expression or a template.
+#[derive(Debug, Clone, PartialEq)]
+pub enum HostValue {
+    Num(f64),
+    Text(String),
+}
+
+/// One icon to compile, by the name the lexicon emits it under, with
+/// params a host sets on it.
+#[derive(Debug, Clone, Default)]
+pub struct Only {
+    pub icon: String,
+    pub params: BTreeMap<String, HostValue>,
+}
 
 /// A limit in force (SPEC §9): its ceiling, `None` when switched off,
 /// and where that came from, for the error that names it.
@@ -59,6 +98,8 @@ fn past_limit(what: String, kind: LimitKind, limit: u64, from: &str) -> String {
     let d = kind.directive();
     let place = if kind.lexicon_wide() {
         "in the lexicon block"
+    } else if kind.of_fonts() {
+        "in the font or the lexicon block"
     } else {
         "in this icon's definition or the lexicon block"
     };
@@ -160,6 +201,8 @@ pub struct EvTransform {
     pub onto: Option<[f64; 6]>,
     pub bounds: Option<Bounds>,
     pub strokes: Option<Strokes>,
+    /// A text's fill: every paint of its glyphs, but none, drawn in it.
+    pub paint: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -379,10 +422,17 @@ struct Ctx<'a> {
     insert_depth: InForce,
     expression_depth: InForce,
     transform_chain: InForce,
+    text_length: InForce,
+    text_limit: (InForce, u64),
     /// Transform steps around what is being expanded now.
     chain: u64,
+    /// Glyphs being drawn around what is being expanded now.
+    in_glyph: u32,
     /// A limit was passed: expansion of this icon stops everywhere.
     exhausted: bool,
+    /// Each font in each style text has been set in, or None for one
+    /// that could not be, once reported.
+    fonts: BTreeMap<(String, Vec<String>), Option<Rc<FontInst<'a>>>>,
 }
 
 impl<'a> Ctx<'a> {
@@ -402,7 +452,10 @@ impl<'a> Ctx<'a> {
         self.insert_depth = in_force(LimitKind::InsertDepth, &def.limits, lexicon);
         self.expression_depth = in_force(LimitKind::ExpressionDepth, &def.limits, lexicon);
         self.transform_chain = in_force(LimitKind::TransformChain, &def.limits, lexicon);
+        self.text_length = in_force(LimitKind::TextLength, &def.limits, lexicon);
+        self.text_limit = (in_force(LimitKind::TextLimit, &def.limits, lexicon), 0);
         self.chain = 0;
+        self.in_glyph = 0;
         self.exhausted = false;
     }
 
@@ -437,6 +490,27 @@ impl<'a> Ctx<'a> {
 }
 
 pub fn expand(resolved: &Resolved) -> (Vec<ExpandedIcon>, Vec<SpanDiag>) {
+    let (icons, diags, _) = expand_with(resolved, None);
+    (icons, diags)
+}
+
+/// One icon, with the params a host sets on it, and the icons it badges,
+/// since it draws them; or what is wrong with the request: an icon the
+/// lexicon does not emit, or a param it does not have or of another type.
+pub fn expand_only(
+    resolved: &Resolved,
+    only: &Only,
+) -> Result<(Vec<ExpandedIcon>, Vec<SpanDiag>), String> {
+    match expand_with(resolved, Some(only)) {
+        (_, _, Some(refused)) => Err(refused),
+        (icons, diags, None) => Ok((icons, diags)),
+    }
+}
+
+fn expand_with(
+    resolved: &Resolved,
+    only: Option<&Only>,
+) -> (Vec<ExpandedIcon>, Vec<SpanDiag>, Option<String>) {
     let unset = InForce {
         limit: None,
         from: String::new(),
@@ -450,11 +524,17 @@ pub fn expand(resolved: &Resolved) -> (Vec<ExpandedIcon>, Vec<SpanDiag>) {
         repeats: (unset.clone(), 0),
         insert_depth: unset.clone(),
         expression_depth: unset.clone(),
-        transform_chain: unset,
+        transform_chain: unset.clone(),
+        text_length: unset.clone(),
+        text_limit: (unset, 0),
         chain: 0,
+        in_glyph: 0,
         exhausted: false,
+        fonts: BTreeMap::new(),
     };
     let mut out = Vec::new();
+    // with one icon asked for, every emitted icon, to choose from
+    let mut candidates: Vec<(ResolvedDef, String)> = Vec::new();
 
     // Axes multiply the way nested repeats do, so the icon count is
     // checked by multiplying their sizes, before any product is built.
@@ -515,12 +595,86 @@ pub fn expand(resolved: &Resolved) -> (Vec<ExpandedIcon>, Vec<SpanDiag>) {
                     emitted.insert(name.clone(), source);
                 }
             }
-            if let Some(exp) = expand_one(&mut ctx, &def, name) {
+            if only.is_some() {
+                candidates.push((def, name));
+            } else if let Some(exp) = expand_one(&mut ctx, &def, name, None) {
                 out.push(exp);
             }
         }
     }
-    (out, ctx.diags)
+    let Some(only) = only else {
+        return (out, ctx.diags, None);
+    };
+    let Some(at) = candidates.iter().position(|(_, n)| *n == only.icon) else {
+        let refused = format!(
+            "the lexicon emits no icon '{}'{}",
+            only.icon,
+            suggest(&only.icon, candidates.iter().map(|(_, n)| n.as_str()))
+        );
+        return (out, ctx.diags, Some(refused));
+    };
+    if let Some(refused) = refuse_host_params(&candidates[at].0, &only.icon, &only.params) {
+        return (out, ctx.diags, Some(refused));
+    }
+    let (def, name) = &candidates[at];
+    if let Some(exp) = expand_one(&mut ctx, def, name.clone(), Some(&only.params)) {
+        let targets: BTreeSet<&str> = exp
+            .shapes
+            .iter()
+            .filter_map(|s| match s {
+                Shape::Badge { icon, .. } => Some(icon.as_str()),
+                _ => None,
+            })
+            .collect();
+        let targets: Vec<usize> = candidates
+            .iter()
+            .enumerate()
+            .filter(|(i, (_, n))| *i != at && targets.contains(n.as_str()))
+            .map(|(i, _)| i)
+            .collect();
+        out.push(exp);
+        for i in targets {
+            let (def, name) = &candidates[i];
+            if let Some(exp) = expand_one(&mut ctx, def, name.clone(), None) {
+                out.push(exp);
+            }
+        }
+    }
+    (out, ctx.diags, None)
+}
+
+/// A host's params, held to the icon's: each one it has, of its type, and
+/// a number finite.
+fn refuse_host_params(
+    def: &ResolvedDef,
+    icon: &str,
+    params: &BTreeMap<String, HostValue>,
+) -> Option<String> {
+    for (name, value) in params {
+        let Some((_, declared)) = def.params.iter().find(|(n, _)| n == name) else {
+            return Some(format!(
+                "icon '{icon}' has no param '{name}'{}",
+                suggest(name, def.params.iter().map(|(n, _)| n.as_str()))
+            ));
+        };
+        match (declared, value) {
+            (Param::Num(_), HostValue::Num(v)) if !v.is_finite() => {
+                return Some(format!("param '{name}' of icon '{icon}' must be finite"));
+            }
+            (Param::Num(_), HostValue::Text(_)) => {
+                return Some(format!(
+                    "param '{name}' of icon '{icon}' is a number; give it a number"
+                ));
+            }
+            (Param::Text(_), HostValue::Num(_)) => {
+                return Some(format!(
+                    "param '{name}' of icon '{icon}' is text; give it a string"
+                ));
+            }
+            _ => {}
+        }
+    }
+    None
 }
 
 /// "icon 'srv' with variant 'down' of axis 'state'", or just "icon 'srv'".
@@ -577,14 +731,26 @@ fn axis_combos(ctx: &mut Ctx, icon: &ResolvedDef) -> Vec<Vec<(String, Option<usi
     combos
 }
 
-fn expand_one(ctx: &mut Ctx, def: &ResolvedDef, name: String) -> Option<ExpandedIcon> {
+fn expand_one(
+    ctx: &mut Ctx,
+    def: &ResolvedDef,
+    name: String,
+    host: Option<&BTreeMap<String, HostValue>>,
+) -> Option<ExpandedIcon> {
     ctx.begin(&name, def);
     // parameters evaluate in declaration order; earlier params are in
-    // scope for later defaults
-    let mut env: BTreeMap<String, f64> = BTreeMap::new();
+    // scope for later defaults, and a host's value takes a param's slot
+    let mut env = Scope::default();
     for (pname, pval) in &def.params {
-        let v = eval_full(ctx, pval, &env, def.span)?;
-        env.insert(pname.clone(), v);
+        match host.and_then(|h| h.get(pname)) {
+            Some(HostValue::Num(v)) => {
+                env.insert(pname.clone(), *v);
+            }
+            Some(HostValue::Text(t)) => {
+                env.texts.insert(pname.clone(), t.clone());
+            }
+            None => bind(ctx, &mut env, pname, pval, def.span)?,
+        }
     }
 
     let footprint = match &def.footprint {
@@ -667,14 +833,73 @@ fn quarter(ctx: &mut Ctx, angle: f64, what: &str, span: Span) -> Option<u8> {
     Some(((angle / 90.0).rem_euclid(4.0)) as u8)
 }
 
+/// A param bound in `scope`, evaluated there: a number, or text with its
+/// interpolations filled in.
+fn bind(ctx: &mut Ctx, scope: &mut Scope, name: &str, value: &Param, span: Span) -> Option<()> {
+    match value {
+        Param::Num(n) => {
+            let v = eval_full(ctx, n, scope, span)?;
+            scope.insert(name.to_string(), v);
+        }
+        Param::Text(t) => {
+            let s = interpolate(ctx, t, scope, span)?;
+            scope.texts.insert(name.to_string(), s);
+        }
+    }
+    Some(())
+}
+
+/// Text with its `{…}` filled in: a text param's text, or a number as
+/// text reads it (SPEC §4). Text is laid out when the lexicon compiles,
+/// so the anchor's `x` and `y` are not known to it.
+fn interpolate(ctx: &mut Ctx, pieces: &[PathPiece], scope: &Scope, span: Span) -> Option<String> {
+    let mut out = String::new();
+    for piece in pieces {
+        match piece {
+            PathPiece::Lit(s) => out.push_str(s),
+            PathPiece::Expr { src, ast } => {
+                if let Some(text) = ast
+                    .as_name()
+                    .filter(|n| !scope.contains_key(*n))
+                    .and_then(|n| scope.texts.get(n))
+                {
+                    out.push_str(text);
+                    continue;
+                }
+                let mut free = BTreeSet::new();
+                expr::free_vars(ast, &mut free);
+                if free.iter().any(|n| n == "x" || n == "y") {
+                    ctx.diag(
+                        span,
+                        format!(
+                            "in '{src}': text is laid out when the lexicon compiles, before any \
+                             anchor is placed, so x and y are not known to it"
+                        ),
+                    );
+                    return None;
+                }
+                let num = Num::Expr {
+                    src: src.clone(),
+                    ast: ast.clone(),
+                };
+                let v = eval_full(ctx, &num, scope, span)?;
+                out.push_str(&crate::text::format_value(v));
+            }
+        }
+    }
+    Some(out)
+}
+
+/// An unknown name that is a text param, said as such.
+fn text_not_number(src: &str, name: &str) -> String {
+    format!(
+        "in '{src}': '{name}' is text, not a number; text is interpolated whole into text, as \
+         {{{name}}}"
+    )
+}
+
 /// A value of a transform: in 2-D, it may wait for the anchor.
-fn eval_tf(
-    ctx: &mut Ctx,
-    num: &Num,
-    env: &BTreeMap<String, f64>,
-    span: Span,
-    two_d: bool,
-) -> Option<EvNum> {
+fn eval_tf(ctx: &mut Ctx, num: &Num, env: &Scope, span: Span, two_d: bool) -> Option<EvNum> {
     if two_d {
         eval_2d(ctx, num, env, span)
     } else {
@@ -688,7 +913,7 @@ fn eval_tf(
 fn eval_transform(
     ctx: &mut Ctx,
     spec: &TransformSpec,
-    env: &BTreeMap<String, f64>,
+    env: &Scope,
     turn: &Turn,
     span: Span,
     two_d: bool,
@@ -757,6 +982,7 @@ fn eval_transform(
         onto,
         bounds: spec.bounds,
         strokes: spec.strokes,
+        paint: None,
     })
 }
 
@@ -787,7 +1013,7 @@ fn within_expression_depth(ctx: &mut Ctx, ast: &Expr, span: Span) -> bool {
     }
 }
 
-fn eval_full(ctx: &mut Ctx, num: &Num, env: &BTreeMap<String, f64>, span: Span) -> Option<f64> {
+fn eval_full(ctx: &mut Ctx, num: &Num, env: &Scope, span: Span) -> Option<f64> {
     match num {
         Num::Lit(v) => Some(*v),
         Num::Expr { src, ast } => {
@@ -797,6 +1023,10 @@ fn eval_full(ctx: &mut Ctx, num: &Num, env: &BTreeMap<String, f64>, span: Span) 
             let mut free = BTreeSet::new();
             expr::free_vars(ast, &mut free);
             for name in &free {
+                if !env.contains_key(name) && env.texts.contains_key(name) {
+                    ctx.diag(span, text_not_number(src, name));
+                    return None;
+                }
                 if !env.contains_key(name) {
                     let scope: Vec<&str> = env.keys().map(|s| s.as_str()).collect();
                     ctx.diag(
@@ -826,7 +1056,7 @@ fn eval_full(ctx: &mut Ctx, num: &Num, env: &BTreeMap<String, f64>, span: Span) 
 
 /// Evaluate a 2-D value: full if possible, deferred if it needs the
 /// anchor's `x`/`y`.
-fn eval_2d(ctx: &mut Ctx, num: &Num, env: &BTreeMap<String, f64>, span: Span) -> Option<EvNum> {
+fn eval_2d(ctx: &mut Ctx, num: &Num, env: &Scope, span: Span) -> Option<EvNum> {
     match num {
         Num::Lit(v) => Some(EvNum::Lit(*v)),
         Num::Expr { src, ast } => {
@@ -836,7 +1066,25 @@ fn eval_2d(ctx: &mut Ctx, num: &Num, env: &BTreeMap<String, f64>, span: Span) ->
             let mut free = BTreeSet::new();
             expr::free_vars(ast, &mut free);
             let needs_anchor = free.iter().any(|n| n == "x" || n == "y");
+            if needs_anchor && ctx.in_glyph > 0 {
+                ctx.diag(
+                    span,
+                    format!(
+                        "in '{src}': a glyph is drawn in its font's em grid, from its origin on \
+                         the baseline, where x and y mean nothing"
+                    ),
+                );
+                return None;
+            }
             for name in &free {
+                if name != "x"
+                    && name != "y"
+                    && !env.contains_key(name)
+                    && env.texts.contains_key(name)
+                {
+                    ctx.diag(span, text_not_number(src, name));
+                    return None;
+                }
                 if name != "x" && name != "y" && !env.contains_key(name) {
                     let mut scope: Vec<&str> = env.keys().map(|s| s.as_str()).collect();
                     scope.push("x");
@@ -876,12 +1124,7 @@ fn eval_2d(ctx: &mut Ctx, num: &Num, env: &BTreeMap<String, f64>, span: Span) ->
     }
 }
 
-fn eval_style(
-    ctx: &mut Ctx,
-    style: &Style,
-    env: &BTreeMap<String, f64>,
-    span: Span,
-) -> Option<EvStyle> {
+fn eval_style(ctx: &mut Ctx, style: &Style, env: &Scope, span: Span) -> Option<EvStyle> {
     Some(EvStyle {
         fill: style.fill.clone(),
         stroke: style.stroke.clone(),
@@ -897,7 +1140,7 @@ fn eval_style(
     })
 }
 
-fn when_passes(ctx: &mut Ctx, when: &Option<Num>, env: &BTreeMap<String, f64>, span: Span) -> bool {
+fn when_passes(ctx: &mut Ctx, when: &Option<Num>, env: &Scope, span: Span) -> bool {
     match when {
         None => true,
         Some(n) => match eval_full(ctx, n, env, span) {
@@ -907,12 +1150,7 @@ fn when_passes(ctx: &mut Ctx, when: &Option<Num>, env: &BTreeMap<String, f64>, s
     }
 }
 
-fn repeat_count(
-    ctx: &mut Ctx,
-    count: &Num,
-    env: &BTreeMap<String, f64>,
-    span: Span,
-) -> Option<usize> {
+fn repeat_count(ctx: &mut Ctx, count: &Num, env: &Scope, span: Span) -> Option<usize> {
     let v = eval_full(ctx, count, env, span)?;
     if v < 0.0 || (v - v.round()).abs() > 1e-9 {
         ctx.diag(
@@ -933,7 +1171,7 @@ fn repeat_count(
 fn expand_node_3d<'a: 'n, 'n>(
     ctx: &mut Ctx<'a>,
     node: &'n Node,
-    env: &BTreeMap<String, f64>,
+    env: &Scope,
     turn: &Turn,
     out: &mut Vec<Shape>,
 ) -> Option<Open<'n>> {
@@ -1276,7 +1514,7 @@ fn expand_node_3d<'a: 'n, 'n>(
 fn collect_pt3<'a: 'n, 'n>(
     ctx: &mut Ctx<'a>,
     node: &'n Node,
-    env: &BTreeMap<String, f64>,
+    env: &Scope,
     turn: &Turn,
     out: &mut Vec<[f64; 3]>,
 ) -> Option<Open<'n>> {
@@ -1327,7 +1565,7 @@ fn collect_pt3<'a: 'n, 'n>(
 fn expand_node_2d<'a: 'n, 'n>(
     ctx: &mut Ctx<'a>,
     node: &'n Node,
-    env: &BTreeMap<String, f64>,
+    env: &Scope,
     turn: &Turn,
     out: &mut Vec<Shape2>,
 ) -> Option<Open<'n>> {
@@ -1561,6 +1799,43 @@ fn expand_node_2d<'a: 'n, 'n>(
                 span: *span,
             });
         }
+        Node::Text {
+            args,
+            content,
+            spec,
+            when,
+            span,
+        } => {
+            if !when_passes(ctx, when, env, *span) {
+                return None;
+            }
+            if ctx.in_glyph > 0 {
+                ctx.diag(
+                    *span,
+                    "a glyph cannot set text: it is drawn from shapes, in its font's em grid",
+                );
+                return None;
+            }
+            let [x, y] = evs2!(args, *span, 2);
+            let words = interpolate(ctx, content, env, *span)?;
+            let size = eval_full(ctx, &spec.size, env, *span)?;
+            if size <= 0.0 {
+                ctx.diag(*span, format!("text size must be more than 0, got {size}"));
+                return None;
+            }
+            let max_width = match &spec.max_width {
+                Some(m) => {
+                    let v = eval_full(ctx, m, env, *span)?;
+                    if v <= 0.0 {
+                        ctx.diag(*span, format!("max-width must be more than 0, got {v}"));
+                        return None;
+                    }
+                    Some(v)
+                }
+                None => None,
+            };
+            return set_text(ctx, &words, [x, y], size, max_width, spec, *span);
+        }
         other => ctx.diag(
             node_span(other),
             "3-D node reached 2-D expansion (parser context bug or a fragment inserted in the wrong context)",
@@ -1573,7 +1848,7 @@ fn expand_node_2d<'a: 'n, 'n>(
 fn collect_pt2<'a: 'n, 'n>(
     ctx: &mut Ctx<'a>,
     node: &'n Node,
-    env: &BTreeMap<String, f64>,
+    env: &Scope,
     out: &mut Vec<[EvNum; 2]>,
 ) -> Option<Open<'n>> {
     match node {
@@ -1619,8 +1894,8 @@ fn collect_pt2<'a: 'n, 'n>(
 fn open_insert<'a: 'n, 'n>(
     ctx: &mut Ctx<'a>,
     fragment: &str,
-    args: &[(String, Num)],
-    env: &BTreeMap<String, f64>,
+    args: &[(String, Param)],
+    env: &Scope,
     span: Span,
 ) -> Option<Open<'n>> {
     let resolved: &'a Resolved = ctx.resolved;
@@ -1659,26 +1934,47 @@ fn open_insert<'a: 'n, 'n>(
 
     // hygienic environment: fragment params only, defaults evaluated in
     // fragment scope, overridden by caller args evaluated in caller scope
-    let mut frag_env: BTreeMap<String, f64> = BTreeMap::new();
+    let mut frag_env = Scope::default();
     for (pname, pval, pspan) in &frag.body.params {
-        if let Some(v) = eval_full(ctx, pval, &frag_env, *pspan) {
-            frag_env.insert(pname.clone(), v);
-        }
+        let _ = bind(ctx, &mut frag_env, pname, pval, *pspan);
     }
     for (aname, aval) in args {
-        if !frag_env.contains_key(aname) {
-            let known: Vec<&str> = frag_env.keys().map(|s| s.as_str()).collect();
+        let Some((_, declared, _)) = frag.body.params.iter().find(|(n, _, _)| n == aname) else {
+            let known = frag.body.params.iter().map(|(n, _, _)| n.as_str());
             ctx.diag(
                 span,
                 format!(
                     "fragment '{fragment}' has no parameter '{aname}'{}",
-                    crate::resolve::suggest(aname, known.into_iter())
+                    crate::resolve::suggest(aname, known)
                 ),
             );
             return None;
-        }
-        if let Some(v) = eval_full(ctx, aval, env, span) {
-            frag_env.insert(aname.clone(), v);
+        };
+        match (declared, aval) {
+            (Param::Num(_), Param::Num(n)) => {
+                if let Some(v) = eval_full(ctx, n, env, span) {
+                    frag_env.insert(aname.clone(), v);
+                }
+            }
+            (Param::Text(_), Param::Text(t)) => {
+                if let Some(text) = interpolate(ctx, t, env, span) {
+                    frag_env.texts.insert(aname.clone(), text);
+                }
+            }
+            (Param::Num(_), Param::Text(_)) => {
+                ctx.diag(
+                    span,
+                    format!("fragment '{fragment}' takes a number for '{aname}', not text"),
+                );
+                return None;
+            }
+            (Param::Text(_), Param::Num(_)) => {
+                ctx.diag(
+                    span,
+                    format!("fragment '{fragment}' takes text for '{aname}': {aname}=(text)\"…\""),
+                );
+                return None;
+            }
         }
     }
     Some(Open::Insert {
@@ -1692,7 +1988,7 @@ fn open_insert<'a: 'n, 'n>(
 
 /// The parameters and loop variables a node sees, shared by the tasks
 /// that see them.
-type Env = Rc<BTreeMap<String, f64>>;
+type Env = Rc<Scope>;
 
 /// What a node with children opens, for [`run`] to expand.
 enum Open<'n> {
@@ -1730,6 +2026,14 @@ enum Open<'n> {
     Turn {
         turn: Turn,
         children: &'n [Node],
+    },
+    /// A text laid out: its map, and each glyph's place on its baseline
+    /// and shapes, drawn in its font's scope.
+    Text {
+        outer: EvTransform,
+        glyphs: Vec<(f64, &'n [Node])>,
+        font_env: Env,
+        span: Span,
     },
 }
 
@@ -1777,6 +2081,12 @@ enum Task<'n> {
     CloseTransform {
         steps: u64,
     },
+    /// A glyph of a text begins at its place on the baseline, or ends.
+    StartGlyph {
+        pen: f64,
+        span: Span,
+    },
+    CloseGlyph,
 }
 
 /// Expand `nodes` into `out` with an explicit stack of tasks and sinks
@@ -1888,6 +2198,35 @@ fn run<'a: 'n, 'n>(
                     _ => unreachable!("a transform stands among shapes"),
                 }
             }
+            Task::StartGlyph { pen, span } => {
+                ctx.in_glyph += 1;
+                ctx.chain += 1;
+                // counted, and marked even past the shape-limit, so every
+                // end has its start
+                ctx.spend(LimitKind::Shapes, span);
+                let Some(Sink::Shapes2(out)) = sinks.last_mut() else {
+                    unreachable!("a glyph is drawn among 2-D shapes");
+                };
+                out.push(Shape2::TransformStart {
+                    tf: EvTransform {
+                        origin: [EvNum::Lit(0.0), EvNum::Lit(0.0)],
+                        steps: vec![EvStep::Translate([EvNum::Lit(pen), EvNum::Lit(0.0)])],
+                        onto: None,
+                        bounds: None,
+                        strokes: None,
+                        paint: None,
+                    },
+                    span,
+                });
+            }
+            Task::CloseGlyph => {
+                ctx.in_glyph -= 1;
+                ctx.chain -= 1;
+                let Some(Sink::Shapes2(out)) = sinks.last_mut() else {
+                    unreachable!("a glyph is drawn among 2-D shapes");
+                };
+                out.push(Shape2::TransformEnd);
+            }
         }
     }
     let Some(Sink::Shapes(shapes)) = sinks.pop() else {
@@ -1961,6 +2300,29 @@ fn open_children<'n>(
             push_nodes(tasks, children, env, turn);
         }
         Open::Turn { turn, children } => push_nodes(tasks, children, env, turn),
+        Open::Text {
+            outer,
+            glyphs,
+            font_env,
+            span,
+        } => {
+            // its own map, a matrix and a translate, and each glyph's place
+            if !within_chain(ctx, ctx.chain + 3, span) || !ctx.spend(LimitKind::Shapes, span) {
+                return;
+            }
+            let Some(Sink::Shapes2(out)) = sinks.last_mut() else {
+                ctx.diag(span, "only pt and repeat belong inside a polygon");
+                return;
+            };
+            out.push(Shape2::TransformStart { tf: outer, span });
+            ctx.chain += 2;
+            tasks.push(Task::CloseTransform { steps: 2 });
+            for (pen, nodes) in glyphs.into_iter().rev() {
+                tasks.push(Task::CloseGlyph);
+                push_nodes(tasks, nodes, font_env.clone(), Turn::NONE);
+                tasks.push(Task::StartGlyph { pen, span });
+            }
+        }
         Open::Poly3d {
             style,
             children,
@@ -2032,6 +2394,374 @@ fn node_span(node: &Node) -> Span {
         | Node::Insert { span, .. }
         | Node::Badge { span, .. }
         | Node::Transform { span, .. }
-        | Node::Turn { span, .. } => *span,
+        | Node::Turn { span, .. }
+        | Node::Text { span, .. } => *span,
     }
+}
+
+// --- text ----------------------------------------------------------------
+
+/// A font as text is set in it: in its styles, with its params, metrics,
+/// advances and kerning evaluated, and its glyphs by the text they draw.
+struct FontInst<'a> {
+    name: String,
+    em: f64,
+    ascent: f64,
+    descent: f64,
+    slant: f64,
+    env: Env,
+    glyphs: BTreeMap<&'a str, Placed<'a>>,
+    /// Characters in its longest glyph name: how far a ligature reaches.
+    longest: usize,
+    notdef: Option<Placed<'a>>,
+    kerns: BTreeMap<(&'a str, &'a str), f64>,
+}
+
+/// A glyph ready to place: its name (none for notdef, which is never
+/// kerned), advance and shapes.
+#[derive(Clone, Copy)]
+struct Placed<'a> {
+    name: Option<&'a str>,
+    advance: f64,
+    nodes: &'a [Node],
+}
+
+/// "'é' (U+00E9)", or for a character that would not print, its code
+/// alone.
+fn describe_char(c: char) -> String {
+    if c.is_control() || c.is_whitespace() {
+        format!("U+{:04X}", c as u32)
+    } else {
+        format!("'{c}' (U+{:04X})", c as u32)
+    }
+}
+
+/// The font a text is set in, in its styles, built once and kept.
+fn font_instance<'a>(ctx: &mut Ctx<'a>, spec: &TextSpec, span: Span) -> Option<Rc<FontInst<'a>>> {
+    let key = (spec.font.clone(), spec.styles.clone());
+    if let Some(built) = ctx.fonts.get(&key) {
+        return built.clone();
+    }
+    let built = build_font(ctx, spec, span).map(Rc::new);
+    ctx.fonts.insert(key, built.clone());
+    built
+}
+
+fn build_font<'a>(ctx: &mut Ctx<'a>, spec: &TextSpec, span: Span) -> Option<FontInst<'a>> {
+    let resolved: &'a Resolved = ctx.resolved;
+    let Some(font) = resolved.fonts.get(&spec.font) else {
+        ctx.diag(
+            span,
+            format!(
+                "unknown font '{}'{}",
+                spec.font,
+                suggest(&spec.font, resolved.fonts.keys().map(|k| k.as_str()))
+            ),
+        );
+        return None;
+    };
+    // each style a variant of one of the font's axes, one to an axis,
+    // laid over it in its axes' order
+    let mut chosen: Vec<(usize, &'a Variant)> = Vec::new();
+    for style in &spec.styles {
+        let found = font.body.axes.iter().enumerate().find_map(|(i, a)| {
+            resolved
+                .axes
+                .get(a)
+                .and_then(|axis| axis.variants.iter().find(|v| &v.name == style))
+                .map(|v| (i, v))
+        });
+        let Some((i, v)) = found else {
+            let styles: Vec<&str> = font
+                .body
+                .axes
+                .iter()
+                .filter_map(|a| resolved.axes.get(a))
+                .flat_map(|axis| axis.variants.iter().map(|v| v.name.as_str()))
+                .collect();
+            ctx.diag(
+                span,
+                format!(
+                    "font '{}' has no style '{style}'{} ({})",
+                    font.name,
+                    suggest(style, styles.iter().copied()),
+                    if styles.is_empty() {
+                        "it opts into no axes".to_string()
+                    } else {
+                        format!("its styles: {}", styles.join(", "))
+                    }
+                ),
+            );
+            return None;
+        };
+        if let Some((_, other)) = chosen.iter().find(|(j, _)| *j == i) {
+            ctx.diag(
+                span,
+                format!(
+                    "text asks font '{}' for '{}' and '{style}', both of axis '{}'; choose one",
+                    font.name, other.name, font.body.axes[i]
+                ),
+            );
+            return None;
+        }
+        chosen.push((i, v));
+    }
+    chosen.sort_by_key(|(i, _)| *i);
+    let variants: Vec<&'a Variant> = chosen.into_iter().map(|(_, v)| v).collect();
+    let styled = style_font(font, &variants, &mut ctx.diags)?;
+
+    let count = styled.glyphs.len() as u64 + u64::from(styled.notdef.is_some());
+    let set: BTreeMap<LimitKind, (Limit, String)> = styled
+        .glyph_limit
+        .iter()
+        .map(|l| (LimitKind::GlyphLimit, l.clone()))
+        .collect();
+    let limit = in_force(LimitKind::GlyphLimit, &set, &resolved.lexicon_limits);
+    if let Some(max) = limit.limit {
+        if count > max {
+            let message = past_limit(
+                format!("font '{}' holds {count} glyphs", font.name),
+                LimitKind::GlyphLimit,
+                max,
+                &format!("glyphs, {}", limit.from),
+            );
+            ctx.diag(font.span, message);
+            return None;
+        }
+    }
+
+    let mut env = Scope::default();
+    for (pname, p) in &styled.params {
+        bind(ctx, &mut env, pname, p, font.span)?;
+    }
+    // the resolver has said what a font without these lacks
+    let (Some(em), Some(ascent), Some(descent)) = (styled.em, styled.ascent, styled.descent) else {
+        return None;
+    };
+    let em = eval_full(ctx, em, &env, font.span)?;
+    if em <= 0.0 {
+        ctx.diag(
+            font.span,
+            format!(
+                "font '{}' has an em of {em}; an em is more than 0",
+                font.name
+            ),
+        );
+        return None;
+    }
+    let ascent = eval_full(ctx, ascent, &env, font.span)?;
+    let descent = eval_full(ctx, descent, &env, font.span)?;
+    let slant = match styled.slant {
+        Some(s) => eval_full(ctx, s, &env, font.span)?,
+        None => 0.0,
+    };
+    let mut glyphs = BTreeMap::new();
+    let mut longest = 0;
+    for g in &styled.glyphs {
+        let advance = eval_full(ctx, &g.advance, &env, g.span)?;
+        longest = longest.max(g.name.chars().count());
+        glyphs.insert(
+            g.name.as_str(),
+            Placed {
+                name: Some(g.name.as_str()),
+                advance,
+                nodes: &g.nodes,
+            },
+        );
+    }
+    let notdef = match styled.notdef {
+        Some(g) => Some(Placed {
+            name: None,
+            advance: eval_full(ctx, &g.advance, &env, g.span)?,
+            nodes: &g.nodes,
+        }),
+        None => None,
+    };
+    let mut kerns = BTreeMap::new();
+    for k in &styled.kerns {
+        for side in [&k.left, &k.right] {
+            if !glyphs.contains_key(side.as_str()) {
+                // without axes, the resolver has said so
+                if !font.body.axes.is_empty() {
+                    ctx.diag(
+                        k.span,
+                        format!(
+                            "font '{}' kerns \"{side}\", which it has no glyph for in these \
+                             styles{}",
+                            font.name,
+                            suggest(side, glyphs.keys().copied())
+                        ),
+                    );
+                }
+                return None;
+            }
+        }
+        let by = eval_full(ctx, &k.by, &env, k.span)?;
+        kerns.insert((k.left.as_str(), k.right.as_str()), by);
+    }
+    Some(FontInst {
+        name: font.name.clone(),
+        em,
+        ascent,
+        descent,
+        slant,
+        env: Rc::new(env),
+        glyphs,
+        longest,
+        notdef,
+        kerns,
+    })
+}
+
+/// A text laid out (SPEC §4): its characters held to the icon's text
+/// limits and to what can be set left to right, each place taking the
+/// longest glyph that matches there, or the font's notdef; advances and
+/// kerning lay them along the baseline, and the text's map scales the em
+/// grid to its size, turns y up, slants it, and aligns it at its anchor.
+fn set_text<'a: 'n, 'n>(
+    ctx: &mut Ctx<'a>,
+    words: &str,
+    [x, y]: [EvNum; 2],
+    size: f64,
+    max_width: Option<f64>,
+    spec: &TextSpec,
+    span: Span,
+) -> Option<Open<'n>> {
+    let chars: Vec<char> = words.chars().collect();
+    if chars.is_empty() {
+        return None;
+    }
+    let n = chars.len() as u64;
+    if let Some(limit) = ctx.text_length.limit {
+        if n > limit {
+            let message = past_limit(
+                format!("icon '{}' sets {n} characters in one text here", ctx.icon),
+                LimitKind::TextLength,
+                limit,
+                &format!("characters, {}", ctx.text_length.from),
+            );
+            ctx.exhausted = true;
+            ctx.diag(span, message);
+            return None;
+        }
+    }
+    ctx.text_limit.1 += n;
+    if let Some(limit) = ctx.text_limit.0.limit {
+        if ctx.text_limit.1 > limit {
+            let message = past_limit(
+                format!(
+                    "icon '{}' sets {} characters of text by here",
+                    ctx.icon, ctx.text_limit.1
+                ),
+                LimitKind::TextLimit,
+                limit,
+                &format!("characters, {}", ctx.text_limit.0.from),
+            );
+            ctx.exhausted = true;
+            ctx.diag(span, message);
+            return None;
+        }
+    }
+    for &c in &chars {
+        if let Some(why) = crate::text::refusal(c) {
+            ctx.diag(span, format!("text cannot set {}: {why}", describe_char(c)));
+            return None;
+        }
+    }
+    let font = font_instance(ctx, spec, span)?;
+
+    let mut placed: Vec<Placed<'a>> = Vec::new();
+    let mut i = 0;
+    while i < chars.len() {
+        let mut found = None;
+        for len in (1..=font.longest.min(chars.len() - i)).rev() {
+            let piece: String = chars[i..i + len].iter().collect();
+            if let Some(g) = font.glyphs.get(piece.as_str()) {
+                found = Some((*g, len));
+                break;
+            }
+        }
+        match (found, font.notdef) {
+            (Some((g, len)), _) => {
+                placed.push(g);
+                i += len;
+            }
+            (None, Some(g)) => {
+                placed.push(g);
+                i += 1;
+            }
+            (None, None) => {
+                ctx.diag(
+                    span,
+                    format!(
+                        "font '{}' has no glyph for {}, and no notdef to draw in its place",
+                        font.name,
+                        describe_char(chars[i])
+                    ),
+                );
+                return None;
+            }
+        }
+    }
+
+    let mut pens = Vec::with_capacity(placed.len());
+    let mut pen = 0.0;
+    for (j, g) in placed.iter().enumerate() {
+        pens.push(pen);
+        pen += g.advance;
+        if let (Some(a), Some(b)) = (g.name, placed.get(j + 1).and_then(|h| h.name)) {
+            if let Some(k) = font.kerns.get(&(a, b)) {
+                pen += k;
+            }
+        }
+    }
+    let width = pen;
+    let mut k = size / font.em;
+    if let Some(most) = max_width {
+        if width > 0.0 && width * k > most {
+            k = most / width;
+        }
+    }
+    let dx = match spec.anchor {
+        TextAnchor::Start => 0.0,
+        TextAnchor::Middle => -width / 2.0,
+        TextAnchor::End => -width,
+    };
+    let lift = match spec.baseline {
+        Baseline::Alphabetic => 0.0,
+        Baseline::Top => font.ascent * k,
+        Baseline::Middle => (font.ascent - font.descent) / 2.0 * k,
+        Baseline::Bottom => -font.descent * k,
+    };
+    use crate::affine;
+    let m = affine::mul(
+        &affine::translate(0.0, lift),
+        &affine::mul(
+            &affine::skew_x(font.slant),
+            &affine::mul(&affine::scale(k, -k), &affine::translate(dx, 0.0)),
+        ),
+    );
+    let outer = EvTransform {
+        origin: [EvNum::Lit(0.0), EvNum::Lit(0.0)],
+        steps: vec![
+            EvStep::Matrix(Box::new(m.map(EvNum::Lit))),
+            EvStep::Translate([x, y]),
+        ],
+        onto: None,
+        bounds: spec.bounds,
+        strokes: None,
+        paint: spec.fill.clone(),
+    };
+    let glyphs: Vec<(f64, &'n [Node])> = placed
+        .iter()
+        .zip(pens)
+        .filter(|(g, _)| !g.nodes.is_empty())
+        .map(|(g, pen)| (pen, g.nodes))
+        .collect();
+    Some(Open::Text {
+        outer,
+        glyphs,
+        font_env: font.env.clone(),
+        span,
+    })
 }

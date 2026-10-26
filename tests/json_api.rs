@@ -131,3 +131,46 @@ fn an_empty_lexicon_is_fine_and_empty() {
     assert_eq!(out["ok"], true, "{out}");
     assert_eq!(out["ir"]["icons"], json!([]));
 }
+
+#[test]
+fn one_icon_with_params_compiles_alone() {
+    let mut input = files(&[("text.ilx", include_str!("../tests/fixtures/text.ilx"))]);
+    input["icon"] = json!("port-label");
+    input["params"] = json!({"ports": 24});
+    let out = run(&input);
+    assert_eq!(out["ok"], true, "{out}");
+    let icons = out["ir"]["icons"].as_array().unwrap();
+    assert_eq!(icons.len(), 1);
+    assert_eq!(icons[0]["name"], "port-label");
+
+    // what it cannot answer is the request's fault, not the lexicon's
+    input["params"] = json!({"ports": "24"});
+    let out = run(&input);
+    assert_eq!(out["ok"], false);
+    assert_eq!(
+        out["input_error"],
+        "param 'ports' of icon 'port-label' is a number; give it a number"
+    );
+    assert_eq!(out["ir"], Value::Null);
+    input["params"] = json!({"ports": [1]});
+    let out = run(&input);
+    assert!(
+        out["input_error"]
+            .as_str()
+            .unwrap()
+            .starts_with("expected {\"files\""),
+        "{out}"
+    );
+    input["icon"] = json!("nope");
+    input["params"] = json!({});
+    assert_eq!(
+        run(&input)["input_error"],
+        "the lexicon emits no icon 'nope'"
+    );
+    let mut input = files(&[("text.ilx", include_str!("../tests/fixtures/text.ilx"))]);
+    input["params"] = json!({"ports": 24});
+    assert_eq!(
+        run(&input)["input_error"],
+        "params are set on one icon; name it with \"icon\""
+    );
+}

@@ -77,6 +77,14 @@ impl Expr {
         self.depth
     }
 
+    /// The name it is, when it is nothing but a name.
+    pub fn as_name(&self) -> Option<&str> {
+        match self.nodes.as_slice() {
+            [ExprNode::Var(name)] => Some(name),
+            _ => None,
+        }
+    }
+
     fn measure_depth(&self) -> usize {
         let mut depth: Vec<usize> = Vec::with_capacity(self.nodes.len());
         for node in &self.nodes {

@@ -65,6 +65,9 @@ New defaults follow the same rule.
 - `fragment "name" { … }` — a parameterized geometry group instantiated
   with `insert`. Fragments cannot extend or be extended.
 - `axis "name" { … }` — a variant overlay set (§6).
+- `font "name" { … }` — glyphs, metrics and kerning that `text` is set
+  in (§4, Fonts and text). Never emitted; a font cannot extend or be
+  extended, and its styles are variants of the axes it opts into.
 
 `extends` may be written as a property (`icon "x" extends="y"`) or as a
 child node (`extends "y"`); declaring both is an error.
@@ -77,7 +80,8 @@ child node (`extends "y"`); declaring both is an error.
 - `describe "…"` — documentation; chains **concatenate** ancestor→child.
 - `param name default` — a named number; the default may be an
   expression. Params evaluate in declaration order, and earlier params
-  are in scope for later defaults.
+  are in scope for later defaults. `param name (text)"…"` is a text
+  param, whose default is text with interpolations (§5, Text values).
 - `part "name" { …geometry… }` — all geometry lives in named parts; the
   name is the handle children use to modify it.
 - `replace "name" { … }`, `remove "name"` — child-side part operations
@@ -111,9 +115,10 @@ child node (`extends "y"`); declaring both is an error.
   `error`, `grow`, `scale` or `clip`. Child value wins. Not in
   fragments.
 - `shape-limit n`, `repeat-limit n`, `insert-depth n`,
-  `expression-depth n`, `transform-chain n` — this definition's
-  limits (§9); child value wins. Not in fragments, whose work counts
-  toward the icon they are inserted into.
+  `expression-depth n`, `transform-chain n`, `text-length n`,
+  `text-limit n` — this definition's limits (§9); child value wins. Not
+  in fragments, whose work counts toward the icon they are inserted
+  into.
 
 ## 4. Geometry vocabulary
 
@@ -145,6 +150,7 @@ exists to give you `x`/`y`):
 | `arc cx cy r a0 a1` | | degrees, counter-clockwise from +x, y-flipped; stroke `ink` 1.4; large-arc flag set when \|a1−a0\| > 180 |
 | `path d="M{x-10},{y} h20"` | style | `{…}` interpolates numeric expressions with `x`/`y` in scope |
 | `poly { pt x y … }` | style | fill `ink`, stroke `none` |
+| `text x y "…"` | `font`, `size`, … | a line of text set in a font (below) |
 
 Context-polymorphic: `repeat count "var" { … }` and
 `insert "fragment" arg=… { }` work in both dimensions and inside poly
@@ -255,6 +261,108 @@ nodes.
 - Arbitrary angles are out of scope: a box turned 30° shows faces that
   depend on the angle, which painter order cannot sort.
 
+### Fonts and text
+
+A font is drawn in isolex, as everything else is: each glyph is shapes,
+so text compiles to shapes, and the IR, the reference SVG and every
+renderer agree on it to the byte, with no font looked up at draw time.
+
+A `font "name" { … }` holds:
+
+- `em n` — the size of its design grid, in its own units: a text of
+  `size=s` draws one em `s` output units tall. More than 0.
+- `ascent n`, `descent n` — how far it reaches above its baseline and
+  below it, both as distances; `baseline=` aligns by them.
+- `kind "stroke"|"outline"` — whether its glyphs are drawn along their
+  middles, at a stroke width (often a param), or as filled outlines.
+  It says how the font is meant to be drawn, for the tools that convert
+  fonts; it changes nothing about how a text compiles.
+- `slant deg` — a lean, as `skew-x` leans (§4): `-12` leans right.
+  Default 0; an italic style sets it.
+- `glyph "A" advance=6 { …2-D nodes… }` — the glyph for the text in its
+  name: one character, or several, a ligature, which replaces that run
+  of characters wherever it occurs. `advance` is how far it moves the
+  pen. Its nodes are drawn in the em grid: its origin on the baseline at
+  the pen, x to the right and y **up**, as fonts are drawn. A glyph with
+  no nodes (a space) draws nothing and still advances.
+- `notdef advance=6 { … }` — the glyph drawn for a character no glyph
+  draws. Without one, such a character is an error.
+- `kern "A" "V" -0.6` — space added between two glyphs drawn side by
+  side, in the em grid, by their names.
+- `param`, `axes`, `describe` and `glyph-limit` (§9), as elsewhere.
+
+A font needs `em`, `ascent`, `descent` and `kind`; one without them is
+an error naming what it lacks, and so is a kern of a glyph the font
+does not draw. A glyph's nodes see only the font's params, as a fragment's see
+only its own (§5); `x` and `y` mean nothing there, and a glyph cannot
+set text. Its strokes and paints are held to the lexicon as any are.
+
+**Styles.** A font opts into axes with `axes`, and their variants are
+its styles: bold, italic, condensed, each a variant that restates a
+param (a stroke-built font's weight), its metrics, its slant, or glyphs
+and kerns (replacing the font's by name, or adding to them). A font
+that draws only its regular weight thereby has a bold all the same. A
+text asks for styles by name, at most one from each axis, and they are
+laid over the font in its axes' order, as an icon's variants are (§6).
+A style that sets what only an icon has (a part, a footprint, a
+category) is an error where it styles a font, and a variant that sets
+a font's metrics, glyphs or kerning is an error where it overlays an
+icon.
+
+**Text.** `text x y "…"` stands among 2-D nodes. Its arguments are the
+point it is set from and what it says, text with `{…}` interpolations
+(§5, Text values); its properties:
+
+- `font="name"` and `size=s` — required; `size` is the em in output
+  units, more than 0.
+- `style="bold italic"` — its styles, apart by spaces.
+- `anchor="start"|"middle"|"end"` — where `x` falls along it. Default
+  `start`.
+- `baseline="alphabetic"|"top"|"middle"|"bottom"` — where `y` falls on
+  it: on the baseline, on the ascent line, halfway between the ascent
+  and descent lines, or on the descent line. Default `alphabetic`.
+- `max-width=w` — wider than this, it is scaled down, height too, until
+  it fits.
+- `fill="token"` — every paint of its glyphs but `none`, fill and
+  stroke, written or defaulted, is drawn in this token instead.
+- `bounds=` and `when`, as a transform's (§4).
+
+It is laid out when the lexicon compiles, in this order:
+
+1. Its text is interpolated, and held to `text-length` and `text-limit`
+   (§9).
+2. Each character must be one text can set left to right, a glyph after
+   another; these are refused, each an error naming it: control
+   characters (text is one line), combining marks (U+0300–036F,
+   1AB0–1AFF, 1DC0–1DFF, 20D0–20FF, FE20–FE2F), right-to-left scripts
+   and the controls that order them (U+0590–08FF, FB1D–FDFF, FE70–FEFF,
+   10800–10FFF, 1E800–1EFFF, 200E–200F, 202A–202E, 2066–2069), scripts
+   whose letters change shape with their neighbors (U+0900–0DFF,
+   0E00–0EFF, 0F00–0FFF, 1000–109F, 1100–11FF, 1780–17FF, A960–A97F,
+   D7B0–D7FF), and joiners and variation selectors (U+200C–200D,
+   FE00–FE0F, E0100–E01EF).
+3. From its first character on, each place takes the glyph whose name
+   is the longest run of characters there, else `notdef` for one
+   character.
+4. The pen starts at 0, and each glyph is placed at it; the pen then
+   moves by the glyph's advance, and by the kern of it and the next
+   glyph, if there is one (`notdef` is never kerned). Its width `W` is
+   where the pen ends.
+5. `k = size / em`, or less, `max-width / W`, when `W·k` is more than
+   `max-width`. `dx` is 0, `−W/2` or `−W` by its anchor, and `lift` is
+   0, `ascent·k`, `(ascent − descent)/2·k` or `−descent·k` by its
+   baseline.
+
+It draws through the map `T(x, y) · T(0, lift) · skewX(slant) ·
+S(k, −k) · T(dx, 0)`, each glyph through that and `T(pen, 0)`: the em
+grid scaled to its size, turned y-down, leaned, aligned and set at its
+point, and its glyphs along the baseline. Its strokes scale with it.
+These are transforms like any (§4): they stand inside whatever
+transforms are around the text, count three steps toward
+`transform-chain` (its own two, and a glyph's place), and are held to
+the icon's frame, the text as one transform with `bounds=`. Text with
+nothing in it draws nothing.
+
 Style properties everywhere applicable: `fill`, `stroke` (theme tokens
 or `none`), `width`, `dash` ("3 2.5"), `opacity`, and the `when` guard.
 Each node takes only the properties docs/primitives.md lists for it; any
@@ -314,8 +422,31 @@ result is not one. The KDL literals `#inf`, `#-inf` and `#nan` are
 errors wherever a number is expected.
 
 Deliberately absent: user-defined functions, recursion, assignment,
-strings-as-values, I/O, randomness. Evaluation is total and pure;
+strings in expressions, I/O, randomness. Evaluation is total and pure;
 compilation always terminates.
+
+### Text values
+
+A string is an expression wherever a number goes, so text is marked:
+`param label (text)"PoE {ports}"` declares a text param, and
+`insert "plate" label=(text)"U{u}"` passes text to one. Any other type
+annotation is an error. Text, in a text param or a `text` node, is
+literal but for `{…}`, which holds an expression or a text param's
+name; `{{` and `}}` are a brace of their own.
+
+- A text param's name in braces is its text.
+- An expression in braces is a number, printed by the formatting rule
+  (§7) and then without the zeros that add nothing: 48 is `48`, 2.5 is
+  `2.5`, 1/3 is `0.33`, and −0.001 is `0`.
+- Text is laid out when the lexicon compiles, before any anchor is
+  placed, so `x` and `y` are not known to it.
+
+Text params are late-bound as numbers are (§6): they evaluate in
+declaration order, each seeing the params before it, and a child's
+value takes its slot. A text param is not a number: naming one in an
+expression is an error, and so is overriding a number param with text
+or the reverse, anywhere down a chain, or passing a fragment text for a
+number param or a number for a text one.
 
 Scoping: params and enclosing `repeat` variables are in scope;
 fragments are **hygienic** — a fragment body sees only its own params
@@ -337,7 +468,8 @@ Single `extends` chain, walked root-first, merged child-over-parent:
    replacing or removing an unknown name is an error with a
    nearest-name suggestion.
 3. `category`/`footprint`/`canvas`/`view`/`transform-bounds`: child
-   wins. `describe` concatenates.
+   wins. `describe` concatenates. A param keeps its type, number or
+   text (§5).
    `axes` union (first-seen order). `grant`s union by token, in
    first-seen order; a child granting a token its ancestor granted keeps
    that slot and replaces the reason.
@@ -346,7 +478,9 @@ Cycles are errors reporting the full chain. Only `base` and `icon` can
 be extended.
 
 An `axis` holds `variant "name" { …definition body… }` overlays and an
-optional `emit-base #false`, and nothing else: any other node in an axis
+optional `emit-base #false`, and nothing else; a variant body may hold
+what an icon's does or what a font's does, since fonts opt into axes
+too (§4, Fonts and text): any other node in an axis
 body is an error, and so is `extends` on an axis or in a variant (a
 variant overlays the icon that opts into its axis; it has no parent of
 its own). An icon (or ancestor) opts in with `axes`.
@@ -397,7 +531,9 @@ f64 (renderers apply the formatting rule below); numbers **inside** path
 `d` strings are already formatted.
 
 A **group** is shapes drawn through an affine map: a transform's (§4),
-a badge's, or both multiplied out. It carries `matrix`, six numbers
+a badge's, a text's glyph's, or several multiplied out. Text adds no
+kind of shape: its glyphs are the paths, polygons and other shapes they
+are drawn with, each glyph in a group of its own. It carries `matrix`, six numbers
 `[a, b, c, d, e, f]` as SVG's `matrix()`; optionally `clip`, a convex
 polygon (its points) in the coordinates the group is drawn in, which
 cuts what is drawn to it; optionally `strokes: "fixed"`, which keeps
@@ -478,12 +614,16 @@ it:
 | `icon-limit` | icons the lexicon emits, after axis products | 100 000 | lexicon block |
 | `expression-depth` | how deeply one expression nests (§5) | 256 | lexicon block, definition |
 | `transform-chain` | transform steps one shape is drawn through, in every transform around it, through fragments, and a badge one more | 64 | lexicon block, definition |
+| `text-length` | characters in one text, once interpolated | 1 000 | lexicon block, definition |
+| `text-limit` | characters of text in one icon, all its texts together | 10 000 | lexicon block, definition |
+| `glyph-limit` | glyphs one font draws in the styles it is set in, `notdef` included | 65 536 | lexicon block, font |
 
 Each takes a positive whole number, or `#null` for no limit. A
 definition's value wins over the lexicon block's, which wins over the
 default; a definition's value is inherited down its `extends` chain,
 child over parent, and an axis variant can set one like any other body
-node.
+node. `glyph-limit` counts a font, so a font and its styles set it, not
+an icon.
 
 Expansion counts as it goes and stops at the node that goes past a
 limit, with an error naming the limit, its value and where that came
@@ -494,8 +634,9 @@ before any combination is built.
 The defaults are the values above unless the compiler was built with
 `ISOLEX_DEFAULT_SHAPE_LIMIT`, `ISOLEX_DEFAULT_REPEAT_LIMIT`,
 `ISOLEX_DEFAULT_INSERT_DEPTH`, `ISOLEX_DEFAULT_ICON_LIMIT`,
-`ISOLEX_DEFAULT_EXPRESSION_DEPTH` or `ISOLEX_DEFAULT_TRANSFORM_CHAIN`
-set. Such a
+`ISOLEX_DEFAULT_EXPRESSION_DEPTH`, `ISOLEX_DEFAULT_TRANSFORM_CHAIN`,
+`ISOLEX_DEFAULT_TEXT_LENGTH`, `ISOLEX_DEFAULT_TEXT_LIMIT` or
+`ISOLEX_DEFAULT_GLYPH_LIMIT` set. Such a
 build accepts or rejects a lexicon differently but never compiles it to
 different IR; a lexicon that needs more than the values above should
 say so with a directive.
@@ -504,7 +645,9 @@ say so with a directive.
 
 `isolex check <dir>` parses, resolves, expands and projects, reporting
 diagnostics and counts. `isolex compile <dir> --ir <path|->` writes the
-IR JSON. `isolex docs <dir>` emits per-category markdown reference
+IR JSON. `compile` and `render` take one icon too: `--icon <name>`,
+then any of `--param <name>=<number>` and `--text <name>=<text>`, as
+`compile_one` below. `isolex docs <dir>` emits per-category markdown reference
 tables from `describe` metadata. `isolex render <dir> --svg <out>
 [--palette <file>]` writes one `<icon>.svg` per icon into `<out>` (§7),
 coloring tokens from a built-in palette that a palette file (a JSON
@@ -520,6 +663,20 @@ library function `isolex::compile`, and as a WebAssembly module that
 imports nothing and takes and returns JSON (`isolex::json`), whose IR is
 the IR `compile` writes (compact rather than indented) and whose
 diagnostics are the CLI's as data.
+
+**One icon.** A value known only when one thing is drawn (its name, a
+code, a count) is a param set on a compile of that one icon:
+`isolex::compile_one(files, icon, params)`, or `"icon"` and `"params"`
+beside `"files"` in the JSON. The icon is named as the lexicon emits it,
+a variant's name included. Each param takes the slot of the one it
+sets, as a child's value would, late-bound into everything that reads
+it: a number for a number param, and text, taken as it is with no
+interpolation, for a text param. The whole lexicon is parsed and
+resolved, and only that icon is expanded and projected, with those it
+badges, which it draws; the IR holds that icon alone. The same inputs
+always compile to the same IR, so a host can keep it by them. An icon
+the lexicon does not emit, or a param it does not have, or of the other
+type, is refused as a request rather than reported as a diagnostic.
 
 ## 11. Conformance
 

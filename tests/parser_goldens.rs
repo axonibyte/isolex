@@ -53,6 +53,12 @@ fn fixtures_are_checked_out_with_lf() {
             "transforms.svg.golden",
             include_str!("fixtures/transforms.svg.golden"),
         ),
+        ("text.ilx", include_str!("fixtures/text.ilx")),
+        (
+            "text.ir.golden.json",
+            include_str!("fixtures/text.ir.golden.json"),
+        ),
+        ("text.svg.golden", include_str!("fixtures/text.svg.golden")),
     ] {
         assert!(
             !text.contains('\r'),
@@ -412,6 +418,156 @@ fn diagnostics_name_the_problem_and_the_place() {
             2,
             &["set view on that icon"],
         ),
+        (
+            "font \"f\" extends=\"g\" {\n  em 10\n}",
+            1,
+            &["a font cannot extend", "variants of its axes"],
+        ),
+        (
+            "font \"f\" {\n  part \"p\" { }\n}",
+            2,
+            &["a font holds em", "'part' belongs in an icon"],
+        ),
+        (
+            "font \"f\" {\n  glyf \"A\" advance=1\n}",
+            2,
+            &["unknown node 'glyf' in a font", "did you mean 'glyph'?"],
+        ),
+        (
+            "icon \"x\" {\n  glyph \"A\" advance=1\n}",
+            2,
+            &["'glyph' belongs in a font, not in an icon"],
+        ),
+        (
+            "font \"f\" {\n  glyph \"A\" { }\n}",
+            2,
+            &["glyph needs advance="],
+        ),
+        (
+            "font \"f\" {\n  glyph \"\" advance=1\n}",
+            2,
+            &["a glyph needs the text it draws"],
+        ),
+        (
+            "font \"f\" {\n  glyph \"A\" advance=1\n  glyph \"A\" advance=2\n}",
+            3,
+            &["glyph \"A\" is drawn twice in this font"],
+        ),
+        (
+            "font \"f\" {\n  notdef advance=1\n  notdef advance=2\n}",
+            3,
+            &["notdef is drawn twice here"],
+        ),
+        (
+            "font \"f\" {\n  glyph \"A\" advance=1 width=2\n}",
+            2,
+            &["unknown property 'width' on glyph; glyph takes only advance"],
+        ),
+        (
+            "font \"f\" {\n  kind \"bold\"\n}",
+            2,
+            &["kind is \"stroke\"", "or \"outline\""],
+        ),
+        (
+            "font \"f\" {\n  kern \"A\" -1\n}",
+            2,
+            &["kern takes two glyphs and the space between them"],
+        ),
+        (
+            "font \"f\" {\n  kern \"A\" \"V\" -1\n  kern \"A\" \"V\" -2\n}",
+            3,
+            &["\"A\" \"V\" is kerned twice in this font"],
+        ),
+        (
+            "font \"f\" {\n  em 1 2\n}",
+            2,
+            &["em takes one number, in the font's em grid"],
+        ),
+        (
+            "font \"f\" {\n  glyph \"A\" advance=1 { box 0 0 0 1 1 1 }\n}",
+            2,
+            &["'box' is a 3-D node and cannot appear inside 'at'"],
+        ),
+        (
+            "font \"f\" {\n  text-limit 4\n}",
+            2,
+            &["'text-limit' belongs in an icon"],
+        ),
+        (
+            "icon \"x\" {\n  glyph-limit 4\n}",
+            2,
+            &["'glyph-limit' belongs in a font"],
+        ),
+        (
+            "icon \"x\" {\n  param label (txt)\"a\"\n}",
+            2,
+            &["unknown type (txt)", "did you mean 'text'?"],
+        ),
+        (
+            "icon \"x\" {\n  param label (text)4\n}",
+            2,
+            &["(text) takes a string"],
+        ),
+        (
+            "icon \"x\" {\n  param label (text)\"a{\"\n}",
+            2,
+            &["unclosed '{' in text", "write {{ for a brace of its own"],
+        ),
+        (
+            "icon \"x\" {\n  param label (text)\"a{1 +}\"\n}",
+            2,
+            &["in text expression '1 +'"],
+        ),
+        (
+            "icon \"x\" {\n  part \"p\" {\n    insert \"f\" label=(texts)\"a\"\n  }\n}",
+            3,
+            &["unknown type (texts)"],
+        ),
+        (
+            "icon \"x\" {\n  part \"p\" {\n    at 0 0 0 {\n      text 0 0 \"hi\" size=2\n    }\n  }\n}",
+            4,
+            &["text needs font=\"…\""],
+        ),
+        (
+            "icon \"x\" {\n  part \"p\" {\n    at 0 0 0 {\n      text 0 0 \"hi\" font=\"f\"\n    }\n  }\n}",
+            4,
+            &["text needs size="],
+        ),
+        (
+            "icon \"x\" {\n  part \"p\" {\n    at 0 0 0 {\n      text 0 \"hi\" font=\"f\" size=2\n    }\n  }\n}",
+            4,
+            &["text takes where it starts and what it says, found 2 argument(s)"],
+        ),
+        (
+            "icon \"x\" {\n  part \"p\" {\n    at 0 0 0 {\n      text 0 0 5 font=\"f\" size=2\n    }\n  }\n}",
+            4,
+            &["text's third argument is what it says, a string"],
+        ),
+        (
+            "icon \"x\" {\n  part \"p\" {\n    at 0 0 0 {\n      text 0 0 \"a\" font=\"f\" size=2 anchor=\"centre\"\n    }\n  }\n}",
+            4,
+            &["anchor is \"start\", \"middle\" or \"end\""],
+        ),
+        (
+            "icon \"x\" {\n  part \"p\" {\n    at 0 0 0 {\n      text 0 0 \"a\" font=\"f\" size=2 baseline=\"midle\"\n    }\n  }\n}",
+            4,
+            &["baseline is \"alphabetic\"", "did you mean 'middle'?"],
+        ),
+        (
+            "icon \"x\" {\n  part \"p\" {\n    at 0 0 0 {\n      text 0 0 \"a\" font=\"f\" size=2 bounds=\"wrap\"\n    }\n  }\n}",
+            4,
+            &["bounds is \"error\""],
+        ),
+        (
+            "icon \"x\" {\n  part \"p\" {\n    at 0 0 0 {\n      text 0 0 \"a\" font=\"f\" size=2 stroke=\"ink\"\n    }\n  }\n}",
+            4,
+            &["unknown property 'stroke' on text"],
+        ),
+        (
+            "icon \"x\" {\n  part \"p\" {\n    text 0 0 \"a\" font=\"f\" size=2\n  }\n}",
+            3,
+            &["'text' is a 2-D node and only appears inside an 'at' anchor group"],
+        ),
     ];
 
     for (src, line, fragments) in cases {
@@ -464,7 +620,9 @@ fn every_property_a_node_reads_is_accepted() {
         pt 0 0
       }
       transform origin="x y" rotate=1 when="1 == 1" { circle 0 0 1 }
+      text 0 0 "a{1}" font="f" style="bold" size=1 anchor="end" baseline="top" fill="ink" max-width=4 bounds="grow" when="1 == 1"
     }
+    insert "f" label=(text)"U{1}"
     transform origin="1 2" translate="1 2" rotate=3 scale="1 2" skew-x=1 skew-y=1 mirror="down" onto="front" of="box 0 0 0 1 1 1" bounds="clip" strokes="fixed" when="1 == 1" {
       tile 0 0 0 1 1
     }
@@ -488,7 +646,38 @@ fn every_property_a_node_reads_is_accepted() {
   view 90
   transform-bounds "grow"
   transform-chain 8
+  text-length 8
+  text-limit 8
+  param label (text)"U{1}"
   grant "accent" reason="it is a warning"
+}
+font "f" {
+  describe "d"
+  em 10
+  ascent 8
+  descent 2
+  slant -12
+  kind "outline"
+  param weight 1
+  axes "a"
+  glyph "A" advance=6 { path d="M0,0 h1" }
+  notdef advance=6 { }
+  kern "A" "A" -1
+  glyph-limit 10
+}
+axis "a" {
+  variant "bold" {
+    param weight 2
+    em 12
+    ascent 9
+    descent 3
+    slant 0
+    kind "stroke"
+    glyph "B" advance=1 { }
+    notdef advance=1 { }
+    kern "B" "B" 1
+    glyph-limit 12
+  }
 }"#;
     let outcome = parse_one("t.ilx", src);
     assert_eq!(outcome.diags, vec![], "every property here is read");

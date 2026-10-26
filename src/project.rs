@@ -81,6 +81,8 @@ struct Occ {
     local: Mat,
     bounds: Option<Bounds>,
     strokes: Option<Strokes>,
+    /// A text's fill, for the glyphs drawn in it.
+    paint: Option<String>,
     span: Span,
 }
 
@@ -819,9 +821,41 @@ fn open_transform(ctx: &mut Ctx, tf: &EvTransform, env: &BTreeMap<String, f64>, 
         local,
         bounds: tf.bounds,
         strokes: tf.strokes,
+        paint: tf.paint.clone(),
         span,
     });
     ctx.open.push(ctx.occs.len() - 1);
+}
+
+/// The fill of the nearest text around what is projected now, if any.
+fn text_paint(ctx: &Ctx) -> Option<String> {
+    let mut at = ctx.open.last().copied();
+    while let Some(o) = at {
+        if let Some(p) = &ctx.occs[o].paint {
+            return Some(p.clone());
+        }
+        at = ctx.occs[o].parent;
+    }
+    None
+}
+
+/// A glyph's shape in its text's fill: every paint but none, written or
+/// defaulted, is drawn in it (SPEC §4), and held to the vocabulary so.
+fn repaint(shape: &mut IrShape, paint: &str) {
+    match shape {
+        IrShape::Polygon { fill, stroke, .. }
+        | IrShape::Path { fill, stroke, .. }
+        | IrShape::Ellipse { fill, stroke, .. }
+        | IrShape::Circle { fill, stroke, .. }
+        | IrShape::Rect { fill, stroke, .. } => {
+            for p in [fill, stroke] {
+                if p != "none" {
+                    *p = paint.to_string();
+                }
+            }
+        }
+        IrShape::Group { .. } => {}
+    }
 }
 
 fn shape_span(shape: &Shape) -> Span {
@@ -1112,6 +1146,11 @@ fn project_shape(ctx: &mut Ctx, shape: &Shape, out: &mut Vec<IrShape>) {
                 }
                 let before = out.len();
                 project_2d(ctx, child, &env, out);
+                if let Some(paint) = text_paint(ctx) {
+                    for shape in &mut out[before..] {
+                        repaint(shape, &paint);
+                    }
+                }
                 ctx.tag_up_to(out.len());
                 check_vocabulary(ctx, &out[before..], shape2_span(child));
             }

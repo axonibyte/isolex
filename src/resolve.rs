@@ -29,7 +29,7 @@ pub struct ResolvedDef {
     pub describe: Vec<String>,
     /// Declaration-ordered; later entries with the same name never occur
     /// (overrides replace in place).
-    pub params: Vec<(String, Num)>,
+    pub params: Vec<(String, Param)>,
     pub axes: Vec<String>,
     pub grants: Vec<Grant>,
     pub parts: Vec<(String, Vec<Node>)>,
@@ -58,6 +58,7 @@ pub struct Resolved {
     /// and consumers inspecting the tree do.
     pub bases: BTreeMap<String, ResolvedDef>,
     pub fragments: BTreeMap<String, Definition>,
+    pub fonts: BTreeMap<String, Definition>,
     pub axes: BTreeMap<String, AxisDef>,
     /// Limits the lexicon block sets for every icon.
     pub lexicon_limits: Limits,
@@ -149,11 +150,17 @@ pub fn resolve(lexicon: &Lexicon) -> Resolved {
                     },
                 );
             }
+            DefKind::Font => {
+                out.fonts.insert(def.name.clone(), def.clone());
+            }
             _ => {}
         }
     }
 
     check_grants(&mut ctx, lexicon, &mut out.warnings);
+    for def in lexicon.defs.iter().filter(|d| d.kind == DefKind::Font) {
+        check_font(&mut ctx, def, &out.axes);
+    }
 
     // --- resolve each base/icon ---------------------------------------
     for def in &lexicon.defs {
@@ -304,13 +311,7 @@ fn merge_body(ctx: &mut Ctx, r: &mut ResolvedDef, body: &DefBody, whose: &str) {
         r.transform_bounds = Some(b);
     }
     r.describe.extend(body.describe.iter().cloned());
-    for (name, value, _) in &body.params {
-        if let Some(slot) = r.params.iter_mut().find(|(n, _)| n == name) {
-            slot.1 = value.clone();
-        } else {
-            r.params.push((name.clone(), value.clone()));
-        }
-    }
+    merge_params(ctx, &mut r.params, &body.params, whose);
     for a in &body.axes {
         if !r.axes.contains(a) {
             r.axes.push(a.clone());
@@ -365,9 +366,219 @@ fn merge_body(ctx: &mut Ctx, r: &mut ResolvedDef, body: &DefBody, whose: &str) {
     }
 }
 
+/// Params override in place, keeping their slot; a param keeps its type,
+/// number or text, down the chain.
+fn merge_params(
+    ctx: &mut Ctx,
+    params: &mut Vec<(String, Param)>,
+    over: &[(String, Param, Span)],
+    whose: &str,
+) {
+    fn kind(p: &Param) -> &'static str {
+        match p {
+            Param::Num(_) => "a number",
+            Param::Text(_) => "text",
+        }
+    }
+    for (name, value, span) in over {
+        match params.iter_mut().find(|(n, _)| n == name) {
+            Some(slot) if kind(&slot.1) != kind(value) => ctx.diag(
+                *span,
+                format!(
+                    "'{whose}' sets param '{name}' to {}, but it is {} where it was declared; \
+                     a param keeps its type",
+                    kind(value),
+                    kind(&slot.1)
+                ),
+            ),
+            Some(slot) => slot.1 = value.clone(),
+            None => params.push((name.clone(), value.clone())),
+        }
+    }
+}
+
+/// What a font is drawn with: its own body, then each style's variant
+/// laid over it, in its axes' order.
+#[derive(Debug, Clone)]
+pub struct FontStyled<'a> {
+    pub name: String,
+    pub params: Vec<(String, Param)>,
+    pub em: Option<&'a Num>,
+    pub ascent: Option<&'a Num>,
+    pub descent: Option<&'a Num>,
+    pub slant: Option<&'a Num>,
+    /// In first-seen order; a style's glyph replaces the font's in place.
+    pub glyphs: Vec<&'a Glyph>,
+    pub notdef: Option<&'a Glyph>,
+    pub kerns: Vec<&'a Kern>,
+    /// The glyph-limit set along the way, and by whom.
+    pub glyph_limit: Option<(Limit, String)>,
+}
+
+/// A font with these variants laid over it, or what is wrong with them:
+/// a variant that draws what only an icon has.
+pub fn style_font<'a>(
+    font: &'a Definition,
+    variants: &[&'a Variant],
+    diags: &mut Vec<SpanDiag>,
+) -> Option<FontStyled<'a>> {
+    let mut ctx = Ctx { diags: Vec::new() };
+    let mut out = FontStyled {
+        name: font.name.clone(),
+        params: Vec::new(),
+        em: None,
+        ascent: None,
+        descent: None,
+        slant: None,
+        glyphs: Vec::new(),
+        notdef: None,
+        kerns: Vec::new(),
+        glyph_limit: None,
+    };
+    let bodies = std::iter::once((font.name.clone(), &font.body, font.span)).chain(
+        variants
+            .iter()
+            .map(|v| (format!("variant {}", v.name), &v.body, v.span)),
+    );
+    for (whose, body, span) in bodies {
+        if let Some(what) = icon_only(body) {
+            ctx.diag(
+                span,
+                format!(
+                    "{whose} sets {what}, which only an icon has; it styles font '{}' here",
+                    font.name
+                ),
+            );
+            continue;
+        }
+        merge_params(&mut ctx, &mut out.params, &body.params, &whose);
+        let f = &body.font;
+        out.em = f.em.as_ref().or(out.em);
+        out.ascent = f.ascent.as_ref().or(out.ascent);
+        out.descent = f.descent.as_ref().or(out.descent);
+        out.slant = f.slant.as_ref().or(out.slant);
+        for g in &f.glyphs {
+            match out.glyphs.iter_mut().find(|h| h.name == g.name) {
+                Some(slot) => *slot = g,
+                None => out.glyphs.push(g),
+            }
+        }
+        out.notdef = f.notdef.as_ref().or(out.notdef);
+        for k in &f.kerns {
+            match out
+                .kerns
+                .iter_mut()
+                .find(|j| j.left == k.left && j.right == k.right)
+            {
+                Some(slot) => *slot = k,
+                None => out.kerns.push(k),
+            }
+        }
+        if let Some(l) = body.limits.get(&LimitKind::GlyphLimit) {
+            out.glyph_limit = Some((*l, whose.trim_start_matches("variant ").to_string()));
+        }
+    }
+    let ok = ctx.diags.is_empty();
+    diags.append(&mut ctx.diags);
+    ok.then_some(out)
+}
+
+/// The first thing a body sets that a font cannot have, if any.
+fn icon_only(body: &DefBody) -> Option<&'static str> {
+    if body.category.is_some() {
+        Some("a category")
+    } else if body.footprint.is_some() {
+        Some("a footprint")
+    } else if body.canvas.is_some() {
+        Some("a canvas")
+    } else if !body.parts.is_empty() {
+        Some("parts")
+    } else if !body.grants.is_empty() {
+        Some("grants")
+    } else if body.view.is_some() {
+        Some("a view")
+    } else if body.transform_bounds.is_some() {
+        Some("transform-bounds")
+    } else if body.limits.keys().any(|k| !k.of_fonts()) {
+        Some("an icon's limits")
+    } else {
+        None
+    }
+}
+
+/// What a font must say for text to be set in it, and that its kerning
+/// names its glyphs and its axes exist.
+fn check_font(ctx: &mut Ctx, def: &Definition, axes: &BTreeMap<String, AxisDef>) {
+    let f = &def.body.font;
+    let mut missing = Vec::new();
+    if f.em.is_none() {
+        missing.push("em");
+    }
+    if f.ascent.is_none() {
+        missing.push("ascent");
+    }
+    if f.descent.is_none() {
+        missing.push("descent");
+    }
+    if f.kind.is_none() {
+        missing.push("kind");
+    }
+    if !missing.is_empty() {
+        let list = match missing.as_slice() {
+            [one] => one.to_string(),
+            [init @ .., last] => format!("{} and {last}", init.join(", ")),
+            [] => unreachable!(),
+        };
+        ctx.diag(
+            def.span,
+            format!("font '{}' needs {list}: every font says them", def.name),
+        );
+    }
+    // a style can add glyphs, so kerning is checked against the font's own
+    // only when no axis could
+    if def.body.axes.is_empty() {
+        for k in &f.kerns {
+            for side in [&k.left, &k.right] {
+                if !f.glyphs.iter().any(|g| &g.name == side) {
+                    ctx.diag(
+                        k.span,
+                        format!(
+                            "font '{}' kerns \"{side}\", which it has no glyph for{}",
+                            def.name,
+                            suggest(side, f.glyphs.iter().map(|g| g.name.as_str()))
+                        ),
+                    );
+                }
+            }
+        }
+    }
+    for a in &def.body.axes {
+        if !axes.contains_key(a) {
+            ctx.diag(
+                def.span,
+                format!(
+                    "font '{}' opts into unknown axis '{a}'{}",
+                    def.name,
+                    suggest(a, axes.keys().map(|k| k.as_str()))
+                ),
+            );
+        }
+    }
+}
+
 /// Public entry the expander uses to overlay an axis variant.
 pub fn apply_variant(r: &mut ResolvedDef, variant: &Variant, diags: &mut Vec<SpanDiag>) {
     let mut ctx = Ctx { diags: Vec::new() };
+    if !variant.body.font.is_empty() {
+        ctx.diag(
+            variant.span,
+            format!(
+                "variant {} sets a font's metrics, glyphs or kerning, which only a font has; it \
+                 overlays icon '{}' here",
+                variant.name, r.name
+            ),
+        );
+    }
     merge_body(
         &mut ctx,
         r,

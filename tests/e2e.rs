@@ -926,7 +926,7 @@ fn transforms_match_their_goldens_and_are_deterministic() {
 #[test]
 fn every_golden_draws_inside_its_viewbox() {
     use isolex::affine::{shape_extent, Extent, IDENTITY};
-    for files in [sample(), transforms()] {
+    for files in [sample(), transforms(), text()] {
         let c = isolex::compile(&files);
         assert!(c.errors.is_empty(), "{:?}", c.errors);
         for icon in &c.doc.icons {
@@ -961,7 +961,7 @@ fn every_path_passes_through_render_byte_for_byte() {
     }
     let palette = isolex::render::Palette::default();
     let mut seen = 0;
-    for files in [sample(), transforms()] {
+    for files in [sample(), transforms(), text()] {
         let c = isolex::compile(&files);
         for icon in &c.doc.icons {
             let svg = isolex::render::render_icon(icon, &palette);
@@ -1118,4 +1118,583 @@ fn groups_never_nest_and_badges_fold_into_their_transforms() {
             }
         }
     }
+}
+
+// --- text (#42) -----------------------------------------------------------
+
+fn text() -> Vec<(String, String)> {
+    vec![(
+        "text.ilx".to_string(),
+        include_str!("fixtures/text.ilx").to_string(),
+    )]
+}
+
+#[test]
+fn text_matches_its_goldens_and_is_deterministic() {
+    let compile = || {
+        let c = isolex::compile(&text());
+        assert!(c.errors.is_empty(), "{:?}", c.errors);
+        c.doc
+    };
+    let ir = serde_json::to_string_pretty(&compile()).unwrap();
+    assert_eq!(ir, serde_json::to_string_pretty(&compile()).unwrap());
+    golden("text.ir.golden.json", &format!("{ir}\n"));
+
+    let palette = isolex::render::Palette::default();
+    let svgs: String = compile()
+        .icons
+        .iter()
+        .map(|icon| {
+            format!(
+                "<!-- {} -->\n{}",
+                icon.name,
+                isolex::render::render_icon(icon, &palette)
+            )
+        })
+        .collect();
+    golden("text.svg.golden", &svgs);
+}
+
+/// Text adds no kind of shape to the IR: glyphs are paths and polygons,
+/// each in a group of its own whose matrix places it.
+#[test]
+fn text_compiles_to_paths_and_polygons_in_groups() {
+    use isolex::ir::IrShape;
+    let c = isolex::compile(&text());
+    for icon in &c.doc.icons {
+        for s in &icon.shapes {
+            match s {
+                IrShape::Group { shapes, .. } => {
+                    for inner in shapes {
+                        assert!(
+                            matches!(
+                                inner,
+                                IrShape::Path { .. }
+                                    | IrShape::Polygon { .. }
+                                    | IrShape::Rect { .. }
+                            ),
+                            "{}: {inner:?}",
+                            icon.name
+                        );
+                    }
+                }
+                IrShape::Path { .. } | IrShape::Polygon { .. } | IrShape::Rect { .. } => {}
+                other => panic!("{}: {other:?}", icon.name),
+            }
+        }
+    }
+}
+
+/// A font where each glyph says where it is drawn: a, b, the ligature bb,
+/// notdef, and a kern after a before b.
+const LAYOUT_FONT: &str = r#"
+font "t" {
+  em 1
+  ascent 0.75
+  descent 0.25
+  kind "outline"
+  glyph " " advance=1
+  glyph "a" advance=1 { poly { pt 0 0; pt 1 0; pt 1 1 } }
+  glyph "b" advance=2 { poly { pt 0 0; pt 2 0; pt 2 1 } }
+  glyph "bb" advance=3 { poly { pt 0 0; pt 3 0; pt 3 1 } }
+  notdef advance=4 { poly { pt 0 0; pt 4 0; pt 4 1 } }
+  kern "a" "b" 0.5
+}
+"#;
+
+/// Each glyph group's matrix of one text icon: its six numbers.
+fn glyph_matrices(text: &str) -> Vec<[f64; 6]> {
+    let src = format!(
+        "{LAYOUT_FONT}\nicon \"i\" {{ category \"c\"; canvas 400 100; transform-bounds \"grow\"\n  part \"p\" {{ at 0 0 0 {{ {text} }} }}\n}}\n"
+    );
+    let c = isolex::compile(&[("t.ilx".to_string(), src)]);
+    assert!(c.errors.is_empty(), "{:?}", c.errors);
+    c.doc.icons[0]
+        .shapes
+        .iter()
+        .filter_map(|s| match s {
+            isolex::ir::IrShape::Group { matrix, .. } => Some(*matrix),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn glyphs_go_along_the_baseline_by_advance_kerning_and_ligature() {
+    // a | bb (the longest match) | b | a | z (no glyph: notdef), at size
+    // 10 from (5, 20): y turns up, each glyph at its pen
+    let m = glyph_matrices(r#"text 5 20 "abbbaz" font="t" size=10"#);
+    let xs: Vec<f64> = m.iter().map(|m| m[4]).collect();
+    assert_eq!(xs, vec![5.0, 15.0, 45.0, 65.0, 75.0]);
+    for m in &m {
+        assert_eq!(
+            (m[0], m[1], m[2], m[3], m[5]),
+            (10.0, 0.0, 0.0, -10.0, 20.0)
+        );
+    }
+    // a before b is kerned by half an em; a space draws nothing
+    let xs: Vec<f64> = glyph_matrices(r#"text 0 20 "ab a" font="t" size=10"#)
+        .iter()
+        .map(|m| m[4])
+        .collect();
+    assert_eq!(xs, vec![0.0, 15.0, 45.0]);
+}
+
+#[test]
+fn anchors_baselines_and_max_width_place_the_whole_text() {
+    // "ab" is 3.5 em wide
+    let first = |t: &str| glyph_matrices(t)[0];
+    assert_eq!(
+        first(r#"text 50 20 "ab" font="t" size=10 anchor="middle""#)[4],
+        32.5
+    );
+    assert_eq!(
+        first(r#"text 50 20 "ab" font="t" size=10 anchor="end""#)[4],
+        15.0
+    );
+    // the ascent line, halfway, or the descent line at y
+    assert_eq!(
+        first(r#"text 0 20 "a" font="t" size=10 baseline="top""#)[5],
+        27.5
+    );
+    assert_eq!(
+        first(r#"text 0 20 "a" font="t" size=10 baseline="middle""#)[5],
+        22.5
+    );
+    assert_eq!(
+        first(r#"text 0 20 "a" font="t" size=10 baseline="bottom""#)[5],
+        17.5
+    );
+    // wider than max-width: scaled down until it fits, height too
+    let m = first(r#"text 0 20 "ab" font="t" size=10 max-width=7"#);
+    assert_eq!((m[0], m[3]), (2.0, -2.0));
+    // narrower: as it is
+    assert_eq!(
+        first(r#"text 0 20 "ab" font="t" size=10 max-width=70"#)[0],
+        10.0
+    );
+}
+
+#[test]
+fn a_text_param_is_late_bound_and_passed_to_fragments() {
+    // tagged-a: "A7-14"; tagged-b sets its own tag, "P10-14": the base's
+    // fragment insert sees the child's text, and a number reads without
+    // decimals it does not need
+    let c = isolex::compile(&text());
+    let icon = |name: &str| c.doc.icons.iter().find(|i| i.name == name).unwrap();
+    assert_eq!(glyph_groups(icon("tagged-a")), 5);
+    assert_eq!(glyph_groups(icon("tagged-b")), 6);
+}
+
+/// The groups of an icon that draw a glyph, a stroke-built font's paths.
+fn glyph_groups(icon: &isolex::ir::IrIcon) -> usize {
+    icon.shapes
+        .iter()
+        .filter(|s| match s {
+            isolex::ir::IrShape::Group { shapes, .. } => shapes
+                .iter()
+                .all(|s| matches!(s, isolex::ir::IrShape::Path { .. })),
+            _ => false,
+        })
+        .count()
+}
+
+#[test]
+fn a_text_fill_paints_every_paint_of_its_glyphs_but_none() {
+    let c = isolex::compile(&text());
+    let tagged = c.doc.icons.iter().find(|i| i.name == "tagged-a").unwrap();
+    let mut seen = 0;
+    for s in &tagged.shapes {
+        if let isolex::ir::IrShape::Group { shapes, .. } = s {
+            for inner in shapes {
+                // the plate the text is on keeps its own paints
+                match inner {
+                    isolex::ir::IrShape::Path { fill, stroke, .. } => {
+                        assert_eq!((fill.as_str(), stroke.as_str()), ("none", "accent"));
+                        seen += 1;
+                    }
+                    isolex::ir::IrShape::Rect { fill, .. } => assert_eq!(fill, "body-right"),
+                    other => panic!("{other:?}"),
+                }
+            }
+        }
+    }
+    assert_eq!(seen, 5);
+}
+
+/// The line `needle` first starts, counted as diagnostics count them.
+fn line_of(src: &str, needle: &str) -> usize {
+    src.lines()
+        .position(|l| l.starts_with(needle))
+        .expect("it is there")
+        + 1
+}
+
+/// Compile one source in-process: its errors as `file:line:col: message`.
+fn errors_of(src: &str) -> Vec<String> {
+    isolex::compile(&[("t.ilx".to_string(), src.to_string())])
+        .errors
+        .iter()
+        .map(|d| d.to_string())
+        .collect()
+}
+
+fn text_icon(body: &str) -> String {
+    format!(
+        "{LAYOUT_FONT}\nicon \"i\" {{ category \"c\"; canvas 400 100\n  part \"p\" {{\n    at 0 0 0 {{\n      {body}\n    }}\n  }}\n}}\n"
+    )
+}
+
+#[test]
+fn text_errors_are_reported_at_the_text() {
+    let line = line_of(&text_icon(""), "      ");
+    for (body, want) in [
+        (r#"text 0 9 "a" font="r" size=10"#, "unknown font 'r' (did you mean 't'?)".to_string()),
+        (
+            r#"text 0 9 "a" font="t" size=10 style="bold""#,
+            "font 't' has no style 'bold' (it opts into no axes)".to_string(),
+        ),
+        (r#"text 0 9 "a" font="t" size=0"#, "text size must be more than 0, got 0".to_string()),
+        (
+            r#"text 0 9 "a" font="t" size=1 max-width=-1"#,
+            "max-width must be more than 0, got -1".to_string(),
+        ),
+        (
+            r#"text 0 9 "aא" font="t" size=1"#,
+            "text cannot set 'א' (U+05D0): right-to-left text, which is not set yet".to_string(),
+        ),
+        (
+            r#"text 0 9 "{x}" font="t" size=1"#,
+            "in 'x': text is laid out when the lexicon compiles, before any anchor is placed, so x and y are not known to it".to_string(),
+        ),
+        (r#"text 0 9 "{q}" font="t" size=1"#, "in 'q': unknown name 'q'".to_string()),
+    ] {
+        let errors = errors_of(&text_icon(body));
+        assert!(
+            errors.iter().any(|e| e.starts_with(&format!("t.ilx:{line}:7: {want}"))),
+            "{body}: {errors:?}"
+        );
+    }
+}
+
+#[test]
+fn a_font_without_a_glyph_or_notdef_cannot_set_it() {
+    let src = r#"
+font "f" { em 1; ascent 1; descent 0; kind "stroke"
+  glyph "a" advance=1 { line 0 0 1 1 }
+}
+icon "i" { category "c"; canvas 9 9
+  part "p" { at 0 0 0 { text 0 9 "ab" font="f" size=1 } }
+}
+"#;
+    assert_eq!(
+        errors_of(src),
+        vec!["t.ilx:6:25: font 'f' has no glyph for 'b' (U+0062), and no notdef to draw in its place"]
+    );
+}
+
+#[test]
+fn styles_are_variants_of_a_fonts_axes_one_to_an_axis() {
+    let src = |styles: &str| {
+        format!(
+            r#"
+axis "weight" {{ variant "bold" {{ param w 2 }}; variant "black" {{ param w 3 }} }}
+axis "slope" {{ variant "italic" {{ slant -12 }} }}
+font "f" {{ em 1; ascent 1; descent 0; kind "stroke"; param w 1; axes "weight" "slope"
+  glyph "a" advance=1 {{ line 0 0 1 1 width="w" }}
+}}
+icon "i" {{ category "c"; canvas 9 9
+  part "p" {{ at 0 0 0 {{ text 0 9 "a" font="f" size=1 style="{styles}" }} }}
+}}
+"#
+        )
+    };
+    assert_eq!(errors_of(&src("italic bold")), Vec::<String>::new());
+    assert_eq!(
+        errors_of(&src("bold black")),
+        vec!["t.ilx:8:25: text asks font 'f' for 'bold' and 'black', both of axis 'weight'; choose one"]
+    );
+    assert_eq!(
+        errors_of(&src("blod")),
+        vec!["t.ilx:8:25: font 'f' has no style 'blod' (did you mean 'bold'?) (its styles: bold, black, italic)"]
+    );
+}
+
+#[test]
+fn what_a_font_lacks_or_a_variant_misplaces_is_an_error() {
+    assert_eq!(
+        errors_of("font \"f\" { em 1\n  kern \"a\" \"b\" 1\n}\n"),
+        vec![
+            "t.ilx:1:1: font 'f' needs ascent, descent and kind: every font says them",
+            "t.ilx:2:3: font 'f' kerns \"a\", which it has no glyph for",
+            "t.ilx:2:3: font 'f' kerns \"b\", which it has no glyph for",
+        ]
+    );
+    // a variant that draws parts styles no font, and one with glyphs
+    // overlays no icon
+    let src = r#"
+axis "a" { variant "v" { part "p" { box 0 0 0 1 1 1 } } }
+axis "g" { variant "w" { glyph "a" advance=1 } }
+font "f" { em 1; ascent 1; descent 0; kind "stroke"; axes "a"
+  glyph "a" advance=1 { line 0 0 1 1 }
+}
+icon "i" { category "c"; canvas 9 9; axes "g"
+  part "p" { at 0 0 0 { text 0 9 "a" font="f" size=1 style="v" } }
+}
+"#;
+    // in emission order: the icon as it is, then with its variant
+    assert_eq!(
+        errors_of(src),
+        vec![
+            "t.ilx:2:12: variant v sets parts, which only an icon has; it styles font 'f' here",
+            "t.ilx:3:12: variant w sets a font's metrics, glyphs or kerning, which only a font has; it overlays icon 'i' here",
+        ]
+    );
+    assert_eq!(
+        errors_of("font \"f\" { em 0; ascent 1; descent 0; kind \"stroke\"; glyph \"a\" advance=1 }\nicon \"i\" { category \"c\"; canvas 9 9\n  part \"p\" { at 0 0 0 { text 0 9 \"a\" font=\"f\" size=1 } }\n}\n"),
+        vec!["t.ilx:1:1: font 'f' has an em of 0; an em is more than 0"]
+    );
+}
+
+#[test]
+fn glyphs_are_drawn_in_their_em_grid_and_set_no_text() {
+    let src = |glyph: &str| {
+        format!(
+            "font \"f\" {{ em 1; ascent 1; descent 0; kind \"stroke\"\n  glyph \"a\" advance=1 {{ {glyph} }}\n}}\nicon \"i\" {{ category \"c\"; canvas 9 9\n  part \"p\" {{ at 0 0 0 {{ text 0 9 \"a\" font=\"f\" size=1 }} }}\n}}\n"
+        )
+    };
+    assert_eq!(
+        errors_of(&src(r#"circle "x" 0 1"#)),
+        vec!["t.ilx:2:25: in 'x': a glyph is drawn in its font's em grid, from its origin on the baseline, where x and y mean nothing"]
+    );
+    assert_eq!(
+        errors_of(&src(r#"text 0 0 "a" font="f" size=1"#)),
+        vec!["t.ilx:2:25: a glyph cannot set text: it is drawn from shapes, in its font's em grid"]
+    );
+}
+
+#[test]
+fn text_params_keep_their_type() {
+    assert_eq!(
+        errors_of("base \"b\" { param n 1 }\nicon \"i\" extends=\"b\" { category \"c\"; canvas 9 9\n  param n (text)\"x\"\n}\n"),
+        vec!["t.ilx:3:3: 'i' sets param 'n' to text, but it is a number where it was declared; a param keeps its type"]
+    );
+    assert_eq!(
+        errors_of("icon \"i\" { category \"c\"; canvas 9 9; param t (text)\"x\"\n  part \"p\" { at 0 0 0 { circle 0 0 \"t\" } }\n}\n"),
+        vec!["t.ilx:2:25: in 't': 't' is text, not a number; text is interpolated whole into text, as {t}"]
+    );
+    let src = |arg: &str| {
+        format!(
+            "fragment \"f\" {{ param n 1; param t (text)\"x\"; part \"p\" {{ circle 0 0 \"n\" }} }}\nicon \"i\" {{ category \"c\"; canvas 9 9\n  part \"p\" {{ at 0 0 0 {{ insert \"f\" {arg} }} }}\n}}\n"
+        )
+    };
+    assert_eq!(
+        errors_of(&src(r#"n=(text)"2""#)),
+        vec!["t.ilx:3:25: fragment 'f' takes a number for 'n', not text"]
+    );
+    assert_eq!(
+        errors_of(&src("t=2")),
+        vec!["t.ilx:3:25: fragment 'f' takes text for 't': t=(text)\"…\""]
+    );
+    assert_eq!(errors_of(&src(r#"t=(text)"y" n=3"#)), Vec::<String>::new());
+}
+
+#[test]
+fn text_and_glyphs_stop_at_their_limits() {
+    let icon = |limits: &str, text: &str| {
+        format!(
+            "{LAYOUT_FONT}\nicon \"i\" {{ category \"c\"; canvas 400 100{limits}\n  part \"p\" {{ at 0 0 0 {{\n    text 0 9 \"{text}\" font=\"t\" size=1\n    text 0 9 \"{text}\" font=\"t\" size=1\n  }} }}\n}}\n"
+        )
+    };
+    let line = line_of(&icon("", "a"), "    text");
+    assert_eq!(
+        errors_of(&icon("; text-length 3", "aaaa")),
+        vec![format!("t.ilx:{line}:5: icon 'i' sets 4 characters in one text here past its text-length of 3 (characters, set by 'i'); if that is intended, raise it in this icon's definition or the lexicon block, or set `text-length #null` for no limit")]
+    );
+    assert_eq!(
+        errors_of(&icon("; text-limit 6", "aaaa")),
+        vec![format!("t.ilx:{}:5: icon 'i' sets 8 characters of text by here past its text-limit of 6 (characters, set by 'i'); if that is intended, raise it in this icon's definition or the lexicon block, or set `text-limit #null` for no limit", line + 1)]
+    );
+    assert_eq!(
+        errors_of(&icon("; text-limit 8", "aaaa")),
+        Vec::<String>::new()
+    );
+    let src = format!("lexicon {{ glyph-limit 4 }}\n{}", icon("", "a"));
+    assert_eq!(
+        errors_of(&src),
+        vec!["t.ilx:3:1: font 't' holds 5 glyphs past its glyph-limit of 4 (glyphs, set in the lexicon block); if that is intended, raise it in the font or the lexicon block, or set `glyph-limit #null` for no limit"]
+    );
+}
+
+#[test]
+fn text_is_held_to_its_frame_as_a_transform_is() {
+    let errors = errors_of(&text_icon(r#"text 390 50 "abab" font="t" size=10"#));
+    assert_eq!(errors.len(), 1, "{errors:?}");
+    assert!(
+        errors[0].contains(
+            "icon 'i' draws this transform out to 390.00 40.00 to 460.00 50.00, outside its frame"
+        ),
+        "{errors:?}"
+    );
+    assert_eq!(
+        errors_of(&text_icon(
+            r#"text 390 50 "abab" font="t" size=10 bounds="grow""#
+        )),
+        Vec::<String>::new()
+    );
+}
+
+#[test]
+fn compile_one_sets_params_and_draws_one_icon() {
+    use isolex::HostValue;
+    use std::collections::BTreeMap;
+    let one = |icon: &str, params: &[(&str, HostValue)]| {
+        let params: BTreeMap<String, HostValue> = params
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.clone()))
+            .collect();
+        isolex::compile_one(&text(), icon, &params)
+    };
+    // the same as a child setting the param would draw
+    let c = one("port-label", &[("ports", HostValue::Num(24.0))]).unwrap();
+    assert!(c.errors.is_empty(), "{:?}", c.errors);
+    let src = include_str!("fixtures/text.ilx").replace("param ports 48", "param ports 24");
+    let whole = isolex::compile(&[("text.ilx".to_string(), src)]);
+    assert_eq!(c.doc.icons.len(), 1);
+    assert_eq!(
+        serde_json::to_string(&c.doc.icons[0]).unwrap(),
+        serde_json::to_string(
+            whole
+                .doc
+                .icons
+                .iter()
+                .find(|i| i.name == "port-label")
+                .unwrap()
+        )
+        .unwrap()
+    );
+    // a host's text is taken as it is, braces and all: "{n}-14", with
+    // notdef for the braces and the n
+    let c = one("tagged-a", &[("tag", HostValue::Text("{n}".to_string()))]).unwrap();
+    assert!(c.errors.is_empty(), "{:?}", c.errors);
+    assert_eq!(glyph_groups(&c.doc.icons[0]), 6);
+    // and nothing it cannot answer
+    for (icon, params, why) in [
+        ("nope", vec![], "the lexicon emits no icon 'nope'"),
+        (
+            "port-labl",
+            vec![],
+            "the lexicon emits no icon 'port-labl' (did you mean 'port-label'?)",
+        ),
+        (
+            "port-label",
+            vec![("port", HostValue::Num(1.0))],
+            "icon 'port-label' has no param 'port' (did you mean 'ports'?)",
+        ),
+        (
+            "port-label",
+            vec![("ports", HostValue::Text("1".into()))],
+            "param 'ports' of icon 'port-label' is a number; give it a number",
+        ),
+        (
+            "tagged-a",
+            vec![("tag", HostValue::Num(1.0))],
+            "param 'tag' of icon 'tagged-a' is text; give it a string",
+        ),
+        (
+            "port-label",
+            vec![("ports", HostValue::Num(f64::INFINITY))],
+            "param 'ports' of icon 'port-label' must be finite",
+        ),
+    ] {
+        assert_eq!(one(icon, &params).err().as_deref(), Some(why));
+    }
+}
+
+#[test]
+fn compile_one_draws_the_icons_a_badge_names_but_emits_only_its_own() {
+    use std::collections::BTreeMap;
+    let c = isolex::compile(&sample());
+    let badged = c
+        .doc
+        .icons
+        .iter()
+        .find(|i| {
+            i.shapes
+                .iter()
+                .any(|s| matches!(s, isolex::ir::IrShape::Group { .. }))
+        })
+        .expect("the sample badges an icon");
+    let one = isolex::compile_one(&sample(), &badged.name, &BTreeMap::new()).unwrap();
+    assert!(one.errors.is_empty(), "{:?}", one.errors);
+    assert_eq!(
+        serde_json::to_string(&one.doc.icons).unwrap(),
+        serde_json::to_string(&[badged]).unwrap()
+    );
+}
+
+#[test]
+fn compile_and_render_take_one_icon_on_the_command_line() {
+    let dir = std::env::temp_dir().join(format!("isolex-e2e-one-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("text.ilx"), include_str!("fixtures/text.ilx")).unwrap();
+    let out = bin()
+        .args(["compile"])
+        .arg(&dir)
+        .args([
+            "--ir", "-", "--icon", "tagged-a", "--text", "tag=E", "--param", "n=4",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let ir: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(ir["icons"].as_array().unwrap().len(), 1);
+    // "E-8": three glyphs, and the plate in its translate
+    let groups = ir["icons"][0]["shapes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|s| s["kind"] == "group")
+        .count();
+    assert_eq!(groups, 4);
+
+    let svg = dir.join("svg");
+    let out = bin()
+        .args(["render"])
+        .arg(&dir)
+        .arg("--svg")
+        .arg(&svg)
+        .args(["--icon", "port-label", "--param", "ports=8"])
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(std::fs::read_dir(&svg).unwrap().count(), 1);
+
+    let out = bin()
+        .args(["compile"])
+        .arg(&dir)
+        .args(["--ir", "-", "--icon", "port-label", "--param", "ports=many"])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr)
+        .contains("--param ports takes a number, got 'many'; text is set with --text"));
+    let out = bin()
+        .args(["compile"])
+        .arg(&dir)
+        .args(["--ir", "-", "--icon", "port-label", "--text", "ports=8"])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&out.stderr)
+        .contains("isolex: param 'ports' of icon 'port-label' is a number; give it a number"));
 }

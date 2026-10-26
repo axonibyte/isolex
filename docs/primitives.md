@@ -20,6 +20,8 @@ node does not take is an error, never ignored:
   `scale=`, `skew-x=`, `skew-y=`, `mirror=`, or `matrix=`), `onto=` and
   `of=`, `bounds=`, `strokes=` and `when=`.
 - `turn` and `mirror-diagonal` take `origin=` and `when=`.
+- `text` takes `font=`, `size=`, `style=`, `anchor=`, `baseline=`,
+  `max-width=`, `fill=`, `bounds=` and `when=`.
 
 ## 3-D nodes (on the isometric grid, outside `at`)
 
@@ -143,6 +145,23 @@ poly fill="state-up" stroke="outline" width=1.2 {
   pt 2.5 20.5
 }
 ```
+### `text x y "…"`
+A line of text, set from `(x, y)` in a [font](fonts.md) of the
+lexicon's, and compiled to that font's glyphs: shapes like any other,
+each in a group that places it. `{…}` interpolates a number or a text
+param (`{{` is a brace).
+
+- `font="name"`, `size=s` (the em, in output units): required.
+- `style="bold italic"`: the font's styles, one from each of its axes.
+- `anchor="start"|"middle"|"end"` (default `start`): where `x` falls.
+- `baseline="alphabetic"|"top"|"middle"|"bottom"` (default
+  `alphabetic`): where `y` falls, by the font's ascent and descent.
+- `max-width=w`: scaled down to fit, if it is wider.
+- `fill="token"`: its glyphs drawn in this token, fill and stroke.
+- `bounds=`: as a transform's; text must stay inside the icon's frame.
+```kdl
+text "x" "y + 3" "PoE {ports}" font="plain" size=8 anchor="middle" style="bold"
+```
 
 ## Works in either dimension
 
@@ -211,6 +230,27 @@ transform onto="top" of="box 0 0 0 1 1 0.5" {
   at 0 0 0 { rect 8 8 24 24 fill="accent" }
 }
 ```
+
+## Fonts
+
+A `font` is a top-level definition, not a node; see [the fonts
+guide](fonts.md). Its body holds `em`, `ascent`, `descent`, `kind`,
+and optionally `slant`, its glyphs, `notdef`, kerns, params, `axes` and
+`describe`.
+
+### `glyph "A" advance=6 { …2-D nodes… }`
+The glyph for a character, or for a run of them (a ligature). Drawn in
+the font's em grid from its origin on the baseline, y up. Takes only
+`advance=`.
+```kdl
+glyph "A" advance=5.5 { path d="M0,0 L2,7 L4,0 M0.8,2.5 H3.2" width="weight" }
+```
+
+### `notdef advance=6 { … }`
+What is drawn for a character no glyph draws.
+
+### `kern "A" "V" -0.6`
+Space added between two glyphs side by side, in the em grid.
 
 ### `pt x y [z]`
 A polygon vertex — only inside `poly` (2 coords) or `poly3d` (3 coords),

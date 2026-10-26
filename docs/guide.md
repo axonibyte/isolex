@@ -265,6 +265,29 @@ cannot, `bounds="grow"`, `"scale"` or `"clip"` says what to do. See
 [the primitives reference](primitives.md) for every
 property.
 
+## Text
+
+Icons can say things: a port count, a rack position, a model number.
+Fonts are written in isolex too, as glyphs of shapes, so text compiles
+to shapes like everything else, and every renderer draws it the same:
+
+```kdl
+icon "port-label" {
+  category "net"
+  canvas 48 24
+  param ports 48
+  part "plate" {
+    at 0 0 0 {
+      text 24 12 "PoE {ports}" font="plain" size=10 anchor="middle" baseline="middle"
+    }
+  }
+}
+```
+
+A text param carries words down an inheritance chain:
+`param label (text)"U{u}"`. [The fonts guide](fonts.md) shows how to
+draw a font, give it bold and italic, and set text in it.
+
 ## The expression language
 
 Wherever a number is expected, a quoted string is evaluated. It is a

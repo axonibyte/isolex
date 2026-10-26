@@ -1,10 +1,12 @@
 //! isolex — reference compiler for the Isolex icon-definition language.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use isolex::ir::IrDocument;
 use isolex::render::{missing_colors, render_icon, safe_file_name, Palette};
+use isolex::HostValue;
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -13,27 +15,35 @@ fn main() -> ExitCode {
             println!("isolex {}", env!("CARGO_PKG_VERSION"));
             ExitCode::SUCCESS
         }
-        Some("check") if args.len() == 2 => run(&args[1], Mode::Check),
+        Some("check") if args.len() == 2 => run(&args[1], Mode::Check, None),
         Some("compile") => match args.as_slice() {
-            [_, dir, flag, out] if flag == "--ir" => run(dir, Mode::CompileTo(out.clone())),
+            [_, dir, flag, out, rest @ ..] if flag == "--ir" => match one_icon(rest) {
+                Ok(only) => run(dir, Mode::CompileTo(out.clone()), only),
+                Err(code) => code,
+            },
             _ => usage(),
         },
-        Some("docs") if args.len() == 2 => run(&args[1], Mode::Docs),
+        Some("docs") if args.len() == 2 => run(&args[1], Mode::Docs, None),
         Some("render") => match args.as_slice() {
-            [_, dir, flag, out] if flag == "--svg" => run(
-                dir,
-                Mode::Render {
-                    out: out.clone(),
-                    palette: None,
-                },
-            ),
-            [_, dir, flag, out, pflag, palette] if flag == "--svg" && pflag == "--palette" => run(
-                dir,
-                Mode::Render {
-                    out: out.clone(),
-                    palette: Some(palette.clone()),
-                },
-            ),
+            [_, dir, flag, out, rest @ ..] if flag == "--svg" => {
+                let (palette, rest) = match rest {
+                    [pflag, palette, rest @ ..] if pflag == "--palette" => {
+                        (Some(palette.clone()), rest)
+                    }
+                    rest => (None, rest),
+                };
+                match one_icon(rest) {
+                    Ok(only) => run(
+                        dir,
+                        Mode::Render {
+                            out: out.clone(),
+                            palette,
+                        },
+                        only,
+                    ),
+                    Err(code) => code,
+                }
+            }
             _ => usage(),
         },
         _ => usage(),
@@ -42,10 +52,57 @@ fn main() -> ExitCode {
 
 fn usage() -> ExitCode {
     eprintln!("usage: isolex check <lexicon-dir>");
-    eprintln!("       isolex compile <lexicon-dir> --ir <out.json|->");
+    eprintln!("       isolex compile <lexicon-dir> --ir <out.json|-> [<one icon>]");
     eprintln!("       isolex docs <lexicon-dir>");
-    eprintln!("       isolex render <lexicon-dir> --svg <out-dir> [--palette <palette.json>]");
+    eprintln!(
+        "       isolex render <lexicon-dir> --svg <out-dir> [--palette <palette.json>] [<one icon>]"
+    );
+    eprintln!("one icon: --icon <name> [--param <name>=<number>]… [--text <name>=<text>]…");
     ExitCode::from(2)
+}
+
+/// One icon to compile, by name, with params set on it.
+type OneIcon = (String, BTreeMap<String, HostValue>);
+
+/// One icon to compile, and params to set on it: `--icon name`, then any
+/// of `--param name=number` and `--text name=text`. Nothing is no icon.
+fn one_icon(args: &[String]) -> Result<Option<OneIcon>, ExitCode> {
+    let [flag, icon, rest @ ..] = args else {
+        return if args.is_empty() {
+            Ok(None)
+        } else {
+            Err(usage())
+        };
+    };
+    if flag != "--icon" {
+        return Err(usage());
+    }
+    let mut params = BTreeMap::new();
+    for pair in rest.chunks(2) {
+        let [kind, setting] = pair else {
+            return Err(usage());
+        };
+        let Some((name, value)) = setting.split_once('=') else {
+            eprintln!("isolex: {kind} takes name=value, got '{setting}'");
+            return Err(ExitCode::from(2));
+        };
+        let value = match kind.as_str() {
+            "--param" => match value.parse::<f64>() {
+                Ok(v) if v.is_finite() => HostValue::Num(v),
+                _ => {
+                    eprintln!("isolex: --param {name} takes a number, got '{value}'; text is set with --text");
+                    return Err(ExitCode::from(2));
+                }
+            },
+            "--text" => HostValue::Text(value.to_string()),
+            _ => return Err(usage()),
+        };
+        if params.insert(name.to_string(), value).is_some() {
+            eprintln!("isolex: param '{name}' is set twice");
+            return Err(ExitCode::from(2));
+        }
+    }
+    Ok(Some((icon.clone(), params)))
 }
 
 enum Mode {
@@ -75,7 +132,7 @@ fn collect_ilx(dir: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<()> {
     Ok(())
 }
 
-fn run(dir: &str, mode: Mode) -> ExitCode {
+fn run(dir: &str, mode: Mode, only: Option<OneIcon>) -> ExitCode {
     let root = Path::new(dir);
     let mut paths = Vec::new();
     if let Err(e) = collect_ilx(root, &mut paths) {
@@ -97,7 +154,16 @@ fn run(dir: &str, mode: Mode) -> ExitCode {
         }
     }
 
-    let c = isolex::compile(&files);
+    let c = match &only {
+        None => isolex::compile(&files),
+        Some((icon, params)) => match isolex::compile_one(&files, icon, params) {
+            Ok(c) => c,
+            Err(why) => {
+                eprintln!("isolex: {why}");
+                return ExitCode::FAILURE;
+            }
+        },
+    };
     let doc = &c.doc;
     let diags = &c.errors;
 

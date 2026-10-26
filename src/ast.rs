@@ -162,7 +162,7 @@ pub enum Node {
     },
     Insert {
         fragment: String,
-        args: Vec<(String, Num)>,
+        args: Vec<(String, Param)>,
         when: Option<Num>,
         span: Span,
     },
@@ -191,6 +191,57 @@ pub enum Node {
         when: Option<Num>,
         span: Span,
     },
+
+    /// 2-D: a line of text, laid out from a font's glyphs.
+    Text {
+        args: [Num; 2], // x y: where its baseline starts, by its anchor
+        content: Vec<PathPiece>,
+        spec: TextSpec,
+        when: Option<Num>,
+        span: Span,
+    },
+}
+
+/// How a `text` is set: its font and styles, size, alignment, paint and
+/// what it does past its frame.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct TextSpec {
+    pub font: String,
+    /// Variant names of the font's axes, one per axis at most.
+    pub styles: Vec<String>,
+    pub size: Num,
+    pub anchor: TextAnchor,
+    pub baseline: Baseline,
+    pub fill: Option<String>,
+    pub max_width: Option<Num>,
+    pub bounds: Option<Bounds>,
+}
+
+/// Where the text's x falls along it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub enum TextAnchor {
+    Start,
+    Middle,
+    End,
+}
+
+/// Where the text's y falls on it: its baseline, or its font's ascent or
+/// descent line, or halfway between those two.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub enum Baseline {
+    Alphabetic,
+    Top,
+    Middle,
+    Bottom,
+}
+
+/// A param's value: a number, or text, a template of literal text and
+/// `{…}` interpolations.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum Param {
+    Num(Num),
+    Text(Vec<PathPiece>),
 }
 
 /// What a `transform` does: its steps, applied to its shapes in order,
@@ -342,6 +393,7 @@ impl Node {
             Pt2 { args, span }
             Insert { fragment, args, when, span }
             Badge { icon, corner, scale, when, span }
+            Text { args, content, spec, when, span }
             ;
             Poly3d { style, when, span }
             At { args, when, span }
@@ -415,6 +467,7 @@ pub enum DefKind {
     Icon,
     Fragment,
     Axis,
+    Font,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -485,6 +538,22 @@ pub const DEFAULT_TRANSFORM_CHAIN: u64 = build_default(
     "ISOLEX_DEFAULT_TRANSFORM_CHAIN must be a positive whole number",
 );
 
+pub const DEFAULT_TEXT_LENGTH: u64 = build_default(
+    option_env!("ISOLEX_DEFAULT_TEXT_LENGTH"),
+    1_000,
+    "ISOLEX_DEFAULT_TEXT_LENGTH must be a positive whole number",
+);
+pub const DEFAULT_TEXT_LIMIT: u64 = build_default(
+    option_env!("ISOLEX_DEFAULT_TEXT_LIMIT"),
+    10_000,
+    "ISOLEX_DEFAULT_TEXT_LIMIT must be a positive whole number",
+);
+pub const DEFAULT_GLYPH_LIMIT: u64 = build_default(
+    option_env!("ISOLEX_DEFAULT_GLYPH_LIMIT"),
+    65_536,
+    "ISOLEX_DEFAULT_GLYPH_LIMIT must be a positive whole number",
+);
+
 const fn build_default(set: Option<&str>, fallback: u64, complaint: &str) -> u64 {
     match set {
         None => fallback,
@@ -519,16 +588,28 @@ pub enum LimitKind {
     /// How many transform steps one shape is drawn through.
     #[serde(rename = "transform-chain")]
     TransformChain,
+    /// Characters in one text, once interpolated.
+    #[serde(rename = "text-length")]
+    TextLength,
+    /// Characters in all the text of one icon.
+    #[serde(rename = "text-limit")]
+    TextLimit,
+    /// Glyphs one font holds, with its styles' glyphs.
+    #[serde(rename = "glyph-limit")]
+    GlyphLimit,
 }
 
 impl LimitKind {
-    pub const ALL: [LimitKind; 6] = [
+    pub const ALL: [LimitKind; 9] = [
         LimitKind::Shapes,
         LimitKind::Repeats,
         LimitKind::InsertDepth,
         LimitKind::Icons,
         LimitKind::ExpressionDepth,
         LimitKind::TransformChain,
+        LimitKind::TextLength,
+        LimitKind::TextLimit,
+        LimitKind::GlyphLimit,
     ];
 
     /// The directive that sets it.
@@ -540,6 +621,9 @@ impl LimitKind {
             LimitKind::Icons => "icon-limit",
             LimitKind::ExpressionDepth => "expression-depth",
             LimitKind::TransformChain => "transform-chain",
+            LimitKind::TextLength => "text-length",
+            LimitKind::TextLimit => "text-limit",
+            LimitKind::GlyphLimit => "glyph-limit",
         }
     }
 
@@ -553,12 +637,20 @@ impl LimitKind {
             LimitKind::Icons => DEFAULT_ICON_LIMIT,
             LimitKind::ExpressionDepth => DEFAULT_EXPRESSION_DEPTH,
             LimitKind::TransformChain => DEFAULT_TRANSFORM_CHAIN,
+            LimitKind::TextLength => DEFAULT_TEXT_LENGTH,
+            LimitKind::TextLimit => DEFAULT_TEXT_LIMIT,
+            LimitKind::GlyphLimit => DEFAULT_GLYPH_LIMIT,
         }
     }
 
     /// Only the lexicon block can set it: it counts the whole lexicon.
     pub fn lexicon_wide(self) -> bool {
         self == LimitKind::Icons
+    }
+
+    /// A font sets it, rather than an icon: it counts a font's glyphs.
+    pub fn of_fonts(self) -> bool {
+        self == LimitKind::GlyphLimit
     }
 }
 
@@ -579,7 +671,7 @@ pub struct DefBody {
     pub footprint: Option<[Num; 3]>,
     pub canvas: Option<[Num; 2]>,
     pub describe: Vec<String>,
-    pub params: Vec<(String, Num, Span)>,
+    pub params: Vec<(String, Param, Span)>,
     pub axes: Vec<String>,
     pub grants: Vec<Grant>,
     pub parts: Vec<PartDecl>,
@@ -592,6 +684,64 @@ pub struct DefBody {
     /// What its transforms do when they leave its frame, unless one says.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub transform_bounds: Option<Bounds>,
+    /// A font's metrics and glyphs, in a font or a variant of one.
+    #[serde(skip_serializing_if = "FontBody::is_empty")]
+    pub font: FontBody,
+}
+
+/// What a font body holds beyond params, axes and describe: its metrics,
+/// in its em grid, and its glyphs and kerning.
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+pub struct FontBody {
+    pub em: Option<Num>,
+    pub ascent: Option<Num>,
+    pub descent: Option<Num>,
+    /// Degrees, as skew-x leans: -12 leans right.
+    pub slant: Option<Num>,
+    pub kind: Option<FontKind>,
+    pub glyphs: Vec<Glyph>,
+    pub notdef: Option<Glyph>,
+    pub kerns: Vec<Kern>,
+}
+
+impl FontBody {
+    pub fn is_empty(&self) -> bool {
+        self.em.is_none()
+            && self.ascent.is_none()
+            && self.descent.is_none()
+            && self.slant.is_none()
+            && self.kind.is_none()
+            && self.glyphs.is_empty()
+            && self.notdef.is_none()
+            && self.kerns.is_empty()
+    }
+}
+
+/// How a font's glyphs are drawn: with strokes along their middles, or
+/// as filled outlines.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub enum FontKind {
+    Stroke,
+    Outline,
+}
+
+/// A glyph: the text it draws (one character, or several for a
+/// ligature), how far it moves the pen, and its shapes in the em grid.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Glyph {
+    pub name: String,
+    pub advance: Num,
+    pub nodes: Vec<Node>,
+    pub span: Span,
+}
+
+/// Space added between two glyphs drawn side by side, in the em grid.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Kern {
+    pub left: String,
+    pub right: String,
+    pub by: Num,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]

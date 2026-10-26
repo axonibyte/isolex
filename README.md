@@ -31,8 +31,8 @@ icon "switch-l3" {
 ```
 
 The language is small on purpose: arithmetic expressions, `repeat`,
-`when` guards, fragments, transforms and quarter-turns — and nothing
-Turing-shaped. Compilation is
+`when` guards, fragments, transforms and quarter-turns, and text in
+fonts that are themselves drawn in isolex — and nothing Turing-shaped. Compilation is
 total, pure, and byte-deterministic. See [SPEC.md](SPEC.md).
 
 ```sh
@@ -40,6 +40,7 @@ isolex check src/          # parse + resolve + lint the lexicon
 isolex compile src/ --ir out.json
 isolex docs src/           # generate the lexicon's reference tables
 isolex render src/ --svg out/ [--palette palette.json]   # one SVG per icon
+isolex compile src/ --ir - --icon port-label --param ports=24   # one icon, params set
 ```
 
 ## Embedding
@@ -53,7 +54,9 @@ cargo build --release --locked -p isolex-wasm --target wasm32-unknown-unknown
 ```
 
 The module takes `{"files": [{"name", "text"}, …]}` as JSON and returns
-the IR with the errors and warnings as data; [wasm/src/lib.rs](wasm/src/lib.rs)
+the IR with the errors and warnings as data; with `"icon"` and
+`"params"` too, it compiles that one icon with those params set, for a
+host drawing a value of one thing (`isolex::compile_one`); [wasm/src/lib.rs](wasm/src/lib.rs)
 documents its four exports, and `isolex::json` the shapes. Each release
 publishes it as `isolex-<version>.wasm`.
 
@@ -62,7 +65,9 @@ publishes it as `isolex-<version>.wasm`.
 - [docs/guide.md](docs/guide.md) — a task-oriented walk through authoring
   a lexicon: your first icon, parts, inheritance & late binding,
   fragments, screen-space paths, `repeat`/`when`, axes, transforms and
-  turns, expressions.
+  turns, text, expressions.
+- [docs/fonts.md](docs/fonts.md) — drawing a font, its styles, and
+  setting text in it.
 - [docs/primitives.md](docs/primitives.md) — every geometry node, with an
   example of each.
 - [docs/cookbook.md](docs/cookbook.md) — worked patterns from a real
