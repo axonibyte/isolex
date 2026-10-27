@@ -433,7 +433,16 @@ struct Ctx<'a> {
     /// Each font in each style text has been set in, or None for one
     /// that could not be, once reported.
     fonts: BTreeMap<(String, Vec<String>), Option<Rc<FontInst<'a>>>>,
+    /// Fonts built cleanly for icons expanded before this one, shared
+    /// between the requests of one [`expand_many`].
+    shared: SharedFonts<'a>,
 }
+
+/// Fonts built without a word said, by font and styles and the limits
+/// building one reads (expression depth and text length): built again
+/// under the same, one would be the same, so icons expanded one after
+/// another share them rather than building each again.
+type SharedFonts<'a> = BTreeMap<(String, Vec<String>, Option<u64>, Option<u64>), Rc<FontInst<'a>>>;
 
 impl<'a> Ctx<'a> {
     fn diag(&mut self, span: Span, message: impl Into<String>) {
@@ -490,7 +499,7 @@ impl<'a> Ctx<'a> {
 }
 
 pub fn expand(resolved: &Resolved) -> (Vec<ExpandedIcon>, Vec<SpanDiag>) {
-    let (icons, diags, _) = expand_with(resolved, None);
+    let (icons, diags, _, _) = expand_with(resolved, None, SharedFonts::new());
     (icons, diags)
 }
 
@@ -501,10 +510,31 @@ pub fn expand_only(
     resolved: &Resolved,
     only: &Only,
 ) -> Result<(Vec<ExpandedIcon>, Vec<SpanDiag>), String> {
-    match expand_with(resolved, Some(only)) {
-        (_, _, Some(refused)) => Err(refused),
-        (icons, diags, None) => Ok((icons, diags)),
-    }
+    expand_many(resolved, std::slice::from_ref(only))
+        .pop()
+        .expect("one result for one request")
+}
+
+/// One request's expansion: the icon and those it badges, with what
+/// expanding them said; or why the lexicon cannot answer it.
+pub type Expansion = Result<(Vec<ExpandedIcon>, Vec<SpanDiag>), String>;
+
+/// Several icons, each as [`expand_only`] gives it, sharing the fonts
+/// their text is set in rather than building each again for each.
+pub fn expand_many(resolved: &Resolved, requests: &[Only]) -> Vec<Expansion> {
+    let mut shared = SharedFonts::new();
+    requests
+        .iter()
+        .map(|only| {
+            let (icons, diags, refused, fonts) =
+                expand_with(resolved, Some(only), std::mem::take(&mut shared));
+            shared = fonts;
+            match refused {
+                Some(refused) => Err(refused),
+                None => Ok((icons, diags)),
+            }
+        })
+        .collect()
 }
 
 fn new_ctx(resolved: &Resolved) -> Ctx<'_> {
@@ -528,14 +558,23 @@ fn new_ctx(resolved: &Resolved) -> Ctx<'_> {
         in_glyph: 0,
         exhausted: false,
         fonts: BTreeMap::new(),
+        shared: SharedFonts::new(),
     }
 }
 
-fn expand_with(
-    resolved: &Resolved,
+#[allow(clippy::type_complexity)]
+fn expand_with<'a>(
+    resolved: &'a Resolved,
     only: Option<&Only>,
-) -> (Vec<ExpandedIcon>, Vec<SpanDiag>, Option<String>) {
+    shared: SharedFonts<'a>,
+) -> (
+    Vec<ExpandedIcon>,
+    Vec<SpanDiag>,
+    Option<String>,
+    SharedFonts<'a>,
+) {
     let mut ctx = new_ctx(resolved);
+    ctx.shared = shared;
     let mut out = Vec::new();
     // with one icon asked for, every emitted icon, to choose from
     let mut candidates: Vec<(ResolvedDef, String)> = Vec::new();
@@ -607,7 +646,7 @@ fn expand_with(
         }
     }
     let Some(only) = only else {
-        return (out, ctx.diags, None);
+        return (out, ctx.diags, None, ctx.shared);
     };
     let Some(at) = candidates.iter().position(|(_, n)| *n == only.icon) else {
         let refused = format!(
@@ -615,10 +654,10 @@ fn expand_with(
             only.icon,
             suggest(&only.icon, candidates.iter().map(|(_, n)| n.as_str()))
         );
-        return (out, ctx.diags, Some(refused));
+        return (out, ctx.diags, Some(refused), ctx.shared);
     };
     if let Some(refused) = refuse_host_params(&candidates[at].0, &only.icon, &only.params) {
-        return (out, ctx.diags, Some(refused));
+        return (out, ctx.diags, Some(refused), ctx.shared);
     }
     let (def, name) = &candidates[at];
     if let Some(exp) = expand_one(&mut ctx, def, name.clone(), Some(&only.params)) {
@@ -644,7 +683,7 @@ fn expand_with(
             }
         }
     }
-    (out, ctx.diags, None)
+    (out, ctx.diags, None, ctx.shared)
 }
 
 /// A host's params, held to the icon's: each one it has, of its type, and
@@ -2447,7 +2486,26 @@ fn font_instance<'a>(ctx: &mut Ctx<'a>, spec: &TextSpec, span: Span) -> Option<R
     if let Some(built) = ctx.fonts.get(&key) {
         return built.clone();
     }
+    let shared_key = (
+        spec.font.clone(),
+        spec.styles.clone(),
+        ctx.expression_depth.limit,
+        ctx.text_length.limit,
+    );
+    if !ctx.exhausted {
+        if let Some(inst) = ctx.shared.get(&shared_key) {
+            let built = Some(inst.clone());
+            ctx.fonts.insert(key, built.clone());
+            return built;
+        }
+    }
+    let said = ctx.diags.len();
     let built = build_font(ctx, spec, span).map(Rc::new);
+    if let Some(inst) = &built {
+        if ctx.diags.len() == said && !ctx.exhausted {
+            ctx.shared.insert(shared_key, inst.clone());
+        }
+    }
     ctx.fonts.insert(key, built.clone());
     built
 }

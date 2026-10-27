@@ -58,7 +58,8 @@ cargo build --release --locked -p isolex-wasm --target wasm32-unknown-unknown
 The module takes `{"files": [{"name", "text"}, …]}` as JSON and returns
 the IR with the errors and warnings as data; with `"icon"` and
 `"params"` too, it compiles that one icon with those params set, for a
-host drawing a value of one thing (`isolex::compile_one`); [wasm/src/lib.rs](wasm/src/lib.rs)
+host drawing a value of one thing (`isolex::compile_one`), and with
+`"requests"`, many such icons from one parse (`isolex::compile_many`); [wasm/src/lib.rs](wasm/src/lib.rs)
 documents its four exports, and `isolex::json` the shapes. Each release
 publishes it as `isolex-<version>.wasm`.
 

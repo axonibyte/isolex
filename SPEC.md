@@ -720,6 +720,16 @@ always compile to the same IR, so a host can keep it by them. An icon
 the lexicon does not emit, or a param it does not have, or of the other
 type, is refused as a request rather than reported as a diagnostic.
 
+**Many icons.** A host drawing many things at once (a list, a sheet of
+labels) asks for them together, from one parse: `isolex::compile_many
+(files, requests)`, or `"requests": [{"icon", "params"}, …]` in place
+of `"icon"` and `"params"` in the JSON. The lexicon is parsed and
+resolved once, which is most of the work when it holds a font; each
+request then compiles exactly as one icon would, to the same IR and
+the same errors, and is refused on its own. The lexicon's own errors
+and warnings are reported once, beside the results; with errors,
+nothing is expanded.
+
 ## 11. Conformance
 
 A conforming compiler produces byte-identical IR for identical

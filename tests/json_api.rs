@@ -174,3 +174,56 @@ fn one_icon_with_params_compiles_alone() {
         "params are set on one icon; name it with \"icon\""
     );
 }
+
+#[test]
+fn many_icons_compile_from_one_input_each_as_one_would() {
+    let text = include_str!("../tests/fixtures/text.ilx");
+    let mut input = files(&[("text.ilx", text)]);
+    input["requests"] = json!([
+        {"icon": "port-label", "params": {"ports": 24}},
+        {"icon": "tagged-a", "params": {"tag": "Drill 3"}},
+        {"icon": "nope"},
+        {"icon": "port-label", "params": {"ports": "24"}},
+        {"icon": "styles"},
+    ]);
+    let out = run(&input);
+    assert_eq!(out["ok"], true, "{out}");
+    assert_eq!(out["errors"], json!([]));
+    let results = out["results"].as_array().unwrap();
+    assert_eq!(results.len(), 5);
+    // each is what asking for it alone gives, but for "isolex"
+    for (i, r) in input["requests"].as_array().unwrap().iter().enumerate() {
+        let mut one = files(&[("text.ilx", text)]);
+        one["icon"] = r["icon"].clone();
+        one["params"] = r.get("params").cloned().unwrap_or(json!({}));
+        let mut want = run(&one);
+        want.as_object_mut().unwrap().remove("isolex");
+        assert_eq!(results[i], want, "request {i}");
+    }
+    assert_eq!(
+        results[2]["input_error"],
+        "the lexicon emits no icon 'nope'"
+    );
+    assert_eq!(results[2]["ir"], Value::Null);
+
+    // the lexicon's own errors: no results
+    let mut input = files(&[("b.ilx", "icon \"two\" {\n  patr \"p\" { }\n}\n")]);
+    input["requests"] = json!([{"icon": "two"}]);
+    let out = run(&input);
+    assert_eq!(out["ok"], false);
+    assert_eq!(out["results"], Value::Null);
+    assert_eq!(out["errors"][0]["file"], "b.ilx");
+    assert!(out.get("input_error").is_none(), "{out}");
+
+    // none at all is fine
+    let mut input = files(&[("text.ilx", text)]);
+    input["requests"] = json!([]);
+    assert_eq!(run(&input)["results"], json!([]));
+
+    // requests name their own icons
+    input["icon"] = json!("styles");
+    assert_eq!(
+        run(&input)["input_error"],
+        "\"requests\" name each icon and its params; leave out \"icon\" and \"params\""
+    );
+}

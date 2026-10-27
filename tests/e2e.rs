@@ -1634,6 +1634,121 @@ fn compile_one_draws_the_icons_a_badge_names_but_emits_only_its_own() {
 }
 
 #[test]
+fn compile_many_is_compile_one_for_each_request_from_one_parse() {
+    use isolex::{HostValue, Only};
+    use std::collections::BTreeMap;
+    let request = |icon: &str, params: &[(&str, HostValue)]| Only {
+        icon: icon.to_string(),
+        params: params
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.clone()))
+            .collect::<BTreeMap<_, _>>(),
+    };
+    let requests = [
+        request("port-label", &[("ports", HostValue::Num(24.0))]),
+        request("tagged-a", &[("tag", HostValue::Text("Drill 3".into()))]),
+        request("nope", &[]),
+        request("tagged-a", &[("tag", HostValue::Text("{n}".into()))]),
+        request("port-label", &[("ports", HostValue::Text("1".into()))]),
+        request("styles", &[]),
+        // a value the icon cannot draw is that request's error alone
+        request("port-label", &[("ports", HostValue::Num(1e300))]),
+        request("port-label", &[("ports", HostValue::Num(24.0))]),
+    ];
+    let (lexicon, results) = isolex::compile_many(&text(), &requests);
+    assert!(lexicon.errors.is_empty(), "{:?}", lexicon.errors);
+    assert!(lexicon.doc.icons.is_empty());
+    assert_eq!(results.len(), requests.len());
+    let mut refused = 0;
+    let mut failed = 0;
+    for (r, got) in requests.iter().zip(&results) {
+        let want = isolex::compile_one(&text(), &r.icon, &r.params);
+        match (got, &want) {
+            (Ok(got), Ok(want)) => {
+                assert_eq!(
+                    serde_json::to_string(&got.doc).unwrap(),
+                    serde_json::to_string(&want.doc).unwrap(),
+                    "{}",
+                    r.icon
+                );
+                assert_eq!(format!("{:?}", got.errors), format!("{:?}", want.errors));
+                // the lexicon's warnings are said once, not for each
+                assert!(got.warnings.is_empty());
+                assert_eq!(
+                    format!("{:?}", lexicon.warnings),
+                    format!("{:?}", want.warnings)
+                );
+                failed += usize::from(!got.errors.is_empty());
+            }
+            (Err(got), Err(want)) => {
+                assert_eq!(got, want);
+                refused += 1;
+            }
+            _ => panic!(
+                "{}: {:?} but compile_one {:?}",
+                r.icon,
+                got.is_ok(),
+                want.is_ok()
+            ),
+        }
+    }
+    assert_eq!((refused, failed), (2, 1));
+
+    // a lexicon with errors of its own: they, and nothing expanded
+    let broken = vec![(
+        "a.ilx".to_string(),
+        "icon \"a\" {\n  patr \"p\" { }\n}\n".to_string(),
+    )];
+    let (lexicon, results) = isolex::compile_many(&broken, &requests);
+    assert!(results.is_empty());
+    let one = isolex::compile_one(&broken, "a", &BTreeMap::new()).unwrap();
+    assert!(!one.errors.is_empty());
+    assert_eq!(format!("{:?}", lexicon.errors), format!("{:?}", one.errors));
+}
+
+#[test]
+fn compile_many_shares_a_font_only_between_icons_it_would_build_the_same_for() {
+    use isolex::{HostValue, Only};
+    use std::collections::BTreeMap;
+    // the font's advance nests three deep: past "tight"'s expression-depth
+    let src = r#"font "f" { em 10; ascent 7; descent 3; kind "stroke"
+  glyph "A" advance="1 + (2 * (1 + 1))" { path d="M0,0 L5,7" }
+}
+icon "loose" { category "c"; footprint 1 1 1; param t (text)"A"
+  part "p" { at 0 0 0 { text 2 10 "{t}" font="f" size=8 } }
+}
+icon "tight" { category "c"; footprint 1 1 1; expression-depth 1; param t (text)"A"
+  part "p" { at 0 0 0 { text 2 10 "{t}" font="f" size=8 } }
+}
+"#;
+    let files = vec![("a.ilx".to_string(), src.to_string())];
+    let request = |icon: &str| Only {
+        icon: icon.to_string(),
+        params: BTreeMap::from([("t".to_string(), HostValue::Text("AA".into()))]),
+    };
+    for order in [["loose", "tight", "loose"], ["tight", "loose", "tight"]] {
+        let requests: Vec<Only> = order.iter().map(|i| request(i)).collect();
+        let (lexicon, results) = isolex::compile_many(&files, &requests);
+        assert!(lexicon.errors.is_empty(), "{:?}", lexicon.errors);
+        for (r, got) in requests.iter().zip(results) {
+            let got = got.unwrap();
+            let want = isolex::compile_one(&files, &r.icon, &r.params).unwrap();
+            assert_eq!(
+                format!("{:?}", got.errors),
+                format!("{:?}", want.errors),
+                "{order:?}: {}",
+                r.icon
+            );
+            assert_eq!(
+                serde_json::to_string(&got.doc).unwrap(),
+                serde_json::to_string(&want.doc).unwrap()
+            );
+            assert_eq!(got.errors.is_empty(), r.icon == "loose", "{:?}", got.errors);
+        }
+    }
+}
+
+#[test]
 fn compile_and_render_take_one_icon_on_the_command_line() {
     let dir = std::env::temp_dir().join(format!("isolex-e2e-one-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
