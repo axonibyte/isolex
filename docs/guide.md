@@ -364,17 +364,30 @@ isolex render src/ --svg out/     # one SVG per icon, to look at
 ```
 
 `render` colors tokens from a built-in palette of placeholder colors for
-the tokens the compiler uses by default. Give it your own as a JSON
-object of token to CSS color, which extends or overrides the built-in
-one:
+the tokens the compiler uses by default. Give the lexicon its own in a
+`palette` block, a color for each token on a light ground and on a dark
+one, so the folder carries its colors with it:
+
+```kdl
+palette {
+  ink light="#1f2933" dark="#e4e7eb"
+  accent light="#c62828" dark="#ef9a9a"
+}
+```
+
+A token colored twice, or one the lexicon does not declare, is an error;
+a token an icon paints that the block leaves out is a warning. `render`
+draws with the light colors, and hosts embedding the compiler get both.
+For a one-off render, a JSON object of token to CSS color overrides
+both the built-in palette and the block:
 
 ```sh
 echo '{"accent": "#c62828", "ink": "#111"}' > palette.json
 isolex render src/ --svg out/ --palette palette.json
 ```
 
-A token with no color is an error naming the icons that paint with it,
-and nothing is written.
+A token with no color in any of them is an error naming the icons that
+paint with it, and nothing is written.
 
 `check` early and often; the diagnostics are precise and are treated as
 API (they have golden tests). When two builds of the same source differ,

@@ -32,6 +32,11 @@
 //! `ok` and `errors` at the top are the lexicon's parsing and resolving,
 //! and `results` is `null` when it has errors; `warnings` are the
 //! lexicon's, and each result's are empty.
+//!
+//! A lexicon with a `palette` block adds it at the top of either output,
+//! by token, whether it compiled or not: `"palette": {"ink": {"light":
+//! "#1f2933", "dark": "#e4e7eb"}, …}`. Without one, there is no
+//! `palette`.
 
 use std::collections::BTreeMap;
 
@@ -39,7 +44,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::ir::IrDocument;
 use crate::parser::Diag;
-use crate::HostValue;
+use crate::{Colors, HostValue};
 
 #[derive(Deserialize)]
 struct Input {
@@ -83,6 +88,8 @@ struct Output<'a> {
     errors: &'a [Diag],
     warnings: &'a [Diag],
     ir: Option<&'a IrDocument>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    palette: Option<&'a BTreeMap<String, Colors>>,
 }
 
 /// The output for many icons: the lexicon's, and each request's.
@@ -93,6 +100,8 @@ struct ManyOutput<'a> {
     errors: &'a [Diag],
     warnings: &'a [Diag],
     results: Option<Vec<OneOutput<'a>>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    palette: Option<&'a BTreeMap<String, Colors>>,
 }
 
 /// One request's result: an icon's output but for `isolex`.
@@ -117,6 +126,7 @@ pub fn compile_json(input: &[u8]) -> String {
             errors: &[],
             warnings: &[],
             ir: None,
+            palette: None,
         })
     };
     let parsed: Input = match serde_json::from_slice(input) {
@@ -158,6 +168,7 @@ pub fn compile_json(input: &[u8]) -> String {
         errors: &c.errors,
         warnings: &c.warnings,
         ir: ok.then_some(&c.doc),
+        palette: c.palette.as_ref(),
     })
 }
 
@@ -199,6 +210,7 @@ fn many(files: &[(String, String)], requests: Vec<Request>) -> String {
         errors: &lexicon.errors,
         warnings: &lexicon.warnings,
         results,
+        palette: lexicon.palette.as_ref(),
     })
     .expect("the output serializes")
 }

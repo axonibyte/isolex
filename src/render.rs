@@ -45,15 +45,39 @@ impl Default for Palette {
 }
 
 impl Palette {
+    /// These colors and no others.
+    pub fn of_tokens<'a>(colors: impl IntoIterator<Item = (&'a String, &'a String)>) -> Palette {
+        Palette(
+            colors
+                .into_iter()
+                .map(|(t, c)| (t.clone(), c.clone()))
+                .collect(),
+        )
+    }
+
+    /// The built-in palette with these colors laid over it: a lexicon's
+    /// `palette` block, its light colors.
+    pub fn with_colors<'a>(colors: impl IntoIterator<Item = (&'a String, &'a String)>) -> Palette {
+        let mut palette = Palette::default();
+        palette.0.extend(Palette::of_tokens(colors).0);
+        palette
+    }
+
     /// The built-in palette with a palette file's JSON object of token to
     /// color laid over it.
     pub fn with_json(text: &str) -> Result<Palette, String> {
+        Palette::default().with_json_over(text)
+    }
+
+    /// This palette with a palette file's JSON object of token to color
+    /// laid over it.
+    pub fn with_json_over(self, text: &str) -> Result<Palette, String> {
         let value: serde_json::Value =
             serde_json::from_str(text).map_err(|e| format!("the palette is not JSON: {e}"))?;
         let Some(object) = value.as_object() else {
             return Err("the palette must be a JSON object of token to color".to_string());
         };
-        let mut palette = Palette::default();
+        let mut palette = self;
         for (token, color) in object {
             let Some(color) = color.as_str() else {
                 return Err(format!(

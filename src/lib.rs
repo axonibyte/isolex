@@ -34,6 +34,56 @@ pub struct Compilation {
     /// Parse, resolve, expand and projection errors, in that order.
     pub errors: Vec<Diag>,
     pub warnings: Vec<Diag>,
+    /// The lexicon's `palette` block, by token, when it has one (SPEC §2).
+    pub palette: Option<BTreeMap<String, Colors>>,
+}
+
+/// A token's colors in the `palette` block: on a light ground and on a
+/// dark one.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct Colors {
+    pub light: String,
+    pub dark: String,
+}
+
+fn palette_of(lexicon: &ast::Lexicon) -> Option<BTreeMap<String, Colors>> {
+    lexicon.palette.as_ref().map(|p| {
+        p.colors
+            .iter()
+            .map(|c| {
+                let colors = Colors {
+                    light: c.light.clone(),
+                    dark: c.dark.clone(),
+                };
+                (c.token.clone(), colors)
+            })
+            .collect()
+    })
+}
+
+/// A token an emitted icon paints that the palette block gives no color, a
+/// warning at the block; with no block, none (SPEC §2).
+fn uncolored(lexicon: &ast::Lexicon, doc: &IrDocument) -> Vec<SpanDiag> {
+    let Some(block) = &lexicon.palette else {
+        return Vec::new();
+    };
+    let colored = render::Palette::of_tokens(block.colors.iter().map(|c| (&c.token, &c.light)));
+    render::missing_colors(&doc.icons, &colored)
+        .into_iter()
+        .map(|(token, icons)| {
+            let mut by: Vec<&str> = icons.iter().map(|i| i.as_str()).take(3).collect();
+            if icons.len() > 3 {
+                by.push("…");
+            }
+            SpanDiag {
+                span: block.span,
+                message: format!(
+                    "'{token}' is painted (by {}) but the palette gives it no color",
+                    by.join(", ")
+                ),
+            }
+        })
+        .collect()
 }
 
 /// Compiles a lexicon given as (file name, source text) pairs, in the
@@ -51,12 +101,18 @@ pub fn compile(files: &[(String, String)]) -> Compilation {
         &project::Vocabulary::of(outcome.lexicon.config.as_ref()),
     );
     errors.extend(pdiags.iter().map(|d| locate(files, d)));
-    let warnings = resolved.warnings.iter().map(|w| locate(files, w)).collect();
+    let warnings = resolved
+        .warnings
+        .iter()
+        .chain(uncolored(&outcome.lexicon, &doc).iter())
+        .map(|w| locate(files, w))
+        .collect();
     Compilation {
         doc,
         definitions: outcome.lexicon.defs.len(),
         errors,
         warnings,
+        palette: palette_of(&outcome.lexicon),
     }
 }
 
@@ -87,6 +143,7 @@ pub fn compile_one(
     }
     let mut c = each.pop().expect("one result for one request")?;
     c.warnings = lexicon.warnings;
+    c.palette = lexicon.palette;
     Ok(c)
 }
 
@@ -122,6 +179,7 @@ pub fn compile_many(
         definitions,
         errors,
         warnings,
+        palette: palette_of(&outcome.lexicon),
     };
     if !lexicon.errors.is_empty() {
         return (lexicon, Vec::new());
@@ -141,6 +199,7 @@ pub fn compile_many(
                 definitions,
                 errors,
                 warnings: Vec::new(),
+                palette: None,
             })
         })
         .collect();

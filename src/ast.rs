@@ -775,10 +775,32 @@ pub struct Lexicon {
     pub files: Vec<String>,
     pub config: Option<LexiconConfig>,
     pub defs: Vec<Definition>,
+    /// The `palette` block, at most one per lexicon.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub palette: Option<PaletteBlock>,
     /// Where each node's pieces are written, for tools that edit the
     /// source; left out of the goldens.
     #[serde(skip)]
     pub sources: SourceMap,
+}
+
+/// The lexicon's own colors for its tokens: `palette { ink light="#…"
+/// dark="#…" }`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct PaletteBlock {
+    /// In the order written, each token once.
+    pub colors: Vec<PaletteColor>,
+    pub span: Span,
+}
+
+/// A token's color on a light ground and on a dark one, as written: `#rgb`
+/// or `#rrggbb`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct PaletteColor {
+    pub token: String,
+    pub light: String,
+    pub dark: String,
+    pub span: Span,
 }
 
 /// The pieces of one node of the source, by the span every construct of

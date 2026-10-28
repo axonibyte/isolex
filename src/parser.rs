@@ -160,7 +160,9 @@ fn map_sources(ctx: &FileCtx, doc: &kdl::Document, map: &mut SourceMap) {
     }
 }
 
-const TOP_NODES: &[&str] = &["lexicon", "base", "icon", "fragment", "axis", "font"];
+const TOP_NODES: &[&str] = &[
+    "lexicon", "palette", "base", "icon", "fragment", "axis", "font",
+];
 
 fn parse_top(ctx: &mut FileCtx, node: kdl::NodeRef, out: &mut Lexicon) {
     let name = node.name().value();
@@ -248,6 +250,17 @@ fn parse_top(ctx: &mut FileCtx, node: kdl::NodeRef, out: &mut Lexicon) {
                 out.config = Some(cfg);
             }
         }
+        "palette" => {
+            let block = parse_palette(ctx, node);
+            if out.palette.is_some() {
+                ctx.diag(
+                    node.span().offset(),
+                    "duplicate 'palette' node; one per lexicon",
+                );
+            } else {
+                out.palette = Some(block);
+            }
+        }
         "base" | "icon" | "fragment" | "axis" | "font" => {
             if let Some(def) = parse_definition(ctx, node) {
                 out.defs.push(def);
@@ -261,6 +274,80 @@ fn parse_top(ctx: &mut FileCtx, node: kdl::NodeRef, out: &mut Lexicon) {
             ),
         ),
     }
+}
+
+/// `palette { <token> light="#…" dark="#…" … }` (SPEC §2): whether each
+/// token is the lexicon's is checked once every file is read.
+fn parse_palette(ctx: &mut FileCtx, node: kdl::NodeRef) -> PaletteBlock {
+    only_props(ctx, node, &[]);
+    if let Some(e) = node.entries().iter().find(|e| e.name().is_none()) {
+        ctx.diag(
+            e.span().offset(),
+            "palette takes no arguments: palette { ink light=\"#1f2933\" dark=\"#e4e7eb\" }",
+        );
+    }
+    let mut colors: Vec<PaletteColor> = Vec::new();
+    for ch in node.children().into_iter().flat_map(|c| c.nodes()) {
+        let token = ch.name().value();
+        let off = ch.span().offset();
+        only_props(ctx, ch, &["light", "dark"]);
+        if ch.entries().iter().any(|e| e.name().is_none()) || ch.children().is_some() {
+            ctx.diag(
+                off,
+                format!("a palette color is written {token} light=\"#…\" dark=\"#…\""),
+            );
+            continue;
+        }
+        let mut color = |which: &str| -> Option<String> {
+            let Some(e) = ch
+                .entries()
+                .iter()
+                .find(|e| e.name().map(|n| n.value()) == Some(which))
+            else {
+                ctx.diag(
+                    off,
+                    format!("'{token}' needs a {which} color: {which}=\"#…\""),
+                );
+                return None;
+            };
+            match e.value().as_string() {
+                Some(c) if is_hex_color(c) => Some(c.to_string()),
+                Some(c) => {
+                    ctx.diag(
+                        e.span().offset(),
+                        format!("'{c}' is not a color; write #rgb or #rrggbb"),
+                    );
+                    None
+                }
+                None => {
+                    ctx.diag(e.span().offset(), format!("{which} takes a color string"));
+                    None
+                }
+            }
+        };
+        let (light, dark) = (color("light"), color("dark"));
+        if colors.iter().any(|c| c.token == token) {
+            ctx.diag(off, format!("'{token}' is colored twice in the palette"));
+            continue;
+        }
+        if let (Some(light), Some(dark)) = (light, dark) {
+            colors.push(PaletteColor {
+                token: token.to_string(),
+                light,
+                dark,
+                span: ctx.span(ch.span()),
+            });
+        }
+    }
+    PaletteBlock {
+        colors,
+        span: ctx.span(node.span()),
+    }
+}
+
+fn is_hex_color(c: &str) -> bool {
+    c.strip_prefix('#')
+        .is_some_and(|hex| matches!(hex.len(), 3 | 6) && hex.chars().all(|d| d.is_ascii_hexdigit()))
 }
 
 fn parse_definition(ctx: &mut FileCtx, node: kdl::NodeRef) -> Option<Definition> {

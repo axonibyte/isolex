@@ -121,6 +121,29 @@ pub fn resolve(lexicon: &Lexicon) -> Resolved {
         ..Resolved::default()
     };
 
+    // --- the palette colors only the lexicon's tokens (SPEC §2) --------
+    if let (Some(palette), Some(tokens)) = (
+        &lexicon.palette,
+        lexicon
+            .config
+            .as_ref()
+            .map(|c| &c.tokens)
+            .filter(|t| !t.is_empty()),
+    ) {
+        for color in &palette.colors {
+            if !tokens.contains(&color.token) {
+                ctx.diag(
+                    color.span,
+                    format!(
+                        "the palette colors '{}', which is not one of the lexicon's tokens{}",
+                        color.token,
+                        suggest(&color.token, tokens.iter().map(|t| t.as_str()))
+                    ),
+                );
+            }
+        }
+    }
+
     // --- index and duplicate detection --------------------------------
     let mut index: BTreeMap<&str, &Definition> = BTreeMap::new();
     for def in &lexicon.defs {

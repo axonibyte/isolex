@@ -227,3 +227,40 @@ fn many_icons_compile_from_one_input_each_as_one_would() {
         "\"requests\" name each icon and its params; leave out \"icon\" and \"params\""
     );
 }
+
+#[test]
+fn the_palette_block_is_returned_beside_the_ir() {
+    let lexicon = include_str!("fixtures/palette.ilx");
+    let out = run(&files(&[("palette.ilx", lexicon)]));
+    assert_eq!(out["ok"], true, "{out}");
+    assert_eq!(
+        out["palette"]["accent"],
+        json!({"light": "#c62828", "dark": "#ef9a9a"})
+    );
+    assert_eq!(out["palette"].as_object().unwrap().len(), 6);
+    // the IR does not change
+    assert!(out["ir"].get("palette").is_none());
+
+    // one icon, and many, give it too
+    let mut one = files(&[("palette.ilx", lexicon)]);
+    one["icon"] = json!("crate");
+    assert_eq!(run(&one)["palette"], out["palette"]);
+    let mut many = files(&[("palette.ilx", lexicon)]);
+    many["requests"] = json!([{"icon": "crate"}]);
+    let many = run(&many);
+    assert_eq!(many["palette"], out["palette"]);
+    assert!(many["results"][0].get("palette").is_none());
+
+    // and so does a lexicon that fails, so a host can still show its colors
+    let broken = format!("{lexicon}\nicon \"x\" {{\n  patr \"p\" {{ }}\n}}\n");
+    let out = run(&files(&[("palette.ilx", &broken)]));
+    assert_eq!(out["ok"], false);
+    assert_eq!(out["palette"]["ink"]["dark"], "#f0f4f8");
+
+    // without a block, there is no palette
+    let out = run(&files(&[(
+        "sample.ilx",
+        include_str!("fixtures/sample.ilx"),
+    )]));
+    assert!(out.get("palette").is_none(), "{out}");
+}

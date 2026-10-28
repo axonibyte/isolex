@@ -57,6 +57,16 @@ New defaults follow the same rule.
   when that is declared) that an icon may paint with, written or
   defaulted, only if its definition chain grants them (§3). The limits
   of §9 can be set here for every icon.
+- `palette { … }` — at most one per lexicon, in any file: the lexicon's
+  own colors for its tokens, so a folder of `.ilx` files describes
+  itself completely. Each child is a token with its color on a light
+  ground and on a dark one: `ink light="#1f2933" dark="#e4e7eb"`, both
+  required, each `#rgb` or `#rrggbb`. A token colored twice is an error,
+  and so is one that is not among the lexicon's `tokens`, when it
+  declares them. A token an emitted icon paints that the block gives no
+  color is a warning at the block, naming the icons; a lexicon without a
+  block is not checked. The block never reaches the IR; it is returned
+  beside it (§10).
 - `base "name" { … }` — an abstract definition. Never emitted; may be
   incomplete.
 - `icon "name" { … }` — a concrete definition. After resolution it must
@@ -650,9 +660,9 @@ then any of `--param <name>=<number>` and `--text <name>=<text>`, as
 `compile_one` below. `isolex docs <dir>` emits per-category markdown reference
 tables from `describe` metadata. `isolex render <dir> --svg <out>
 [--palette <file>]` writes one `<icon>.svg` per icon into `<out>` (§7),
-coloring tokens from a built-in palette that a palette file (a JSON
-object of token to CSS color) extends or overrides; a token with no
-color, or an icon name that is not a safe file name (letters, digits,
+coloring tokens from a built-in palette that the lexicon's `palette`
+block (its light colors, §2) and then a palette file (a JSON object of
+token to CSS color) extend or override; a token with no color, or an icon name that is not a safe file name (letters, digits,
 `-`, `_` and `.`, not starting with `.`), is an error, and a render
 that fails writes nothing. Diagnostics go to standard error,
 warnings first. Exit status: 0 clean (warnings included), 1 errors or
@@ -704,7 +714,8 @@ The same compilation is available without a file system: as the
 library function `isolex::compile`, and as a WebAssembly module that
 imports nothing and takes and returns JSON (`isolex::json`), whose IR is
 the IR `compile` writes (compact rather than indented) and whose
-diagnostics are the CLI's as data.
+diagnostics are the CLI's as data. Both give the lexicon's `palette`
+block, by token with its light and dark colors, when it has one.
 
 **One icon.** A value known only when one thing is drawn (its name, a
 code, a count) is a param set on a compile of that one icon:

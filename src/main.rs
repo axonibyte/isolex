@@ -198,18 +198,26 @@ fn run(dir: &str, mode: Mode, only: Option<OneIcon>) -> ExitCode {
             print!("{}", docs_markdown(doc));
             ExitCode::SUCCESS
         }
-        Mode::Render { out, palette } => render_svg(doc, &out, palette.as_deref()),
+        Mode::Render { out, palette } => {
+            // the built-in palette, then the lexicon's, then a palette file
+            let lexicon = match &c.palette {
+                Some(colors) => Palette::with_colors(colors.iter().map(|(t, c)| (t, &c.light))),
+                None => Palette::default(),
+            };
+            render_svg(doc, &out, lexicon, palette.as_deref())
+        }
     }
 }
 
-/// One SVG per icon into `out`. Everything is checked first, the palette,
-/// every token's color and every icon name as a file name, so a render
-/// that fails writes nothing.
-fn render_svg(doc: &IrDocument, out: &str, palette: Option<&str>) -> ExitCode {
-    let palette = match palette {
-        None => Palette::default(),
+/// One SVG per icon into `out`, colored by `palette` with a palette file
+/// laid over it. Everything is checked first, the palette, every token's
+/// color and every icon name as a file name, so a render that fails
+/// writes nothing.
+fn render_svg(doc: &IrDocument, out: &str, palette: Palette, file: Option<&str>) -> ExitCode {
+    let palette = match file {
+        None => palette,
         Some(path) => match std::fs::read_to_string(path) {
-            Ok(text) => match Palette::with_json(&text) {
+            Ok(text) => match palette.with_json_over(&text) {
                 Ok(p) => p,
                 Err(e) => {
                     eprintln!("isolex: {path}: {e}");
@@ -226,8 +234,8 @@ fn render_svg(doc: &IrDocument, out: &str, palette: Option<&str>) -> ExitCode {
     for (token, icons) in &missing {
         let icons: Vec<&str> = icons.iter().map(|s| s.as_str()).collect();
         eprintln!(
-            "isolex: the palette has no color for '{token}' (painted by {}); add it to a palette \
-             file and pass --palette",
+            "isolex: the palette has no color for '{token}' (painted by {}); add it to the \
+             lexicon's palette block, or to a palette file passed with --palette",
             icons.join(", ")
         );
     }

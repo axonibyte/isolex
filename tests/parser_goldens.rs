@@ -54,6 +54,11 @@ fn fixtures_are_checked_out_with_lf() {
             include_str!("fixtures/transforms.svg.golden"),
         ),
         ("text.ilx", include_str!("fixtures/text.ilx")),
+        ("palette.ilx", include_str!("fixtures/palette.ilx")),
+        (
+            "palette.svg.golden",
+            include_str!("fixtures/palette.svg.golden"),
+        ),
         (
             "text.ir.golden.json",
             include_str!("fixtures/text.ir.golden.json"),
@@ -571,6 +576,57 @@ fn diagnostics_name_the_problem_and_the_place() {
             "icon \"x\" {\n  part \"p\" {\n    text 0 0 \"a\" font=\"f\" size=2\n  }\n}",
             3,
             &["'text' is a 2-D node and only appears inside an 'at' anchor group"],
+        ),
+        // the palette block (#55)
+        (
+            "pallete {\n}",
+            1,
+            &["unknown top-level node 'pallete'", "did you mean 'palette'?"],
+        ),
+        (
+            "palette {\n  ink light=\"#12\" dark=\"#000\"\n}",
+            2,
+            &["'#12' is not a color; write #rgb or #rrggbb"],
+        ),
+        (
+            "palette {\n  ink light=\"red\" dark=\"#000\"\n}",
+            2,
+            &["'red' is not a color"],
+        ),
+        (
+            "palette {\n  ink light=\"#111\"\n}",
+            2,
+            &["'ink' needs a dark color: dark=\"#…\""],
+        ),
+        (
+            "palette {\n  ink light=\"#111\" dark=1\n}",
+            2,
+            &["dark takes a color string"],
+        ),
+        (
+            "palette {\n  ink light=\"#111\" dark=\"#000\"\n  ink light=\"#222\" dark=\"#000\"\n}",
+            3,
+            &["'ink' is colored twice in the palette"],
+        ),
+        (
+            "palette {\n  ink light=\"#111\" dark=\"#000\" shade=\"#fff\"\n}",
+            2,
+            &["unknown property 'shade' on ink", "ink takes light and dark"],
+        ),
+        (
+            "palette {\n  ink \"#111\"\n}",
+            2,
+            &["a palette color is written ink light=\"#…\" dark=\"#…\""],
+        ),
+        (
+            "palette \"house\" {\n}",
+            1,
+            &["palette takes no arguments"],
+        ),
+        (
+            "palette {\n}\npalette {\n}",
+            3,
+            &["duplicate 'palette' node; one per lexicon"],
         ),
     ];
 

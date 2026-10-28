@@ -782,7 +782,7 @@ fn render_takes_a_palette_over_the_built_in_one() {
     let (ok, stderr, out) = render("nopalette", &[("i.ilx", icon)], None);
     assert!(!ok, "{stderr}");
     assert!(
-        stderr.contains("the palette has no color for 'brand' (painted by i); add it to a palette file and pass --palette"),
+        stderr.contains("the palette has no color for 'brand' (painted by i); add it to the lexicon's palette block, or to a palette file passed with --palette"),
         "{stderr}"
     );
     assert!(!out.exists(), "a failed render writes nothing");
@@ -821,6 +821,92 @@ fn render_refuses_an_icon_name_that_is_not_a_file_name() {
         "{stderr}"
     );
     assert!(!out.exists() && !out.parent().unwrap().join("escape.svg").exists());
+}
+
+#[test]
+fn render_draws_with_the_palette_block_and_a_palette_file_over_it() {
+    let lexicon = include_str!("fixtures/palette.ilx");
+    let (ok, stderr, out) = render("block", &[("palette.ilx", lexicon)], None);
+    assert!(ok, "{stderr}");
+    let block = svgs(&out);
+    let golden_path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/palette.svg.golden"
+    );
+    if std::env::var("UPDATE_GOLDENS").is_ok() {
+        std::fs::write(golden_path, &block).unwrap();
+    }
+    let want = std::fs::read_to_string(golden_path)
+        .expect("golden missing: run with UPDATE_GOLDENS=1 once, then review the diff");
+    assert_eq!(block, want, "SVG drifted from the golden");
+    // the block's light colors, not the built-in ones
+    assert!(block.contains("fill=\"#c62828\"") && block.contains("stroke=\"#102a43\""));
+    assert!(
+        !block.contains("#1f2933"),
+        "no built-in color is left: {block}"
+    );
+
+    // a palette file overrides the block, token by token
+    let (ok, stderr, out) = render(
+        "block-file",
+        &[("palette.ilx", lexicon)],
+        Some(r##"{"accent": "#00f"}"##),
+    );
+    assert!(ok, "{stderr}");
+    let file = svgs(&out);
+    assert_eq!(file, block.replace("#c62828", "#00f"));
+}
+
+#[test]
+fn the_palette_block_colors_only_the_lexicons_tokens() {
+    let (ok, stderr) = check_files(
+        "palette-undeclared",
+        &[
+            ("a.ilx", "lexicon {\n  tokens \"ink\" \"accent\"\n}\n"),
+            // in another file, as a block may be
+            ("b.ilx", "palette {\n  ink light=\"#111\" dark=\"#eee\"\n  acent light=\"#c00\" dark=\"#f99\"\n}\n"),
+        ],
+    );
+    assert!(!ok, "{stderr}");
+    assert!(
+        stderr.contains("b.ilx:3:3: the palette colors 'acent', which is not one of the lexicon's tokens (did you mean 'accent'?)"),
+        "{stderr}"
+    );
+    // with no tokens declared, any token may be colored
+    let (ok, stderr) = check_files(
+        "palette-free",
+        &[(
+            "b.ilx",
+            "palette {\n  brand light=\"#c00\" dark=\"#f99\"\n}\n",
+        )],
+    );
+    assert!(ok, "{stderr}");
+}
+
+#[test]
+fn a_painted_token_the_palette_block_leaves_out_is_a_warning() {
+    let icon = "icon \"i\" { category \"c\"; canvas 9 9; part \"p\" { at 0 0 0 { circle 4 4 3 fill=\"brand\" stroke=\"ink\" } } }\n";
+    let (ok, stderr) = check_files(
+        "palette-warning",
+        &[
+            ("i.ilx", icon),
+            (
+                "p.ilx",
+                "palette {\n  ink light=\"#111\" dark=\"#eee\"\n}\n",
+            ),
+        ],
+    );
+    assert!(ok, "a warning never fails a check: {stderr}");
+    assert!(
+        stderr.contains(
+            "p.ilx:1:1: warning: 'brand' is painted (by i) but the palette gives it no color"
+        ),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("'ink' is painted"), "{stderr}");
+    // without a block, nothing is said
+    let (ok, stderr) = check_files("palette-none", &[("i.ilx", icon)]);
+    assert!(ok && !stderr.contains("warning"), "{stderr}");
 }
 
 #[test]
