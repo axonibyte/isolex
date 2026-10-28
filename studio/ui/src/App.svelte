@@ -12,6 +12,8 @@
   import Canvas from './components/Canvas.svelte';
   import SourceTab from './components/SourceTab.svelte';
   import IsoIcon from './components/IsoIcon.svelte';
+  import PartsPanel from './components/PartsPanel.svelte';
+  import { marks, pick, source, within } from './lib/select';
 
   interface Props {
     backend: Backend;
@@ -48,6 +50,47 @@
   const library = $derived(view.library);
   const icon = $derived(studio.icon ? (view.icons[studio.icon] ?? null) : null);
   const def = $derived(studio.definition);
+  const sources = $derived(studio.icon ? (view.sources[studio.icon] ?? []) : []);
+  /** The selected node's shapes on the canvas. */
+  const marked = $derived(marks(sources, studio.editingNode, studio.selected));
+  /** The parts hidden in the editor, by node. */
+  const partNodes = (names: Set<string>) => studio.outline?.parts.filter((p) => names.has(p.name)).map((p) => p.node) ?? [];
+  const hidden = $derived.by(() => {
+    const parts = partNodes(studio.hidden);
+    const out = new Set<number>();
+    if (!parts.length) return out;
+    sources.forEach((o, i) => {
+      const n = pick(o, studio.editingNode);
+      if (n && parts.some((p) => within(n, p))) out.add(i);
+    });
+    return out;
+  });
+  /** What the shape under the pointer is, when it is drawn from elsewhere. */
+  let hover = $state('');
+
+  /** Where a shape drawn from elsewhere comes from, as the hint says it. */
+  function drawnBy(i: number): string {
+    const o = sources[i];
+    if (!o || pick(o, studio.editingNode)) return '';
+    return `From ${source(o, view.graph)}${o.part ? `, part ${o.part}` : ''}: open it from Parts to edit it`;
+  }
+
+  /** A click on the canvas: the shape's node selected, if it is the edited
+      definition's and its part is not locked. */
+  function onpick(i: number | null) {
+    const o = i === null ? null : sources[i];
+    const n = o ? pick(o, studio.editingNode) : null;
+    if (o && !n) {
+      studio.message = drawnBy(i!);
+      return;
+    }
+    const locked = n && studio.outline?.parts.find((p) => studio.locked.has(p.name) && within(n, p.node));
+    if (locked) {
+      studio.message = `Part ${locked.name} is locked`;
+      return;
+    }
+    studio.select(n);
+  }
   const errors = $derived(view.compiled?.errors.length ?? 0);
   const warnings = $derived(view.compiled?.warnings.length ?? 0);
 
@@ -112,6 +155,8 @@
     } else if (mod && key === 'y') {
       e.preventDefault();
       void studio.redo();
+    } else if (e.key === 'Escape') {
+      studio.select(null);
     } else if (!mod && !e.altKey && e.key === '0') {
       canvasView?.fitIcon();
     } else if (!mod && !e.altKey) {
@@ -148,7 +193,11 @@
       <h1 class="brand">isolex studio</h1>
       <span class="what">
         <span class="kind">{def ? def.kind.toLowerCase() : 'icon'}</span>
-        <span class="name">{studio.icon ?? '—'}</span>
+        <span class="name">{studio.editing ?? studio.icon ?? '—'}</span>
+        {#if studio.icon && def && !def.emits.includes(studio.icon)}
+          <span class="kind">as drawn in</span>
+          <span class="name">{studio.icon}</span>
+        {/if}
       </span>
       <button class="icon-btn" onclick={() => studio.undo()} disabled={!library.canUndo} aria-label="Undo" title="Undo (Ctrl+Z)"
         ><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7 5 3 9l4 4" /><path d="M3 9h9a5 5 0 0 1 0 10h-2" /></svg></button
@@ -188,16 +237,24 @@
       </nav>
 
       <aside class="side" aria-label="Parts">
-        <h2>Parts</h2>
-        <p class="empty">The open definition’s parts and shapes appear here with selection.</p>
+        <PartsPanel {studio} />
       </aside>
 
       <main class="stage {canvas === 'dark' ? 'iso-dark' : 'iso-light'}" aria-label="Canvas area">
-        <Canvas bind:this={canvasView} {icon} onpointer={(p) => (pointer = p)} />
+        <Canvas
+          bind:this={canvasView}
+          {icon}
+          {tool}
+          {marked}
+          {hidden}
+          onpointer={(p) => (pointer = p)}
+          {onpick}
+          onhover={(i) => (hover = i === null ? '' : drawnBy(i))}
+        />
         {#if !icon}
           <p class="note">{view.compiled ? (studio.icon ? `${studio.icon} does not compile.` : 'This library emits no icon.') : 'Compiling…'}</p>
         {/if}
-        <div class="hint" role="status">{studio.message || 'Scroll to zoom · Ctrl+scroll pans north–south · Shift+scroll east–west · 0 fits'}</div>
+        <div class="hint" role="status">{hover || studio.message || 'Scroll to zoom · Ctrl+scroll pans north–south · Shift+scroll east–west · 0 fits'}</div>
       </main>
 
       <aside class="side right" aria-label="Inspector">
@@ -436,15 +493,6 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
-  }
-  .side h2 {
-    margin: 0;
-    padding: 10px 12px 6px;
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--muted);
   }
   .right {
     border-right: 0;

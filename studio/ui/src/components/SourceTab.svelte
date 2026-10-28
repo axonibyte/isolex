@@ -10,6 +10,7 @@
   import { Typist } from '../lib/typing';
   import type { Studio } from '../lib/state.svelte';
   import type { Problem } from '../lib/isolex/syntax';
+  import { byteOf, lineOf, rowAt } from '../lib/select';
 
   interface Props {
     studio: Studio;
@@ -70,13 +71,18 @@
     ];
   });
 
-  /** The open definition's first line. */
+  /** The selection's first line, or the open definition's. */
   const highlight = $derived.by(() => {
-    const d = studio.definition;
-    if (!d || d.file !== file) return null;
-    const bytes = new TextEncoder().encode(text).slice(0, d.span.start);
-    return new TextDecoder().decode(bytes).split('\n').length;
+    const at = studio.selected ?? studio.editingNode;
+    return at && at.file === file ? lineOf(text, at.start) : null;
   });
+
+  /** A caret put inside a node of the open definition selects it. */
+  function oncaret(offset: number) {
+    if (!file) return;
+    const f = rowAt(studio.outline, file, byteOf(text, offset));
+    if (f) studio.select(f.row!.node);
+  }
 
   const vocabulary = $derived({
     tokens: Object.keys(studio.view.palette ?? {}),
@@ -89,7 +95,7 @@
   <div class="source">
     <div class="head"><span class="file">{file}</span><span class="note">recompiles as you type</span></div>
     <div class="body" onfocusout={() => typist.close()}>
-      <SourceEditor bind:value={text} {problems} {vocabulary} {highlight} label="Source of {file}" {onedit} />
+      <SourceEditor bind:value={text} {problems} {vocabulary} {highlight} label="Source of {file}" {onedit} {oncaret} />
     </div>
   </div>
 {:else}

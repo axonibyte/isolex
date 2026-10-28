@@ -6,6 +6,7 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use isolex_studio_core::outline::Outline;
 use isolex_studio_core::session::{Answer, Ask, Notice, Session, Sink, Source};
 use isolex_studio_core::About;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -74,6 +75,12 @@ fn source(open: State<Open>, file: String) -> Result<Option<Source>, String> {
     with(&open, |s| s.source(&file))
 }
 
+/// A definition's parts, for the Parts panel.
+#[tauri::command]
+fn outline(open: State<Open>, definition: String) -> Result<Option<Outline>, String> {
+    with(&open, |s| s.outline(&definition))
+}
+
 #[tauri::command]
 fn ask(open: State<Open>, ask: Ask, label: String) -> Result<Answer, String> {
     with(&open, |s| s.ask(&ask, &label))
@@ -140,6 +147,7 @@ pub fn run() {
             open,
             view,
             source,
+            outline,
             ask,
             choose,
             begin_gesture,

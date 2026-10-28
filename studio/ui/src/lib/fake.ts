@@ -1,31 +1,23 @@
 // A stand-in for the studio's core, outside the app (in a plain browser,
 // in vitest, in Playwright): the compiler's own sample library, already
-// compiled, which takes typing in its source and nothing else.
+// compiled, with what the core says of it (its graph, each definition's
+// outline, each icon's sources: a golden studio-core's tests keep), which
+// takes typing in its source and nothing else. What it says of the source
+// holds while the source is as it was.
 
 import sampleSource from '../../../../tests/fixtures/sample.ilx?raw';
 import sampleIr from '../../../../tests/fixtures/sample.ir.golden.json';
+import sampleStudio from '../../../../tests/fixtures/sample.studio.golden.json';
 import type { IrDocument } from './isolex/ir';
-import type { Answer, Backend, Graph, Notice } from './backend';
+import type { Answer, Backend, Graph, Notice, Origin, Outline } from './backend';
 
 const FILE = 'sample.ilx';
 const ir = sampleIr as unknown as IrDocument;
-
-/** Each icon, under the definition that emits it: a variant's (`-down`)
-    under its icon's. */
-function graph(): Graph {
-  const names = ir.icons.map((i) => i.name);
-  const own = names.filter((n) => !names.some((m) => m !== n && n.startsWith(m + '-')));
-  return {
-    definitions: own.map((name) => ({
-      name,
-      kind: 'Icon' as const,
-      file: FILE,
-      span: { file: 0, start: Math.max(0, sampleSource.indexOf(`icon "${name}"`)), len: 1 },
-      emits: names.filter((n) => n === name || n.startsWith(name + '-')),
-    })),
-    edges: [],
-  };
-}
+const studio = sampleStudio as unknown as {
+  graph: Graph;
+  outlines: Record<string, Outline>;
+  sources: Record<string, Origin[]>;
+};
 
 export function fake(): Backend {
   let text = sampleSource;
@@ -53,12 +45,13 @@ export function fake(): Backend {
     pickFolder: async () => 'sample',
     open: async () => {
       state();
-      tell({ kind: 'graph', graph: graph() });
+      tell({ kind: 'graph', graph: studio.graph });
       tell({ kind: 'compiled', generation: 1, revision, errors: [], warnings: [], palette: null, icons: ir.icons.map((i) => i.name) });
-      for (const icon of ir.icons) tell({ kind: 'icon', name: icon.name, ir: icon });
+      for (const icon of ir.icons) tell({ kind: 'icon', name: icon.name, ir: icon, sources: studio.sources[icon.name] ?? [] });
     },
     view: async () => {},
     source: async (file) => (file === FILE ? { revision, text } : null),
+    outline: async (definition) => (text === sampleSource ? (studio.outlines[definition] ?? null) : null),
     ask: async (ask): Promise<Answer> => {
       if (ask.kind !== 'type' || ask.file !== FILE) {
         return { kind: 'refused', reason: 'The sample library outside the app takes typing only.' };

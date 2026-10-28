@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 
 use isolex::ir::IrIcon;
 use isolex_studio_core::compile::{
-    order, run_generation, Background, Compiler, Diag, Event, Generation, Isolex, Outcome,
+    order, run_generation, Background, Compiler, Diag, Drawing, Event, Generation, Isolex, Outcome,
     Problems, Report, Scheduler, SvgCache, QUIET,
 };
 
@@ -64,8 +64,15 @@ fn icons_compile_the_open_one_first_then_those_shown_then_the_rest() {
     assert_eq!(order(&icons, Some("nope"), &[]), ["a", "b", "c", "d", "e"]);
 }
 
-fn ir(name: &str) -> Arc<IrIcon> {
-    Arc::new(IrIcon {
+fn drawing(name: &str) -> Arc<Drawing> {
+    Arc::new(Drawing {
+        ir: ir(name),
+        sources: Vec::new(),
+    })
+}
+
+fn ir(name: &str) -> IrIcon {
+    IrIcon {
         name: name.to_string(),
         category: "c".into(),
         footprint: None,
@@ -74,14 +81,17 @@ fn ir(name: &str) -> Arc<IrIcon> {
         describe: Vec::new(),
         grants: Vec::new(),
         shapes: Vec::new(),
-    })
+    }
 }
 
 fn drawn(g: u64, name: &str, hash: u64) -> Report {
     Report::Icon {
         generation: g,
         name: name.into(),
-        outcome: Outcome::Drawn { ir: ir(name), hash },
+        outcome: Outcome::Drawn {
+            drawing: drawing(name),
+            hash,
+        },
     }
 }
 
@@ -148,7 +158,7 @@ fn icons_are_told_as_changed_unchanged_or_broken_and_stale_results_dropped() {
     else {
         unreachable!()
     };
-    assert_eq!(last.name, "a");
+    assert_eq!(last.ir.name, "a");
     assert_eq!(
         kinds(&t.accept(drawn(2, "a", 11))),
         ["changed a 11"],
@@ -187,7 +197,7 @@ impl Compiler for Fake {
             return None;
         }
         Some(Outcome::Drawn {
-            ir: ir(name),
+            drawing: drawing(name),
             hash: name.len() as u64,
         })
     }
@@ -383,4 +393,77 @@ fn in_the_background_an_edit_redraws_only_what_it_changes() {
         "the lexicon's own error is told, as an error"
     );
     drop(bg);
+}
+
+/// Shapes as provenance counts them: a group, then its own.
+fn count(shapes: &[isolex::ir::IrShape]) -> usize {
+    shapes
+        .iter()
+        .map(|s| match s {
+            isolex::ir::IrShape::Group { shapes, .. } => 1 + count(shapes),
+            _ => 1,
+        })
+        .sum()
+}
+
+fn draw(text: &str, name: &str) -> (Arc<Drawing>, u64) {
+    let (ready, _, _) = Isolex.prepare(&files(text));
+    match Isolex.icon(&ready, name, &AtomicBool::new(false)) {
+        Some(Outcome::Drawn { drawing, hash }) => (drawing, hash),
+        other => panic!("{name}: {other:?}"),
+    }
+}
+
+#[test]
+fn a_drawing_says_where_each_shape_is_written() {
+    let sample = include_str!("../../tests/fixtures/sample.ilx");
+    let (d, _) = draw(sample, "switch-l3");
+    assert_eq!(d.sources.len(), count(&d.ir.shapes));
+    for s in &d.sources {
+        assert_eq!(s.node.file, "a.ilx");
+        let text = &sample[s.node.start..s.node.start + s.node.len];
+        assert!(
+            ["box", "facerect", "path"]
+                .iter()
+                .any(|k| text.starts_with(k)),
+            "{text}"
+        );
+    }
+    let from = |kind: &str| {
+        d.sources
+            .iter()
+            .find(|s| sample[s.node.start..].starts_with(kind))
+            .unwrap()
+    };
+    assert_eq!(from("box").definition, "rack-unit");
+    assert_eq!(from("box").part.as_deref(), Some("chassis"));
+    assert_eq!(from("path").definition, "switch-l3");
+    // a port is drawn through its repeat
+    let port = from("facerect");
+    assert_eq!(port.definition, "switch");
+    assert_eq!(port.sites.len(), 1);
+    assert!(sample[port.sites[0].start..].starts_with("repeat \"ports\""));
+}
+
+#[test]
+fn the_same_icon_written_elsewhere_is_drawn_again() {
+    let sample = include_str!("../../tests/fixtures/sample.ilx");
+    let (before, h1) = draw(sample, "switch-l3");
+    let moved = format!("// a line above everything\n{sample}");
+    let (after, h2) = draw(&moved, "switch-l3");
+    assert_eq!(
+        serde_json::to_string(&before.ir).unwrap(),
+        serde_json::to_string(&after.ir).unwrap()
+    );
+    assert_ne!(h1, h2, "selecting goes by where shapes are written");
+    let shift = "// a line above everything\n".len();
+    assert_eq!(
+        after.sources[0].node.start,
+        before.sources[0].node.start + shift
+    );
+    assert_eq!(
+        draw(sample, "switch-l3").1,
+        h1,
+        "and the same source hashes the same"
+    );
 }

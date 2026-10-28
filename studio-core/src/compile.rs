@@ -43,13 +43,50 @@ pub struct Problems {
     pub palette: Option<BTreeMap<String, isolex::Colors>>,
 }
 
+/// A node of the source, by file and byte range.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct Place {
+    pub file: String,
+    pub start: usize,
+    pub len: usize,
+}
+
+/// Where one shape of a drawing came from (`isolex::ShapeSource`), with
+/// files named: the node that draws it, the definition and part it is
+/// written in, and the insert, badge, repeat and text nodes it was drawn
+/// through, outermost first. The editor selects by it.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct Origin {
+    pub node: Place,
+    pub definition: String,
+    pub part: Option<String>,
+    pub sites: Vec<Place>,
+}
+
+/// An icon as drawn: its IR, and where each of its shapes came from, one
+/// each in the order the IR lists them, a group before its own.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct Drawing {
+    pub ir: IrIcon,
+    pub sources: Vec<Origin>,
+}
+
 /// What one icon came to in one generation.
 #[derive(Debug, Clone)]
 pub enum Outcome {
-    /// Drawn: its IR, as JSON, and that JSON's hash.
-    Drawn { ir: Arc<IrIcon>, hash: u64 },
+    /// Drawn, with the hash of the drawing as JSON: the same IR drawn from
+    /// moved source (a line added above it) is a different drawing, since
+    /// selecting goes by where its shapes are written.
+    Drawn { drawing: Arc<Drawing>, hash: u64 },
     /// It does not compile.
     Broken(Vec<Diag>),
+}
+
+/// The library parsed and resolved, with its files' names, by which
+/// provenance's spans are numbered.
+pub struct Ready {
+    prepared: isolex::Prepared,
+    files: Vec<String>,
 }
 
 /// What the compiler has to do, so tests can stand in for it.
@@ -67,9 +104,9 @@ pub trait Compiler: Send + Sync + 'static {
 pub struct Isolex;
 
 impl Compiler for Isolex {
-    type Prepared = isolex::Prepared;
+    type Prepared = Ready;
 
-    fn prepare(&self, files: &[(String, String)]) -> (isolex::Prepared, Problems, Vec<String>) {
+    fn prepare(&self, files: &[(String, String)]) -> (Ready, Problems, Vec<String>) {
         let prepared = isolex::Prepared::new(files);
         let o = prepared.outcome();
         let problems = Problems {
@@ -82,20 +119,24 @@ impl Compiler for Isolex {
             .into_iter()
             .flat_map(|d| d.emits)
             .collect();
-        (prepared, problems, names)
+        let ready = Ready {
+            prepared,
+            files: files.iter().map(|(name, _)| name.clone()).collect(),
+        };
+        (ready, problems, names)
     }
 
-    fn icon(
-        &self,
-        prepared: &isolex::Prepared,
-        name: &str,
-        cancel: &AtomicBool,
-    ) -> Option<Outcome> {
+    fn icon(&self, ready: &Ready, name: &str, cancel: &AtomicBool) -> Option<Outcome> {
         let request = isolex::Only {
             icon: name.to_string(),
             params: BTreeMap::new(),
         };
-        match prepared.icon(&request, cancel) {
+        let place = |span: isolex::ast::Span| Place {
+            file: ready.files.get(span.file).cloned().unwrap_or_default(),
+            start: span.start,
+            len: span.len,
+        };
+        match ready.prepared.icon(&request, cancel) {
             Err(isolex::Refused::Cancelled) => None,
             Err(isolex::Refused::Request(why)) => Some(Outcome::Broken(vec![Diag {
                 file: String::new(),
@@ -105,11 +146,24 @@ impl Compiler for Isolex {
             }])),
             Ok(c) if !c.errors.is_empty() => Some(Outcome::Broken(c.errors)),
             Ok(mut c) => match c.doc.icons.pop() {
-                Some(icon) => {
-                    let json = serde_json::to_string(&icon).expect("IR serializes");
+                Some(ir) => {
+                    let sources = c
+                        .provenance
+                        .pop()
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|s| Origin {
+                            node: place(s.span),
+                            definition: s.definition,
+                            part: s.part,
+                            sites: s.sites.iter().map(|site| place(site.span)).collect(),
+                        })
+                        .collect();
+                    let drawing = Drawing { ir, sources };
+                    let json = serde_json::to_string(&drawing).expect("a drawing serializes");
                     Some(Outcome::Drawn {
                         hash: hash(&json),
-                        ir: Arc::new(icon),
+                        drawing: Arc::new(drawing),
                     })
                 }
                 None => Some(Outcome::Broken(Vec::new())),
@@ -276,7 +330,7 @@ pub enum Event {
     /// An icon drawn differently from before (or for the first time).
     Changed {
         name: String,
-        ir: Arc<IrIcon>,
+        drawing: Arc<Drawing>,
         hash: u64,
     },
     /// An icon that does not compile now; `last` is its last good drawing,
@@ -284,7 +338,7 @@ pub enum Event {
     Broken {
         name: String,
         diags: Vec<Diag>,
-        last: Option<Arc<IrIcon>>,
+        last: Option<Arc<Drawing>>,
     },
     /// An icon the library no longer emits.
     Gone { name: String },
@@ -294,7 +348,7 @@ pub enum Event {
 #[derive(Debug, Default)]
 struct Known {
     /// Its last good drawing, and its hash.
-    last: Option<(Arc<IrIcon>, u64)>,
+    last: Option<(Arc<Drawing>, u64)>,
     /// It does not compile now.
     broken: bool,
 }
@@ -353,22 +407,26 @@ impl Tracker {
                 }
                 let entry = self.icons.entry(name.clone()).or_default();
                 match outcome {
-                    Outcome::Drawn { ir, hash } => {
+                    Outcome::Drawn { drawing, hash } => {
                         let same = entry.last.as_ref().is_some_and(|(_, h)| *h == hash);
                         let was_broken = entry.broken;
-                        entry.last = Some((ir.clone(), hash));
+                        entry.last = Some((drawing.clone(), hash));
                         entry.broken = false;
                         if same && !was_broken {
                             return Vec::new();
                         }
-                        vec![Event::Changed { name, ir, hash }]
+                        vec![Event::Changed {
+                            name,
+                            drawing,
+                            hash,
+                        }]
                     }
                     Outcome::Broken(diags) => {
                         entry.broken = true;
                         vec![Event::Broken {
                             name,
                             diags,
-                            last: entry.last.as_ref().map(|(ir, _)| ir.clone()),
+                            last: entry.last.as_ref().map(|(d, _)| d.clone()),
                         }]
                     }
                 }

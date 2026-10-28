@@ -1,7 +1,8 @@
 <!--
   The canvas (docs/studio-interface.md, The canvas): the open icon as
   isolex draws it, over its grid and frame, zoomed and panned as the spec
-  says. Drawing on it comes with the tools (#69, #83).
+  says. A click selects the shape under the pointer (#68); drawing on it
+  comes with the tools (#69, #83).
 -->
 <script lang="ts">
   import type { IrIcon } from '../lib/isolex/ir';
@@ -11,11 +12,20 @@
 
   interface Props {
     icon: IrIcon | null;
+    /** The tool: with Pan, a drag pans; with Select, a click selects. */
+    tool?: string;
+    /** The shapes, by index, marked as selected, and those left out. */
+    marked?: Set<number>;
+    hidden?: Set<number>;
     /** Where the pointer is: tile x and y on the floor, or flat x and y. */
     onpointer?: (at: string) => void;
+    /** A click on the shape at this index, or on none. */
+    onpick?: (shape: number | null) => void;
+    /** The shape under the pointer, or none. */
+    onhover?: (shape: number | null) => void;
   }
 
-  let { icon, onpointer }: Props = $props();
+  let { icon, tool = 'select', marked, hidden, onpointer, onpick, onhover }: Props = $props();
 
   let host: HTMLDivElement;
   // unmeasured until the window lays it out
@@ -24,6 +34,16 @@
   let fitted: string | null = null;
   let pan = $state<{ x: number; y: number; cx: number; cy: number } | null>(null);
   let space = $state(false);
+  /** Where a click began, to tell it from a drag. */
+  let press: { x: number; y: number } | null = null;
+  let hovered: number | null = null;
+
+  /** The index of the shape an event is on. */
+  function shapeOf(e: Event): number | null {
+    const el = (e.target as Element | null)?.closest?.('[data-shape]');
+    const i = el?.getAttribute('data-shape');
+    return i == null ? null : Number(i);
+  }
 
   const flat = $derived(!!icon?.canvas);
 
@@ -51,17 +71,30 @@
   }
 
   function onpointerdown(e: PointerEvent) {
-    if (e.button === 1 || (e.button === 0 && space)) {
+    if (e.button === 1 || (e.button === 0 && (space || tool === 'hand'))) {
       e.preventDefault();
       (e.target as Element).setPointerCapture?.(e.pointerId);
       pan = { x: e.clientX, y: e.clientY, cx: camera.x, cy: camera.y };
+    } else if (e.button === 0 && tool === 'select') {
+      press = { x: e.clientX, y: e.clientY };
     }
+  }
+
+  function onpointerup(e: PointerEvent) {
+    pan = null;
+    if (press && Math.hypot(e.clientX - press.x, e.clientY - press.y) < 4) onpick?.(shapeOf(e));
+    press = null;
   }
 
   function onpointermove(e: PointerEvent) {
     if (pan) {
       camera = { ...camera, x: pan.cx + e.clientX - pan.x, y: pan.cy + e.clientY - pan.y };
       return;
+    }
+    const over = shapeOf(e);
+    if (over !== hovered) {
+      hovered = over;
+      onhover?.(over);
     }
     const p = toCanvas(camera, local(e));
     if (flat) onpointer?.(`x ${n(p[0])} · y ${n(p[1])}`);
@@ -104,7 +137,7 @@
 
 <div
   class="canvas"
-  class:panning={space || pan}
+  class:panning={space || pan || tool === 'hand'}
   bind:this={host}
   bind:clientWidth={size.w}
   bind:clientHeight={size.h}
@@ -113,8 +146,14 @@
   {onwheel}
   {onpointerdown}
   {onpointermove}
-  onpointerup={() => (pan = null)}
-  onpointercancel={() => (pan = null)}
+  {onpointerup}
+  onpointercancel={() => {
+    pan = null;
+    press = null;
+  }}
+  onpointerleave={() => {
+    if (hovered !== null) onhover?.((hovered = null));
+  }}
 >
   {#if icon}
     <svg width="100%" height="100%" aria-hidden="true">
@@ -132,7 +171,7 @@
           height={icon.viewbox[3]}
           vector-effect="non-scaling-stroke"
         />
-        <IsoShapes shapes={icon.shapes} />
+        <IsoShapes shapes={icon.shapes} tagged {marked} {hidden} />
       </g>
     </svg>
   {/if}
@@ -148,6 +187,9 @@
   }
   .canvas.panning {
     cursor: grab;
+  }
+  .canvas :global(.marked) {
+    filter: drop-shadow(0 0 1px var(--accent)) drop-shadow(0 0 1px var(--accent));
   }
   svg {
     display: block;

@@ -14,9 +14,10 @@ use isolex::ir::IrIcon;
 use isolex::kdl::Value;
 use serde::{Deserialize, Serialize};
 
-use crate::compile::{Background, Diag, Event, Isolex};
+use crate::compile::{Background, Diag, Drawing, Event, Isolex, Origin};
 use crate::edit::{self, Choice, Intent, NodeRef, Plan, Request, Slot};
 use crate::library::Library;
+use crate::outline::Outline;
 use crate::watch::{DiskOutcome, PollingWatcher, Watcher};
 
 /// Where notices go: the window, or a test's record of them.
@@ -51,13 +52,18 @@ pub enum Notice {
         palette: Option<BTreeMap<String, isolex::Colors>>,
         icons: Vec<String>,
     },
-    /// An icon drawn differently than before.
-    Icon { name: String, ir: IrIcon },
+    /// An icon drawn differently than before, with where each of its
+    /// shapes is written.
+    Icon {
+        name: String,
+        ir: IrIcon,
+        sources: Vec<Origin>,
+    },
     /// An icon that does not compile now, with its last good drawing.
     Broken {
         name: String,
         diagnostics: Vec<Diag>,
-        last: Option<IrIcon>,
+        last: Option<Drawing>,
     },
     /// An icon no longer emitted.
     Gone { name: String },
@@ -267,6 +273,11 @@ impl Session {
         })
     }
 
+    /// A definition's parts, for the Parts panel.
+    pub fn outline(&self, definition: &str) -> Option<Outline> {
+        crate::outline::outline(&self.lib.sources(), definition)
+    }
+
     /// What the interface shows: the definition and icon open, and the
     /// thumbnails on screen, which compile first.
     pub fn view(&mut self, editing: Option<String>, open: Option<String>, visible: Vec<String>) {
@@ -440,10 +451,10 @@ fn forward(events: Receiver<Event>, sink: Arc<dyn Sink>) {
                     palette: problems.palette,
                     icons,
                 },
-                Event::Changed { name, ir, .. } => Notice::Icon {
-                    name,
-                    ir: (*ir).clone(),
-                },
+                Event::Changed { name, drawing, .. } => {
+                    let Drawing { ir, sources } = (*drawing).clone();
+                    Notice::Icon { name, ir, sources }
+                }
                 Event::Broken { name, diags, last } => Notice::Broken {
                     name,
                     diagnostics: diags,

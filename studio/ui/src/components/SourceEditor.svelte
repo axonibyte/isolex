@@ -30,6 +30,9 @@
     highlight?: number | null;
     /** Each change a person makes, with the text after it. */
     onedit?: (value: string) => void;
+    /** Where the caret was put, by a click or a key that moves it, as a
+        character offset. */
+    oncaret?: (offset: number) => void;
   }
 
   let {
@@ -41,7 +44,13 @@
     readonly = false,
     highlight = null,
     onedit,
+    oncaret,
   }: Props = $props();
+
+  const MOVES = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown']);
+  const caret = () => {
+    if (area.selectionStart === area.selectionEnd) oncaret?.(area.selectionStart);
+  };
 
   let area: HTMLTextAreaElement;
   let overlay: HTMLPreElement;
@@ -277,6 +286,10 @@
         {onkeydown}
         {oninput}
         onblur={() => (completion = null)}
+        onmouseup={caret}
+        onkeyup={(e) => {
+          if (MOVES.has(e.key) && !completion) caret();
+        }}
       ></textarea>
       <span bind:this={measure} aria-hidden="true" class="measure">0000000000</span>
       {#if completion}

@@ -1,0 +1,2551 @@
+{
+  "graph": {
+    "definitions": [
+      {
+        "name": "rack-unit",
+        "kind": "Base",
+        "file": "sample.ilx",
+        "span": {
+          "file": 0,
+          "start": 249,
+          "len": 199
+        },
+        "emits": []
+      },
+      {
+        "name": "switch",
+        "kind": "Base",
+        "file": "sample.ilx",
+        "span": {
+          "file": 0,
+          "start": 450,
+          "len": 259
+        },
+        "emits": []
+      },
+      {
+        "name": "switch-l2",
+        "kind": "Icon",
+        "file": "sample.ilx",
+        "span": {
+          "file": 0,
+          "start": 711,
+          "len": 75
+        },
+        "emits": [
+          "switch-l2"
+        ]
+      },
+      {
+        "name": "switch-l3",
+        "kind": "Icon",
+        "file": "sample.ilx",
+        "span": {
+          "file": 0,
+          "start": 788,
+          "len": 235
+        },
+        "emits": [
+          "switch-l3"
+        ]
+      },
+      {
+        "name": "switch-poe",
+        "kind": "Icon",
+        "file": "sample.ilx",
+        "span": {
+          "file": 0,
+          "start": 1025,
+          "len": 1242
+        },
+        "emits": [
+          "switch-poe",
+          "switch-poe-down",
+          "switch-poe-planned"
+        ]
+      },
+      {
+        "name": "disk-stack",
+        "kind": "Fragment",
+        "file": "sample.ilx",
+        "span": {
+          "file": 0,
+          "start": 2269,
+          "len": 176
+        },
+        "emits": []
+      },
+      {
+        "name": "state",
+        "kind": "Axis",
+        "file": "sample.ilx",
+        "span": {
+          "file": 0,
+          "start": 2447,
+          "len": 256
+        },
+        "emits": []
+      },
+      {
+        "name": "mini-glyph",
+        "kind": "Fragment",
+        "file": "sample.ilx",
+        "span": {
+          "file": 0,
+          "start": 2705,
+          "len": 92
+        },
+        "emits": []
+      },
+      {
+        "name": "state-down",
+        "kind": "Icon",
+        "file": "sample.ilx",
+        "span": {
+          "file": 0,
+          "start": 2799,
+          "len": 360
+        },
+        "emits": [
+          "state-down"
+        ]
+      },
+      {
+        "name": "state-planned",
+        "kind": "Icon",
+        "file": "sample.ilx",
+        "span": {
+          "file": 0,
+          "start": 3161,
+          "len": 210
+        },
+        "emits": [
+          "state-planned"
+        ]
+      }
+    ],
+    "edges": [
+      {
+        "kind": "extends",
+        "from": "switch",
+        "to": "rack-unit",
+        "at": {
+          "file": 0,
+          "start": 476,
+          "len": 11
+        }
+      },
+      {
+        "kind": "extends",
+        "from": "switch-l2",
+        "to": "switch",
+        "at": {
+          "file": 0,
+          "start": 740,
+          "len": 8
+        }
+      },
+      {
+        "kind": "extends",
+        "from": "switch-l3",
+        "to": "switch-l2",
+        "at": {
+          "file": 0,
+          "start": 817,
+          "len": 11
+        }
+      },
+      {
+        "kind": "extends",
+        "from": "switch-poe",
+        "to": "switch-l2",
+        "at": {
+          "file": 0,
+          "start": 1055,
+          "len": 11
+        }
+      },
+      {
+        "kind": "axis",
+        "from": "switch-poe",
+        "to": "state",
+        "at": {
+          "file": 0,
+          "start": 2258,
+          "len": 7
+        }
+      },
+      {
+        "kind": "insert",
+        "from": "switch-poe",
+        "to": "mini-glyph",
+        "at": {
+          "file": 0,
+          "start": 2040,
+          "len": 12
+        }
+      },
+      {
+        "kind": "insert",
+        "from": "switch-poe",
+        "to": "disk-stack",
+        "at": {
+          "file": 0,
+          "start": 2077,
+          "len": 12
+        }
+      },
+      {
+        "kind": "badge",
+        "from": "switch-poe",
+        "to": "state-down",
+        "at": {
+          "file": 0,
+          "start": 2142,
+          "len": 12
+        }
+      },
+      {
+        "kind": "badge",
+        "from": "state",
+        "to": "state-down",
+        "at": {
+          "file": 0,
+          "start": 2536,
+          "len": 12
+        },
+        "variant": "down"
+      },
+      {
+        "kind": "badge",
+        "from": "state",
+        "to": "state-planned",
+        "at": {
+          "file": 0,
+          "start": 2664,
+          "len": 15
+        },
+        "variant": "planned"
+      }
+    ]
+  },
+  "outlines": {
+    "disk-stack": {
+      "definition": "disk-stack",
+      "kind": "fragment",
+      "extends": null,
+      "node": {
+        "file": "sample.ilx",
+        "start": 2269,
+        "len": 176
+      },
+      "parts": [
+        {
+          "name": "stack",
+          "op": "part",
+          "variant": null,
+          "node": {
+            "file": "sample.ilx",
+            "start": 2349,
+            "len": 94
+          },
+          "shapes": [
+            {
+              "kind": "repeat",
+              "note": "×n",
+              "node": {
+                "file": "sample.ilx",
+                "start": 2368,
+                "len": 71
+              },
+              "children": [
+                {
+                  "kind": "cylinder",
+                  "note": "r 0.26 · h 0.2",
+                  "node": {
+                    "file": "sample.ilx",
+                    "start": 2391,
+                    "len": 42
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "inherited": []
+    },
+    "mini-glyph": {
+      "definition": "mini-glyph",
+      "kind": "fragment",
+      "extends": null,
+      "node": {
+        "file": "sample.ilx",
+        "start": 2705,
+        "len": 92
+      },
+      "parts": [
+        {
+          "name": "dot",
+          "op": "part",
+          "variant": null,
+          "node": {
+            "file": "sample.ilx",
+            "start": 2746,
+            "len": 49
+          },
+          "shapes": [
+            {
+              "kind": "circle",
+              "note": "r size",
+              "node": {
+                "file": "sample.ilx",
+                "start": 2763,
+                "len": 28
+              },
+              "children": []
+            }
+          ]
+        }
+      ],
+      "inherited": []
+    },
+    "rack-unit": {
+      "definition": "rack-unit",
+      "kind": "base",
+      "extends": null,
+      "node": {
+        "file": "sample.ilx",
+        "start": 249,
+        "len": 199
+      },
+      "parts": [
+        {
+          "name": "chassis",
+          "op": "part",
+          "variant": null,
+          "node": {
+            "file": "sample.ilx",
+            "start": 397,
+            "len": 49
+          },
+          "shapes": [
+            {
+              "kind": "box",
+              "note": "2×1×u * 0.28",
+              "node": {
+                "file": "sample.ilx",
+                "start": 418,
+                "len": 24
+              },
+              "children": []
+            }
+          ]
+        }
+      ],
+      "inherited": []
+    },
+    "state": {
+      "definition": "state",
+      "kind": "axis",
+      "extends": null,
+      "node": {
+        "file": "sample.ilx",
+        "start": 2447,
+        "len": 256
+      },
+      "parts": [
+        {
+          "name": "state-badge",
+          "op": "part",
+          "variant": "down",
+          "node": {
+            "file": "sample.ilx",
+            "start": 2503,
+            "len": 63
+          },
+          "shapes": [
+            {
+              "kind": "badge",
+              "note": "state-down",
+              "node": {
+                "file": "sample.ilx",
+                "start": 2530,
+                "len": 30
+              },
+              "children": []
+            }
+          ]
+        },
+        {
+          "name": "state-badge",
+          "op": "part",
+          "variant": "planned",
+          "node": {
+            "file": "sample.ilx",
+            "start": 2631,
+            "len": 66
+          },
+          "shapes": [
+            {
+              "kind": "badge",
+              "note": "state-planned",
+              "node": {
+                "file": "sample.ilx",
+                "start": 2658,
+                "len": 33
+              },
+              "children": []
+            }
+          ]
+        }
+      ],
+      "inherited": []
+    },
+    "state-down": {
+      "definition": "state-down",
+      "kind": "icon",
+      "extends": null,
+      "node": {
+        "file": "sample.ilx",
+        "start": 2799,
+        "len": 360
+      },
+      "parts": [
+        {
+          "name": "octagon",
+          "op": "part",
+          "variant": null,
+          "node": {
+            "file": "sample.ilx",
+            "start": 2891,
+            "len": 266
+          },
+          "shapes": [
+            {
+              "kind": "at",
+              "note": "at 0 0 0",
+              "node": {
+                "file": "sample.ilx",
+                "start": 2912,
+                "len": 241
+              },
+              "children": [
+                {
+                  "kind": "poly",
+                  "note": "8 points",
+                  "node": {
+                    "file": "sample.ilx",
+                    "start": 2929,
+                    "len": 156
+                  },
+                  "children": []
+                },
+                {
+                  "kind": "path",
+                  "note": "",
+                  "node": {
+                    "file": "sample.ilx",
+                    "start": 3092,
+                    "len": 55
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "inherited": []
+    },
+    "state-planned": {
+      "definition": "state-planned",
+      "kind": "icon",
+      "extends": null,
+      "node": {
+        "file": "sample.ilx",
+        "start": 3161,
+        "len": 210
+      },
+      "parts": [
+        {
+          "name": "outline",
+          "op": "part",
+          "variant": null,
+          "node": {
+            "file": "sample.ilx",
+            "start": 3260,
+            "len": 109
+          },
+          "shapes": [
+            {
+              "kind": "at",
+              "note": "at 0 0 0",
+              "node": {
+                "file": "sample.ilx",
+                "start": 3281,
+                "len": 84
+              },
+              "children": [
+                {
+                  "kind": "rect",
+                  "note": "18×18",
+                  "node": {
+                    "file": "sample.ilx",
+                    "start": 3298,
+                    "len": 61
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "inherited": []
+    },
+    "switch": {
+      "definition": "switch",
+      "kind": "base",
+      "extends": "rack-unit",
+      "node": {
+        "file": "sample.ilx",
+        "start": 450,
+        "len": 259
+      },
+      "parts": [
+        {
+          "name": "ports",
+          "op": "part",
+          "variant": null,
+          "node": {
+            "file": "sample.ilx",
+            "start": 551,
+            "len": 156
+          },
+          "shapes": [
+            {
+              "kind": "repeat",
+              "note": "×ports",
+              "node": {
+                "file": "sample.ilx",
+                "start": 570,
+                "len": 133
+              },
+              "children": [
+                {
+                  "kind": "facerect",
+                  "note": "front",
+                  "node": {
+                    "file": "sample.ilx",
+                    "start": 597,
+                    "len": 100
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "inherited": [
+        {
+          "name": "chassis",
+          "from": "rack-unit",
+          "shapes": 1
+        }
+      ]
+    },
+    "switch-l2": {
+      "definition": "switch-l2",
+      "kind": "icon",
+      "extends": "switch",
+      "node": {
+        "file": "sample.ilx",
+        "start": 711,
+        "len": 75
+      },
+      "parts": [],
+      "inherited": [
+        {
+          "name": "chassis",
+          "from": "rack-unit",
+          "shapes": 1
+        },
+        {
+          "name": "ports",
+          "from": "switch",
+          "shapes": 1
+        }
+      ]
+    },
+    "switch-l3": {
+      "definition": "switch-l3",
+      "kind": "icon",
+      "extends": "switch-l2",
+      "node": {
+        "file": "sample.ilx",
+        "start": 788,
+        "len": 235
+      },
+      "parts": [
+        {
+          "name": "routing-badge",
+          "op": "part",
+          "variant": null,
+          "node": {
+            "file": "sample.ilx",
+            "start": 891,
+            "len": 130
+          },
+          "shapes": [
+            {
+              "kind": "at",
+              "note": "at 1 0.5 0.28",
+              "node": {
+                "file": "sample.ilx",
+                "start": 918,
+                "len": 99
+              },
+              "children": [
+                {
+                  "kind": "path",
+                  "note": "",
+                  "node": {
+                    "file": "sample.ilx",
+                    "start": 940,
+                    "len": 71
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "inherited": [
+        {
+          "name": "chassis",
+          "from": "rack-unit",
+          "shapes": 1
+        },
+        {
+          "name": "ports",
+          "from": "switch",
+          "shapes": 1
+        }
+      ]
+    },
+    "switch-poe": {
+      "definition": "switch-poe",
+      "kind": "icon",
+      "extends": "switch-l2",
+      "node": {
+        "file": "sample.ilx",
+        "start": 1025,
+        "len": 1242
+      },
+      "parts": [
+        {
+          "name": "ports",
+          "op": "replace",
+          "variant": null,
+          "node": {
+            "file": "sample.ilx",
+            "start": 1069,
+            "len": 181
+          },
+          "shapes": [
+            {
+              "kind": "repeat",
+              "note": "×8",
+              "node": {
+                "file": "sample.ilx",
+                "start": 1091,
+                "len": 155
+              },
+              "children": [
+                {
+                  "kind": "facerect",
+                  "note": "front",
+                  "node": {
+                    "file": "sample.ilx",
+                    "start": 1112,
+                    "len": 128
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "chassis",
+          "op": "remove",
+          "variant": null,
+          "node": {
+            "file": "sample.ilx",
+            "start": 1253,
+            "len": 16
+          },
+          "shapes": []
+        },
+        {
+          "name": "everything-else",
+          "op": "part",
+          "variant": null,
+          "node": {
+            "file": "sample.ilx",
+            "start": 1272,
+            "len": 908
+          },
+          "shapes": [
+            {
+              "kind": "tile",
+              "note": "2×1",
+              "node": {
+                "file": "sample.ilx",
+                "start": 1301,
+                "len": 43
+              },
+              "children": []
+            },
+            {
+              "kind": "cylinder",
+              "note": "r 0.4 · h 0.12",
+              "node": {
+                "file": "sample.ilx",
+                "start": 1349,
+                "len": 70
+              },
+              "children": []
+            },
+            {
+              "kind": "poly3d",
+              "note": "3 points",
+              "node": {
+                "file": "sample.ilx",
+                "start": 1424,
+                "len": 83
+              },
+              "children": []
+            },
+            {
+              "kind": "shadow",
+              "note": "0.48×0.48",
+              "node": {
+                "file": "sample.ilx",
+                "start": 1512,
+                "len": 24
+              },
+              "children": []
+            },
+            {
+              "kind": "seg",
+              "note": "",
+              "node": {
+                "file": "sample.ilx",
+                "start": 1541,
+                "len": 42
+              },
+              "children": []
+            },
+            {
+              "kind": "at",
+              "note": "at 0.5 0.5 0.6",
+              "node": {
+                "file": "sample.ilx",
+                "start": 1588,
+                "len": 477
+              },
+              "children": [
+                {
+                  "kind": "line",
+                  "note": "",
+                  "node": {
+                    "file": "sample.ilx",
+                    "start": 1611,
+                    "len": 36
+                  },
+                  "children": []
+                },
+                {
+                  "kind": "circle",
+                  "note": "r 8",
+                  "node": {
+                    "file": "sample.ilx",
+                    "start": 1654,
+                    "len": 35
+                  },
+                  "children": []
+                },
+                {
+                  "kind": "ellipse",
+                  "note": "4.5×8",
+                  "node": {
+                    "file": "sample.ilx",
+                    "start": 1696,
+                    "len": 46
+                  },
+                  "children": []
+                },
+                {
+                  "kind": "rect",
+                  "note": "18×12",
+                  "node": {
+                    "file": "sample.ilx",
+                    "start": 1749,
+                    "len": 46
+                  },
+                  "children": []
+                },
+                {
+                  "kind": "arc",
+                  "note": "",
+                  "node": {
+                    "file": "sample.ilx",
+                    "start": 1802,
+                    "len": 40
+                  },
+                  "children": []
+                },
+                {
+                  "kind": "poly",
+                  "note": "points by repeat",
+                  "node": {
+                    "file": "sample.ilx",
+                    "start": 1849,
+                    "len": 177
+                  },
+                  "children": []
+                },
+                {
+                  "kind": "insert",
+                  "note": "mini-glyph",
+                  "node": {
+                    "file": "sample.ilx",
+                    "start": 2033,
+                    "len": 26
+                  },
+                  "children": []
+                }
+              ]
+            },
+            {
+              "kind": "insert",
+              "note": "disk-stack",
+              "node": {
+                "file": "sample.ilx",
+                "start": 2070,
+                "len": 61
+              },
+              "children": []
+            },
+            {
+              "kind": "badge",
+              "note": "state-down",
+              "node": {
+                "file": "sample.ilx",
+                "start": 2136,
+                "len": 40
+              },
+              "children": []
+            }
+          ]
+        }
+      ],
+      "inherited": []
+    }
+  },
+  "sources": {
+    "state-down": [
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 2929,
+          "len": 156
+        },
+        "definition": "state-down",
+        "part": "octagon",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 3092,
+          "len": 55
+        },
+        "definition": "state-down",
+        "part": "octagon",
+        "sites": []
+      }
+    ],
+    "state-planned": [
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 3298,
+          "len": 61
+        },
+        "definition": "state-planned",
+        "part": "outline",
+        "sites": []
+      }
+    ],
+    "switch-l2": [
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 418,
+          "len": 24
+        },
+        "definition": "rack-unit",
+        "part": "chassis",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 418,
+          "len": 24
+        },
+        "definition": "rack-unit",
+        "part": "chassis",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 418,
+          "len": 24
+        },
+        "definition": "rack-unit",
+        "part": "chassis",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 597,
+          "len": 100
+        },
+        "definition": "switch",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 570,
+            "len": 133
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 597,
+          "len": 100
+        },
+        "definition": "switch",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 570,
+            "len": 133
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 597,
+          "len": 100
+        },
+        "definition": "switch",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 570,
+            "len": 133
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 597,
+          "len": 100
+        },
+        "definition": "switch",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 570,
+            "len": 133
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 597,
+          "len": 100
+        },
+        "definition": "switch",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 570,
+            "len": 133
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 597,
+          "len": 100
+        },
+        "definition": "switch",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 570,
+            "len": 133
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 597,
+          "len": 100
+        },
+        "definition": "switch",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 570,
+            "len": 133
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 597,
+          "len": 100
+        },
+        "definition": "switch",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 570,
+            "len": 133
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 597,
+          "len": 100
+        },
+        "definition": "switch",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 570,
+            "len": 133
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 597,
+          "len": 100
+        },
+        "definition": "switch",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 570,
+            "len": 133
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 597,
+          "len": 100
+        },
+        "definition": "switch",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 570,
+            "len": 133
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 597,
+          "len": 100
+        },
+        "definition": "switch",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 570,
+            "len": 133
+          }
+        ]
+      }
+    ],
+    "switch-l3": [
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 418,
+          "len": 24
+        },
+        "definition": "rack-unit",
+        "part": "chassis",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 418,
+          "len": 24
+        },
+        "definition": "rack-unit",
+        "part": "chassis",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 418,
+          "len": 24
+        },
+        "definition": "rack-unit",
+        "part": "chassis",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 597,
+          "len": 100
+        },
+        "definition": "switch",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 570,
+            "len": 133
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 597,
+          "len": 100
+        },
+        "definition": "switch",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 570,
+            "len": 133
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 597,
+          "len": 100
+        },
+        "definition": "switch",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 570,
+            "len": 133
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 597,
+          "len": 100
+        },
+        "definition": "switch",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 570,
+            "len": 133
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 597,
+          "len": 100
+        },
+        "definition": "switch",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 570,
+            "len": 133
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 597,
+          "len": 100
+        },
+        "definition": "switch",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 570,
+            "len": 133
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 597,
+          "len": 100
+        },
+        "definition": "switch",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 570,
+            "len": 133
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 597,
+          "len": 100
+        },
+        "definition": "switch",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 570,
+            "len": 133
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 597,
+          "len": 100
+        },
+        "definition": "switch",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 570,
+            "len": 133
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 597,
+          "len": 100
+        },
+        "definition": "switch",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 570,
+            "len": 133
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 597,
+          "len": 100
+        },
+        "definition": "switch",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 570,
+            "len": 133
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 597,
+          "len": 100
+        },
+        "definition": "switch",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 570,
+            "len": 133
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 940,
+          "len": 71
+        },
+        "definition": "switch-l3",
+        "part": "routing-badge",
+        "sites": []
+      }
+    ],
+    "switch-poe": [
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1112,
+          "len": 128
+        },
+        "definition": "switch-poe",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 1091,
+            "len": 155
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1112,
+          "len": 128
+        },
+        "definition": "switch-poe",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 1091,
+            "len": 155
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1112,
+          "len": 128
+        },
+        "definition": "switch-poe",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 1091,
+            "len": 155
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1112,
+          "len": 128
+        },
+        "definition": "switch-poe",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 1091,
+            "len": 155
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1112,
+          "len": 128
+        },
+        "definition": "switch-poe",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 1091,
+            "len": 155
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1112,
+          "len": 128
+        },
+        "definition": "switch-poe",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 1091,
+            "len": 155
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1112,
+          "len": 128
+        },
+        "definition": "switch-poe",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 1091,
+            "len": 155
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1301,
+          "len": 43
+        },
+        "definition": "switch-poe",
+        "part": "everything-else",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1349,
+          "len": 70
+        },
+        "definition": "switch-poe",
+        "part": "everything-else",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1349,
+          "len": 70
+        },
+        "definition": "switch-poe",
+        "part": "everything-else",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1424,
+          "len": 83
+        },
+        "definition": "switch-poe",
+        "part": "everything-else",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1512,
+          "len": 24
+        },
+        "definition": "switch-poe",
+        "part": "everything-else",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1541,
+          "len": 42
+        },
+        "definition": "switch-poe",
+        "part": "everything-else",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1611,
+          "len": 36
+        },
+        "definition": "switch-poe",
+        "part": "everything-else",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1654,
+          "len": 35
+        },
+        "definition": "switch-poe",
+        "part": "everything-else",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1696,
+          "len": 46
+        },
+        "definition": "switch-poe",
+        "part": "everything-else",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1749,
+          "len": 46
+        },
+        "definition": "switch-poe",
+        "part": "everything-else",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1802,
+          "len": 40
+        },
+        "definition": "switch-poe",
+        "part": "everything-else",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1849,
+          "len": 177
+        },
+        "definition": "switch-poe",
+        "part": "everything-else",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 2763,
+          "len": 28
+        },
+        "definition": "mini-glyph",
+        "part": "dot",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 2033,
+            "len": 26
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 2391,
+          "len": 42
+        },
+        "definition": "disk-stack",
+        "part": "stack",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 2070,
+            "len": 61
+          },
+          {
+            "file": "sample.ilx",
+            "start": 2368,
+            "len": 71
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 2391,
+          "len": 42
+        },
+        "definition": "disk-stack",
+        "part": "stack",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 2070,
+            "len": 61
+          },
+          {
+            "file": "sample.ilx",
+            "start": 2368,
+            "len": 71
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 2391,
+          "len": 42
+        },
+        "definition": "disk-stack",
+        "part": "stack",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 2070,
+            "len": 61
+          },
+          {
+            "file": "sample.ilx",
+            "start": 2368,
+            "len": 71
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 2391,
+          "len": 42
+        },
+        "definition": "disk-stack",
+        "part": "stack",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 2070,
+            "len": 61
+          },
+          {
+            "file": "sample.ilx",
+            "start": 2368,
+            "len": 71
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 2136,
+          "len": 40
+        },
+        "definition": "switch-poe",
+        "part": "everything-else",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 2929,
+          "len": 156
+        },
+        "definition": "state-down",
+        "part": "octagon",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 2136,
+            "len": 40
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 3092,
+          "len": 55
+        },
+        "definition": "state-down",
+        "part": "octagon",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 2136,
+            "len": 40
+          }
+        ]
+      }
+    ],
+    "switch-poe-down": [
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1112,
+          "len": 128
+        },
+        "definition": "switch-poe",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 1091,
+            "len": 155
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1112,
+          "len": 128
+        },
+        "definition": "switch-poe",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 1091,
+            "len": 155
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1112,
+          "len": 128
+        },
+        "definition": "switch-poe",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 1091,
+            "len": 155
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1112,
+          "len": 128
+        },
+        "definition": "switch-poe",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 1091,
+            "len": 155
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1112,
+          "len": 128
+        },
+        "definition": "switch-poe",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 1091,
+            "len": 155
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1112,
+          "len": 128
+        },
+        "definition": "switch-poe",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 1091,
+            "len": 155
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1112,
+          "len": 128
+        },
+        "definition": "switch-poe",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 1091,
+            "len": 155
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1301,
+          "len": 43
+        },
+        "definition": "switch-poe",
+        "part": "everything-else",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1349,
+          "len": 70
+        },
+        "definition": "switch-poe",
+        "part": "everything-else",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1349,
+          "len": 70
+        },
+        "definition": "switch-poe",
+        "part": "everything-else",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1424,
+          "len": 83
+        },
+        "definition": "switch-poe",
+        "part": "everything-else",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1512,
+          "len": 24
+        },
+        "definition": "switch-poe",
+        "part": "everything-else",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1541,
+          "len": 42
+        },
+        "definition": "switch-poe",
+        "part": "everything-else",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1611,
+          "len": 36
+        },
+        "definition": "switch-poe",
+        "part": "everything-else",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1654,
+          "len": 35
+        },
+        "definition": "switch-poe",
+        "part": "everything-else",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1696,
+          "len": 46
+        },
+        "definition": "switch-poe",
+        "part": "everything-else",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1749,
+          "len": 46
+        },
+        "definition": "switch-poe",
+        "part": "everything-else",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1802,
+          "len": 40
+        },
+        "definition": "switch-poe",
+        "part": "everything-else",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1849,
+          "len": 177
+        },
+        "definition": "switch-poe",
+        "part": "everything-else",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 2763,
+          "len": 28
+        },
+        "definition": "mini-glyph",
+        "part": "dot",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 2033,
+            "len": 26
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 2391,
+          "len": 42
+        },
+        "definition": "disk-stack",
+        "part": "stack",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 2070,
+            "len": 61
+          },
+          {
+            "file": "sample.ilx",
+            "start": 2368,
+            "len": 71
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 2391,
+          "len": 42
+        },
+        "definition": "disk-stack",
+        "part": "stack",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 2070,
+            "len": 61
+          },
+          {
+            "file": "sample.ilx",
+            "start": 2368,
+            "len": 71
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 2391,
+          "len": 42
+        },
+        "definition": "disk-stack",
+        "part": "stack",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 2070,
+            "len": 61
+          },
+          {
+            "file": "sample.ilx",
+            "start": 2368,
+            "len": 71
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 2391,
+          "len": 42
+        },
+        "definition": "disk-stack",
+        "part": "stack",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 2070,
+            "len": 61
+          },
+          {
+            "file": "sample.ilx",
+            "start": 2368,
+            "len": 71
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 2136,
+          "len": 40
+        },
+        "definition": "switch-poe",
+        "part": "everything-else",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 2929,
+          "len": 156
+        },
+        "definition": "state-down",
+        "part": "octagon",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 2136,
+            "len": 40
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 3092,
+          "len": 55
+        },
+        "definition": "state-down",
+        "part": "octagon",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 2136,
+            "len": 40
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 2530,
+          "len": 30
+        },
+        "definition": "state",
+        "part": "state-badge",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 2929,
+          "len": 156
+        },
+        "definition": "state-down",
+        "part": "octagon",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 2530,
+            "len": 30
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 3092,
+          "len": 55
+        },
+        "definition": "state-down",
+        "part": "octagon",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 2530,
+            "len": 30
+          }
+        ]
+      }
+    ],
+    "switch-poe-planned": [
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1112,
+          "len": 128
+        },
+        "definition": "switch-poe",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 1091,
+            "len": 155
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1112,
+          "len": 128
+        },
+        "definition": "switch-poe",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 1091,
+            "len": 155
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1112,
+          "len": 128
+        },
+        "definition": "switch-poe",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 1091,
+            "len": 155
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1112,
+          "len": 128
+        },
+        "definition": "switch-poe",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 1091,
+            "len": 155
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1112,
+          "len": 128
+        },
+        "definition": "switch-poe",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 1091,
+            "len": 155
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1112,
+          "len": 128
+        },
+        "definition": "switch-poe",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 1091,
+            "len": 155
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1112,
+          "len": 128
+        },
+        "definition": "switch-poe",
+        "part": "ports",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 1091,
+            "len": 155
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1301,
+          "len": 43
+        },
+        "definition": "switch-poe",
+        "part": "everything-else",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1349,
+          "len": 70
+        },
+        "definition": "switch-poe",
+        "part": "everything-else",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1349,
+          "len": 70
+        },
+        "definition": "switch-poe",
+        "part": "everything-else",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1424,
+          "len": 83
+        },
+        "definition": "switch-poe",
+        "part": "everything-else",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1512,
+          "len": 24
+        },
+        "definition": "switch-poe",
+        "part": "everything-else",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1541,
+          "len": 42
+        },
+        "definition": "switch-poe",
+        "part": "everything-else",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1611,
+          "len": 36
+        },
+        "definition": "switch-poe",
+        "part": "everything-else",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1654,
+          "len": 35
+        },
+        "definition": "switch-poe",
+        "part": "everything-else",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1696,
+          "len": 46
+        },
+        "definition": "switch-poe",
+        "part": "everything-else",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1749,
+          "len": 46
+        },
+        "definition": "switch-poe",
+        "part": "everything-else",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1802,
+          "len": 40
+        },
+        "definition": "switch-poe",
+        "part": "everything-else",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 1849,
+          "len": 177
+        },
+        "definition": "switch-poe",
+        "part": "everything-else",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 2763,
+          "len": 28
+        },
+        "definition": "mini-glyph",
+        "part": "dot",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 2033,
+            "len": 26
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 2391,
+          "len": 42
+        },
+        "definition": "disk-stack",
+        "part": "stack",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 2070,
+            "len": 61
+          },
+          {
+            "file": "sample.ilx",
+            "start": 2368,
+            "len": 71
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 2391,
+          "len": 42
+        },
+        "definition": "disk-stack",
+        "part": "stack",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 2070,
+            "len": 61
+          },
+          {
+            "file": "sample.ilx",
+            "start": 2368,
+            "len": 71
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 2391,
+          "len": 42
+        },
+        "definition": "disk-stack",
+        "part": "stack",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 2070,
+            "len": 61
+          },
+          {
+            "file": "sample.ilx",
+            "start": 2368,
+            "len": 71
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 2391,
+          "len": 42
+        },
+        "definition": "disk-stack",
+        "part": "stack",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 2070,
+            "len": 61
+          },
+          {
+            "file": "sample.ilx",
+            "start": 2368,
+            "len": 71
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 2136,
+          "len": 40
+        },
+        "definition": "switch-poe",
+        "part": "everything-else",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 2929,
+          "len": 156
+        },
+        "definition": "state-down",
+        "part": "octagon",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 2136,
+            "len": 40
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 3092,
+          "len": 55
+        },
+        "definition": "state-down",
+        "part": "octagon",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 2136,
+            "len": 40
+          }
+        ]
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 2658,
+          "len": 33
+        },
+        "definition": "state",
+        "part": "state-badge",
+        "sites": []
+      },
+      {
+        "node": {
+          "file": "sample.ilx",
+          "start": 3298,
+          "len": 61
+        },
+        "definition": "state-planned",
+        "part": "outline",
+        "sites": [
+          {
+            "file": "sample.ilx",
+            "start": 2658,
+            "len": 33
+          }
+        ]
+      }
+    ]
+  }
+}

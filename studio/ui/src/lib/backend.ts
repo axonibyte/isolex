@@ -55,8 +55,8 @@ export type Notice =
       palette: Record<string, { light: string; dark: string }> | null;
       icons: string[];
     }
-  | { kind: 'icon'; name: string; ir: IrIcon }
-  | { kind: 'broken'; name: string; diagnostics: Diag[]; last: IrIcon | null }
+  | { kind: 'icon'; name: string; ir: IrIcon; sources: Origin[] }
+  | { kind: 'broken'; name: string; diagnostics: Diag[]; last: { ir: IrIcon; sources: Origin[] } | null }
   | { kind: 'gone'; name: string }
   | { kind: 'reloaded'; files: string[] }
   | { kind: 'out-of-sync'; files: string[] };
@@ -66,6 +66,47 @@ export interface NodeAt {
   file: string;
   start: number;
   len: number;
+}
+
+/** Where one shape of a drawing is written: the node that draws it, the
+    definition and part it is in, and the insert, badge, repeat and text
+    nodes it was drawn through, outermost first. One per shape, in the
+    order the IR lists them, a group before its own. */
+export interface Origin {
+  node: NodeAt;
+  definition: string;
+  part: string | null;
+  sites: NodeAt[];
+}
+
+/** A shape in a part, or a node holding shapes (at, repeat, transform,
+    turn) with its own under it. */
+export interface Row {
+  kind: string;
+  note: string;
+  node: NodeAt;
+  children: Row[];
+}
+
+export interface Part {
+  name: string;
+  op: 'part' | 'replace' | 'remove';
+  /** The axis variant it is written in. */
+  variant: string | null;
+  node: NodeAt;
+  /** In source order: the last is drawn on top. */
+  shapes: Row[];
+}
+
+/** A definition's parts, for the Parts panel. */
+export interface Outline {
+  definition: string;
+  kind: 'base' | 'icon' | 'fragment' | 'axis' | 'font';
+  extends: string | null;
+  node: NodeAt;
+  parts: Part[];
+  /** Drawn from the definitions it extends, each naming which. */
+  inherited: { name: string; from: string; shapes: number }[];
 }
 
 export type JsonValue = boolean | number | string | null;
@@ -98,6 +139,7 @@ export interface Backend {
   open(path: string): Promise<void>;
   view(editing: string | null, icon: string | null, visible: string[]): Promise<void>;
   source(file: string): Promise<Source | null>;
+  outline(definition: string): Promise<Outline | null>;
   ask(ask: Ask, label: string): Promise<Answer>;
   choose(id: number, option: number): Promise<Answer>;
   beginGesture(): Promise<void>;
@@ -127,6 +169,7 @@ export async function shell(): Promise<Backend> {
     open: (path) => invoke('open', { path }),
     view: (editing, icon, visible) => invoke('view', { editing, icon, visible }),
     source: (file) => invoke('source', { file }),
+    outline: (definition) => invoke('outline', { definition }),
     ask: (ask, label) => invoke('ask', { ask, label }),
     choose: (id, option) => invoke('choose', { id, option }),
     beginGesture: () => invoke('begin_gesture'),

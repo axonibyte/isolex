@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { definitionOf, empty, reduce } from './state.svelte';
-import type { Diag, Graph, Notice } from './backend';
+import type { Diag, Graph, Notice, Origin } from './backend';
 import type { IrIcon } from './isolex/ir';
 
 const icon = (name: string): IrIcon => ({ name, viewbox: [0, 0, 1, 1], shapes: [] }) as unknown as IrIcon;
 const diag: Diag = { file: 'a.ilx', line: 1, col: 1, message: 'bad' };
+const origin = (start: number): Origin => ({ node: { file: 'a.ilx', start, len: 3 }, definition: 'a', part: null, sites: [] });
+const drawn = (name: string, start = 0): Notice => ({ kind: 'icon', name, ir: icon(name), sources: [origin(start)] });
 const compiled = (generation: number): Notice => ({
   kind: 'compiled',
   generation,
@@ -33,19 +35,29 @@ describe('reduce', () => {
   });
 
   it('keeps a broken icon’s last drawing, and mends it', () => {
-    let v = reduce(empty(), { kind: 'icon', name: 'a', ir: icon('a') });
+    let v = reduce(empty(), drawn('a'));
     v = reduce(v, { kind: 'broken', name: 'a', diagnostics: [diag], last: null });
     expect(v.icons.a?.name).toBe('a');
     expect(v.broken.a).toEqual([diag]);
-    v = reduce(v, { kind: 'icon', name: 'a', ir: icon('a') });
+    v = reduce(v, drawn('a'));
     expect(v.broken.a).toBeUndefined();
   });
 
+  it('keeps each drawing’s sources with it', () => {
+    let v = reduce(empty(), drawn('a', 5));
+    expect(v.sources.a).toEqual([origin(5)]);
+    v = reduce(v, { kind: 'broken', name: 'a', diagnostics: [diag], last: { ir: icon('a'), sources: [origin(9)] } });
+    expect(v.sources.a).toEqual([origin(9)]);
+    v = reduce(v, { kind: 'broken', name: 'a', diagnostics: [diag], last: null });
+    expect(v.sources.a).toEqual([origin(9)]);
+  });
+
   it('forgets an icon that is gone', () => {
-    let v = reduce(empty(), { kind: 'icon', name: 'a', ir: icon('a') });
+    let v = reduce(empty(), drawn('a'));
     v = reduce(v, { kind: 'broken', name: 'a', diagnostics: [diag], last: null });
     v = reduce(v, { kind: 'gone', name: 'a' });
     expect(v.icons).toEqual({});
+    expect(v.sources).toEqual({});
     expect(v.broken).toEqual({});
   });
 

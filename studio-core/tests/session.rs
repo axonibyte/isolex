@@ -134,10 +134,20 @@ fn opening_editing_choosing_undoing_and_saving() {
         (0, include_str!("../../tests/fixtures/sample.ilx"))
     );
     assert!(s.source("nope.ilx").is_none());
-    window.wait(
+    let poe = window.wait(
         compiled,
         |n| matches!(n, Notice::Icon { name, .. } if name == "switch-poe"),
     );
+    // each shape says where it is written, by file name
+    let Notice::Icon { sources, .. } = window.seen.lock().unwrap()[poe].clone() else {
+        unreachable!()
+    };
+    assert!(!sources.is_empty());
+    assert!(sources.iter().all(|o| o.node.file == "sample.ilx"));
+    // and the Parts panel's outline, at the revision it is asked at
+    let outline = s.outline("switch-poe").unwrap();
+    assert_eq!(outline.parts.len(), 3);
+    assert!(s.outline("nope").is_none());
 
     // a literal set: applied, one step, and compiled again
     let mark = window.len();
