@@ -206,6 +206,10 @@ impl Library {
             .collect();
     }
 
+    pub(crate) fn set_saved(&mut self, saved: BTreeMap<FilePath, u64>) {
+        self.saved = saved;
+    }
+
     /// The hashes this library last loaded or saved, by path: what it
     /// knows the disk holds, to tell its own writes from others'.
     pub fn saved_hashes(&self) -> &BTreeMap<FilePath, u64> {
@@ -381,7 +385,7 @@ impl Change {
 }
 
 /// Every `.ilx` file under `root`, by its library path.
-fn read_folder(root: &Path) -> std::io::Result<BTreeMap<FilePath, String>> {
+pub(crate) fn read_folder(root: &Path) -> std::io::Result<BTreeMap<FilePath, String>> {
     let mut files = BTreeMap::new();
     let mut todo = vec![(String::new(), root.to_path_buf())];
     while let Some((rel, dir)) = todo.pop() {

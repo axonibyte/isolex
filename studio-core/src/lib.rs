@@ -13,8 +13,10 @@ use serde::Serialize;
 
 pub mod library;
 pub mod save;
+pub mod watch;
 
 pub use library::{Change, EditError, Library, Patch, Transaction};
+pub use watch::{DiskChange, DiskOutcome, PollingWatcher, Watcher};
 
 /// What the studio and the compiler it is built with say they are.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
