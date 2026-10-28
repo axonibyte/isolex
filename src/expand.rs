@@ -665,6 +665,36 @@ pub fn expand_many(resolved: &Resolved, requests: &[Only]) -> Vec<Expansion> {
         .collect()
 }
 
+/// Every icon the lexicon emits, by the name the IR gives it, with the
+/// icon definition that emits it, in the order they are emitted; as many
+/// as the icon-limit allows. Nothing is expanded.
+pub fn emitted(resolved: &Resolved) -> Vec<(String, String)> {
+    let mut ctx = new_ctx(resolved);
+    let icon_limit = in_force(LimitKind::Icons, &BTreeMap::new(), &resolved.lexicon_limits);
+    let mut count: u128 = 0;
+    let mut out = Vec::new();
+    for icon in &resolved.icons {
+        count = count.saturating_add(axis_product(&ctx, icon));
+        if icon_limit
+            .limit
+            .is_some_and(|limit| count > u128::from(limit))
+        {
+            break;
+        }
+        for combo in axis_combos(&mut ctx, icon) {
+            let mut name = icon.name.clone();
+            for (axis, variant) in &combo {
+                if let Some(v) = variant {
+                    name.push('-');
+                    name.push_str(&resolved.axes[axis].variants[*v].name);
+                }
+            }
+            out.push((icon.name.clone(), name));
+        }
+    }
+    out
+}
+
 fn new_ctx(resolved: &Resolved) -> Ctx<'_> {
     let unset = InForce {
         limit: None,

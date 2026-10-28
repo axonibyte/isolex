@@ -1,0 +1,203 @@
+{
+  "definitions": [
+    {
+      "name": "chassis",
+      "kind": "Base",
+      "file": "graph.ilx",
+      "span": {
+        "file": 0,
+        "start": 330,
+        "len": 97
+      },
+      "emits": []
+    },
+    {
+      "name": "server",
+      "kind": "Icon",
+      "file": "graph.ilx",
+      "span": {
+        "file": 0,
+        "start": 429,
+        "len": 99
+      },
+      "emits": [
+        "server",
+        "server-down"
+      ]
+    },
+    {
+      "name": "switch",
+      "kind": "Icon",
+      "file": "graph.ilx",
+      "span": {
+        "file": 0,
+        "start": 530,
+        "len": 192
+      },
+      "emits": [
+        "switch"
+      ]
+    },
+    {
+      "name": "led-row",
+      "kind": "Fragment",
+      "file": "graph.ilx",
+      "span": {
+        "file": 0,
+        "start": 724,
+        "len": 100
+      },
+      "emits": []
+    },
+    {
+      "name": "led",
+      "kind": "Fragment",
+      "file": "graph.ilx",
+      "span": {
+        "file": 0,
+        "start": 826,
+        "len": 90
+      },
+      "emits": []
+    },
+    {
+      "name": "down",
+      "kind": "Icon",
+      "file": "graph.ilx",
+      "span": {
+        "file": 0,
+        "start": 918,
+        "len": 124
+      },
+      "emits": [
+        "down"
+      ]
+    },
+    {
+      "name": "state",
+      "kind": "Axis",
+      "file": "graph.ilx",
+      "span": {
+        "file": 0,
+        "start": 1044,
+        "len": 101
+      },
+      "emits": []
+    },
+    {
+      "name": "mono",
+      "kind": "Font",
+      "file": "graph.ilx",
+      "span": {
+        "file": 0,
+        "start": 1147,
+        "len": 207
+      },
+      "emits": []
+    },
+    {
+      "name": "weight",
+      "kind": "Axis",
+      "file": "graph.ilx",
+      "span": {
+        "file": 0,
+        "start": 1356,
+        "len": 40
+      },
+      "emits": []
+    }
+  ],
+  "edges": [
+    {
+      "kind": "extends",
+      "from": "server",
+      "to": "chassis",
+      "at": {
+        "file": 0,
+        "start": 455,
+        "len": 9
+      }
+    },
+    {
+      "kind": "axis",
+      "from": "server",
+      "to": "state",
+      "at": {
+        "file": 0,
+        "start": 472,
+        "len": 7
+      }
+    },
+    {
+      "kind": "insert",
+      "from": "server",
+      "to": "led-row",
+      "at": {
+        "file": 0,
+        "start": 509,
+        "len": 9
+      }
+    },
+    {
+      "kind": "extends",
+      "from": "switch",
+      "to": "chassis",
+      "at": {
+        "file": 0,
+        "start": 552,
+        "len": 9
+      }
+    },
+    {
+      "kind": "insert",
+      "from": "switch",
+      "to": "led-row",
+      "at": {
+        "file": 0,
+        "start": 613,
+        "len": 9
+      }
+    },
+    {
+      "kind": "font",
+      "from": "switch",
+      "to": "mono",
+      "at": {
+        "file": 0,
+        "start": 697,
+        "len": 6
+      }
+    },
+    {
+      "kind": "insert",
+      "from": "led-row",
+      "to": "led",
+      "at": {
+        "file": 0,
+        "start": 807,
+        "len": 5
+      }
+    },
+    {
+      "kind": "badge",
+      "from": "state",
+      "to": "down",
+      "at": {
+        "file": 0,
+        "start": 1115,
+        "len": 6
+      },
+      "variant": "down"
+    },
+    {
+      "kind": "axis",
+      "from": "mono",
+      "to": "weight",
+      "at": {
+        "file": 0,
+        "start": 1215,
+        "len": 8
+      }
+    }
+  ]
+}
