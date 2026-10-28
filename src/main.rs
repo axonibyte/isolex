@@ -1,7 +1,7 @@
 //! isolex — reference compiler for the Isolex icon-definition language.
 
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::ExitCode;
 
 #[cfg(feature = "font-tools")]
@@ -131,40 +131,8 @@ enum Mode {
     },
 }
 
-fn collect_ilx(dir: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<()> {
-    let mut entries: Vec<PathBuf> = std::fs::read_dir(dir)?
-        .filter_map(|e| e.ok().map(|e| e.path()))
-        .collect();
-    entries.sort();
-    for path in entries {
-        if path.is_dir() {
-            collect_ilx(&path, out)?;
-        } else if path.extension().map(|e| e == "ilx").unwrap_or(false) {
-            out.push(path);
-        }
-    }
-    Ok(())
-}
-
-/// Every `.ilx` file under `dir`, in the order a lexicon is read (SPEC
-/// §1), with its text.
-fn lexicon_files(dir: &str) -> Result<Vec<(String, String)>, String> {
-    let mut paths = Vec::new();
-    collect_ilx(Path::new(dir), &mut paths).map_err(|e| format!("cannot read {dir}: {e}"))?;
-    if paths.is_empty() {
-        return Err(format!("no .ilx files under {dir}"));
-    }
-    let mut files = Vec::new();
-    for p in &paths {
-        let text =
-            std::fs::read_to_string(p).map_err(|e| format!("cannot read {}: {e}", p.display()))?;
-        files.push((p.display().to_string(), text));
-    }
-    Ok(files)
-}
-
 fn run(dir: &str, mode: Mode, only: Option<OneIcon>) -> ExitCode {
-    let files = match lexicon_files(dir) {
+    let files = match isolex::library::load(Path::new(dir)) {
         Ok(f) => f,
         Err(why) => {
             eprintln!("isolex: {why}");

@@ -183,7 +183,7 @@ fn run_export(dir: &str, rest: &[String]) -> ExitCode {
         (None, Some(u)) => (u, true),
         _ => return bad("font export writes one of --otf <file> or --ufo <dir>".to_string()),
     };
-    let files = match crate::lexicon_files(dir) {
+    let files = match isolex::library::load(std::path::Path::new(dir)) {
         Ok(f) => f,
         Err(why) => {
             eprintln!("isolex: {why}");

@@ -63,6 +63,11 @@ host drawing a value of one thing (`isolex::compile_one`), and with
 documents its four exports, and `isolex::json` the shapes. Each release
 publishes it as `isolex-<version>.wasm`.
 
+A host with a file system reads a lexicon's folder with
+`isolex::library::load`, as the command line does: every `.ilx` file
+under it, in SPEC §1's order, which `isolex::library::order` gives for
+paths it has already.
+
 ## Documentation
 
 - [docs/guide.md](docs/guide.md) — a task-oriented walk through authoring

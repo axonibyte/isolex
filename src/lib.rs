@@ -8,6 +8,7 @@ pub mod expr;
 pub mod ir;
 pub mod json;
 pub mod kdl;
+pub mod library;
 pub mod parser;
 pub mod project;
 pub mod render;
