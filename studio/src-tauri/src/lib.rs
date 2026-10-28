@@ -1,8 +1,42 @@
 //! isolex studio's desktop shell: a window around the interface
 //! (`studio/ui`), and the commands it calls, each a thin layer over
-//! `isolex-studio-core`.
+//! `isolex-studio-core`'s [`Session`], whose notices reach the window as
+//! `isolex` events.
 
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
+use isolex_studio_core::session::{Answer, Ask, Notice, Session, Sink};
 use isolex_studio_core::About;
+use tauri::{AppHandle, Emitter, Manager, State};
+
+/// The event every notice is sent as.
+pub const EVENT: &str = "isolex";
+
+/// The library open in the window, if any.
+#[derive(Default)]
+struct Open(Mutex<Option<Session>>);
+
+/// Notices, to the window.
+struct Window(AppHandle);
+
+impl Sink for Window {
+    fn notify(&self, notice: Notice) {
+        let _ = self.0.emit(EVENT, notice);
+    }
+}
+
+/// Runs `f` on the open library, or says none is open.
+fn with<T>(open: &State<Open>, f: impl FnOnce(&mut Session) -> T) -> Result<T, String> {
+    let mut guard = open
+        .0
+        .lock()
+        .map_err(|_| "the library is unavailable".to_string())?;
+    let session = guard
+        .as_mut()
+        .ok_or_else(|| "no library is open".to_string())?;
+    Ok(f(session))
+}
 
 /// This build's versions, the studio's and the compiler's.
 #[tauri::command]
@@ -10,10 +44,103 @@ fn about() -> About {
     isolex_studio_core::about()
 }
 
-/// Opens the window and serves the interface's commands until it closes.
+/// Opens the library folder at `path`, closing any other.
+#[tauri::command]
+fn open(app: AppHandle, open: State<Open>, path: String) -> Result<(), String> {
+    let session =
+        Session::open(&path, Arc::new(Window(app))).map_err(|e| format!("{path}: {e}"))?;
+    *open
+        .0
+        .lock()
+        .map_err(|_| "the library is unavailable".to_string())? = Some(session);
+    Ok(())
+}
+
+/// What the interface shows: the definition and icon open, and the
+/// thumbnails on screen.
+#[tauri::command]
+fn view(
+    open: State<Open>,
+    editing: Option<String>,
+    icon: Option<String>,
+    visible: Vec<String>,
+) -> Result<(), String> {
+    with(&open, |s| s.view(editing, icon, visible))
+}
+
+#[tauri::command]
+fn ask(open: State<Open>, ask: Ask, label: String) -> Result<Answer, String> {
+    with(&open, |s| s.ask(&ask, &label))
+}
+
+#[tauri::command]
+fn choose(open: State<Open>, id: u64, option: usize) -> Result<Answer, String> {
+    with(&open, |s| s.choose(id, option))
+}
+
+#[tauri::command]
+fn begin_gesture(open: State<Open>) -> Result<(), String> {
+    with(&open, |s| s.begin_gesture())
+}
+
+#[tauri::command]
+fn end_gesture(open: State<Open>) -> Result<(), String> {
+    with(&open, |s| s.end_gesture())
+}
+
+#[tauri::command]
+fn undo(open: State<Open>) -> Result<Option<String>, String> {
+    with(&open, |s| s.undo())
+}
+
+#[tauri::command]
+fn redo(open: State<Open>) -> Result<Option<String>, String> {
+    with(&open, |s| s.redo())
+}
+
+#[tauri::command]
+fn save(open: State<Open>) -> Result<(), String> {
+    with(&open, |s| s.save().map_err(|e| e.to_string()))?
+}
+
+#[tauri::command]
+fn reload(open: State<Open>) -> Result<(), String> {
+    with(&open, |s| s.reload().map_err(|e| e.to_string()))?
+}
+
+/// Opens the window and serves the interface's commands until it closes;
+/// the folder is looked at for outside changes every second.
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![about])
+        .manage(Open::default())
+        .setup(|app| {
+            let handle = app.handle().clone();
+            std::thread::spawn(move || loop {
+                std::thread::sleep(Duration::from_secs(1));
+                let open = handle.state::<Open>();
+                let Ok(mut guard) = open.0.lock() else {
+                    continue;
+                };
+                if let Some(s) = guard.as_mut() {
+                    let _ = s.tick();
+                }
+                drop(guard);
+            });
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            about,
+            open,
+            view,
+            ask,
+            choose,
+            begin_gesture,
+            end_gesture,
+            undo,
+            redo,
+            save,
+            reload
+        ])
         .run(tauri::generate_context!())
         .expect("isolex studio could not start");
 }
