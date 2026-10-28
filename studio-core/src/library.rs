@@ -105,6 +105,9 @@ pub struct Library {
     redo: Vec<Step>,
     gesture: Option<u64>,
     next_gesture: u64,
+    /// Counts every change to the files, so an edit planned against one
+    /// state of them is refused against another.
+    revision: u64,
 }
 
 /// FNV-1a, 64 bits: enough to tell a file from how it was saved.
@@ -141,6 +144,7 @@ impl Library {
             redo: Vec::new(),
             gesture: None,
             next_gesture: 0,
+            revision: 0,
         }
     }
 
@@ -284,6 +288,12 @@ impl Library {
         !self.redo.is_empty()
     }
 
+    /// Which state of the files this is: it changes with every edit, undo
+    /// and redo.
+    pub fn revision(&self) -> u64 {
+        self.revision
+    }
+
     /// Applies the patches in order to a copy, and only if every one
     /// applies, keeps it: returns their inverses, last first.
     fn apply_patches(&mut self, patches: &[Patch]) -> Result<Vec<Patch>, EditError> {
@@ -294,6 +304,7 @@ impl Library {
         }
         inverse.reverse();
         self.files = files;
+        self.revision += 1;
         Ok(inverse)
     }
 }
