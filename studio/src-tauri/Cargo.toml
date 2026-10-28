@@ -26,6 +26,8 @@ isolex-studio-core = { path = "../../studio-core" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2.12", features = [] }
+# the folder picker
+tauri-plugin-dialog = "2.8"
 
 [profile.release]
 lto = true

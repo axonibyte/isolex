@@ -1,0 +1,111 @@
+/* The studio's look (docs/studio-interface.md, Look): a dark window around
+   a light canvas by default, each switchable. Every color is a token here;
+   the window's set changes with data-theme, the canvas's with
+   data-canvas. */
+
+:root {
+  --bg: #121317;
+  --panel: #1a1c21;
+  --raised: #23262d;
+  --line: #2c3038;
+  --fg: #e7e9ee;
+  --muted: #9aa1ad;
+  --accent: #5b8cff;
+  --accent-fg: #0b1020;
+  --danger: #ff7a6e;
+  --warn: #f2c14e;
+  --ok: #4cc38a;
+  --code-bg: #15171b;
+  --code-key: #c4a5ff;
+  --code-str: #8fd18f;
+  --code-num: #f2a96b;
+  --code-prop: #7fc1ff;
+  --font-ui: 'Geist', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  --canvas: #f3f4f7;
+  --grid: rgb(70 90 140 / 0.13);
+  --grid-strong: rgb(70 90 140 / 0.28);
+  --frame: rgb(40 50 70 / 0.45);
+  color-scheme: dark;
+}
+
+:root[data-theme='light'] {
+  --bg: #e9ebef;
+  --panel: #ffffff;
+  --raised: #f2f3f6;
+  --line: #dcdfe5;
+  --fg: #181a1f;
+  --muted: #5a616d;
+  --accent: #2f66e0;
+  --accent-fg: #ffffff;
+  --danger: #c23b2f;
+  --warn: #8a5d00;
+  --ok: #1e7f50;
+  --code-bg: #fbfbfc;
+  --code-key: #7a3fd1;
+  --code-str: #23803a;
+  --code-num: #b25400;
+  --code-prop: #1d5fb5;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: light) {
+  :root[data-theme='system'] {
+    --bg: #e9ebef;
+    --panel: #ffffff;
+    --raised: #f2f3f6;
+    --line: #dcdfe5;
+    --fg: #181a1f;
+    --muted: #5a616d;
+    --accent: #2f66e0;
+    --accent-fg: #ffffff;
+    --danger: #c23b2f;
+    --warn: #8a5d00;
+    --ok: #1e7f50;
+    --code-bg: #fbfbfc;
+    --code-key: #7a3fd1;
+    --code-str: #23803a;
+    --code-num: #b25400;
+    --code-prop: #1d5fb5;
+    color-scheme: light;
+  }
+}
+
+:root[data-canvas='dark'] {
+  --canvas: #1b1d22;
+  --grid: rgb(160 175 210 / 0.1);
+  --grid-strong: rgb(160 175 210 / 0.22);
+  --frame: rgb(210 220 240 / 0.4);
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font: 13px/1.4 var(--font-ui);
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}

@@ -114,6 +114,26 @@ fn opening_editing_choosing_undoing_and_saving() {
     };
     window.wait(0, |n| matches!(n, Notice::Graph { .. }));
     let compiled = window.wait(0, |n| matches!(n, Notice::Compiled { revision: 0, .. }));
+    // the sample's grant is a warning, not an error, and it has no palette
+    let Notice::Compiled {
+        errors,
+        warnings,
+        palette,
+        ..
+    } = window.seen.lock().unwrap()[compiled].clone()
+    else {
+        unreachable!()
+    };
+    assert!(errors.is_empty());
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    assert!(palette.is_none());
+    // and its text, for the Source tab
+    let src = s.source("sample.ilx").unwrap();
+    assert_eq!(
+        (src.revision, src.text.as_str()),
+        (0, include_str!("../../tests/fixtures/sample.ilx"))
+    );
+    assert!(s.source("nope.ilx").is_none());
     window.wait(
         compiled,
         |n| matches!(n, Notice::Icon { name, .. } if name == "switch-poe"),

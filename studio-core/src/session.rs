@@ -45,7 +45,10 @@ pub enum Notice {
     Compiled {
         generation: u64,
         revision: u64,
-        diagnostics: Vec<Diag>,
+        errors: Vec<Diag>,
+        warnings: Vec<Diag>,
+        /// The lexicon's `palette` block, by token, if it has one.
+        palette: Option<BTreeMap<String, isolex::Colors>>,
         icons: Vec<String>,
     },
     /// An icon drawn differently than before.
@@ -207,6 +210,13 @@ pub struct ChoiceOption {
     pub detail: String,
 }
 
+/// A file's text at a revision.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Source {
+    pub revision: u64,
+    pub text: String,
+}
+
 /// A library open in the studio.
 pub struct Session {
     lib: Library,
@@ -247,6 +257,14 @@ impl Session {
 
     pub fn library(&self) -> &Library {
         &self.lib
+    }
+
+    /// A file's text now, with the revision it is at, for the Source tab.
+    pub fn source(&self, file: &str) -> Option<Source> {
+        self.lib.files().get(file).map(|text| Source {
+            revision: self.lib.revision(),
+            text: text.clone(),
+        })
     }
 
     /// What the interface shows: the definition and icon open, and the
@@ -412,12 +430,14 @@ fn forward(events: Receiver<Event>, sink: Arc<dyn Sink>) {
                 Event::Lexicon {
                     generation,
                     revision,
-                    diags,
+                    problems,
                     icons,
                 } => Notice::Compiled {
                     generation,
                     revision,
-                    diagnostics: diags,
+                    errors: problems.errors,
+                    warnings: problems.warnings,
+                    palette: problems.palette,
                     icons,
                 },
                 Event::Changed { name, ir, .. } => Notice::Icon {

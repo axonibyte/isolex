@@ -28,8 +28,14 @@ npm ci               # the interface's dependencies
 npm run tauri dev    # the app, with the interface reloading as you edit
 npm run check        # svelte-check
 npm test             # vitest
+npm run e2e          # Playwright with axe (once: npx playwright install chromium)
 npm run tauri build  # an installer for this platform
 ```
+
+`npm run dev` serves the interface alone in a browser, over the
+compiler's sample library (`tests/fixtures/sample.ilx`) instead of a
+folder: it takes typing in the Source tab, undo and save, and nothing
+else. The browser tests run against it.
 
 `cargo test --manifest-path studio/src-tauri/Cargo.toml` runs the
 shell's own tests. The same checks run on every push to the GitHub

@@ -34,6 +34,15 @@ pub type Snapshot = Arc<Vec<(String, String)>>;
 /// One problem, as the compiler located it.
 pub type Diag = isolex::parser::Diag;
 
+/// The lexicon's own problems: those that fail it, and those that do not;
+/// and its `palette` block, when it has one.
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize)]
+pub struct Problems {
+    pub errors: Vec<Diag>,
+    pub warnings: Vec<Diag>,
+    pub palette: Option<BTreeMap<String, isolex::Colors>>,
+}
+
 /// What one icon came to in one generation.
 #[derive(Debug, Clone)]
 pub enum Outcome {
@@ -48,7 +57,7 @@ pub trait Compiler: Send + Sync + 'static {
     type Prepared: Send + Sync;
     /// Parses and resolves the library once: the lexicon's own errors and
     /// warnings, and the icons it emits, in order.
-    fn prepare(&self, files: &[(String, String)]) -> (Self::Prepared, Vec<Diag>, Vec<String>);
+    fn prepare(&self, files: &[(String, String)]) -> (Self::Prepared, Problems, Vec<String>);
     /// One icon, or none when `cancel` was set first.
     fn icon(&self, prepared: &Self::Prepared, name: &str, cancel: &AtomicBool) -> Option<Outcome>;
 }
@@ -60,17 +69,20 @@ pub struct Isolex;
 impl Compiler for Isolex {
     type Prepared = isolex::Prepared;
 
-    fn prepare(&self, files: &[(String, String)]) -> (isolex::Prepared, Vec<Diag>, Vec<String>) {
+    fn prepare(&self, files: &[(String, String)]) -> (isolex::Prepared, Problems, Vec<String>) {
         let prepared = isolex::Prepared::new(files);
         let o = prepared.outcome();
-        let mut diags = o.errors.clone();
-        diags.extend(o.warnings.iter().cloned());
+        let problems = Problems {
+            errors: o.errors.clone(),
+            warnings: o.warnings.clone(),
+            palette: o.palette.clone(),
+        };
         let names = isolex::graph(files)
             .definitions
             .into_iter()
             .flat_map(|d| d.emits)
             .collect();
-        (prepared, diags, names)
+        (prepared, problems, names)
     }
 
     fn icon(
@@ -175,7 +187,7 @@ pub enum Report {
     Lexicon {
         generation: u64,
         revision: u64,
-        diags: Vec<Diag>,
+        problems: Problems,
         icons: Vec<String>,
     },
     Icon {
@@ -216,7 +228,7 @@ pub fn run_generation<C: Compiler>(
     workers: usize,
     send: &(dyn Fn(Report) + Sync),
 ) {
-    let (prepared, diags, icons) = compiler.prepare(&generation.files);
+    let (prepared, problems, icons) = compiler.prepare(&generation.files);
     if generation.cancel.load(Ordering::Relaxed) {
         return;
     }
@@ -224,7 +236,7 @@ pub fn run_generation<C: Compiler>(
     send(Report::Lexicon {
         generation: generation.number,
         revision: generation.revision,
-        diags,
+        problems,
         icons,
     });
     let next = AtomicUsize::new(0);
@@ -258,7 +270,7 @@ pub enum Event {
     Lexicon {
         generation: u64,
         revision: u64,
-        diags: Vec<Diag>,
+        problems: Problems,
         icons: Vec<String>,
     },
     /// An icon drawn differently from before (or for the first time).
@@ -302,7 +314,7 @@ impl Tracker {
             Report::Lexicon {
                 generation,
                 revision,
-                diags,
+                problems,
                 icons,
             } => {
                 if generation < self.newest {
@@ -325,7 +337,7 @@ impl Tracker {
                     Event::Lexicon {
                         generation,
                         revision,
-                        diags,
+                        problems,
                         icons,
                     },
                 );

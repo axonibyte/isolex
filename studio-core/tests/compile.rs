@@ -9,8 +9,8 @@ use std::time::{Duration, Instant};
 
 use isolex::ir::IrIcon;
 use isolex_studio_core::compile::{
-    order, run_generation, Background, Compiler, Diag, Event, Generation, Isolex, Outcome, Report,
-    Scheduler, SvgCache, QUIET,
+    order, run_generation, Background, Compiler, Diag, Event, Generation, Isolex, Outcome,
+    Problems, Report, Scheduler, SvgCache, QUIET,
 };
 
 fn files(text: &str) -> Arc<Vec<(String, String)>> {
@@ -89,7 +89,7 @@ fn lexicon(g: u64, icons: &[&str]) -> Report {
     Report::Lexicon {
         generation: g,
         revision: g,
-        diags: Vec::new(),
+        problems: Default::default(),
         icons: icons.iter().map(|s| s.to_string()).collect(),
     }
 }
@@ -172,8 +172,8 @@ struct Fake {
 
 impl Compiler for Fake {
     type Prepared = ();
-    fn prepare(&self, _: &[(String, String)]) -> ((), Vec<Diag>, Vec<String>) {
-        ((), Vec::new(), self.icons.clone())
+    fn prepare(&self, _: &[(String, String)]) -> ((), Problems, Vec<String>) {
+        ((), Problems::default(), self.icons.clone())
     }
     fn icon(&self, _: &(), name: &str, cancel: &AtomicBool) -> Option<Outcome> {
         let mut asked = self.asked.lock().unwrap();
@@ -375,9 +375,12 @@ fn in_the_background_an_edit_redraws_only_what_it_changes() {
         e.iter()
             .any(|e| matches!(e, Event::Lexicon { revision: 3, .. }))
     });
-    let Event::Lexicon { diags, .. } = third.last().unwrap() else {
+    let Event::Lexicon { problems, .. } = third.last().unwrap() else {
         unreachable!()
     };
-    assert!(!diags.is_empty(), "the lexicon's own error is told");
+    assert!(
+        !problems.errors.is_empty(),
+        "the lexicon's own error is told, as an error"
+    );
     drop(bg);
 }

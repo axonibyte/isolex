@@ -1,8 +1,9 @@
 # isolex studio's desktop shell and interface (studio/), on GitHub, where
 # the push mirror lands. The forge's CI is one FreeBSD jail with Rust and
 # no Node, and Tauri does not build there, so the studio is checked here:
-# the interface (svelte-check, vitest, the Vite build) and the shell (fmt,
-# clippy, its tests and a build against the built interface), on Linux.
+# the interface (svelte-check, vitest, the Vite build, Playwright with axe)
+# and the shell (fmt, clippy, its tests and a build against the built
+# interface), on Linux.
 # The studio's core (studio-core/) is pure Rust in the compiler's
 # workspace, and the forge's CI tests it.
 name: studio
@@ -50,6 +51,12 @@ jobs:
 
       - name: the interface, built for the shell to serve
         run: npm run build
+
+      - name: Chromium, for the interface's browser tests
+        run: npx playwright install --with-deps chromium
+
+      - name: the interface in a browser, with axe
+        run: npm run e2e
 
       - name: the shell, formatted
         run: cargo fmt --manifest-path src-tauri/Cargo.toml --check

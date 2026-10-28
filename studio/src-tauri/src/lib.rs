@@ -6,7 +6,7 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use isolex_studio_core::session::{Answer, Ask, Notice, Session, Sink};
+use isolex_studio_core::session::{Answer, Ask, Notice, Session, Sink, Source};
 use isolex_studio_core::About;
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -68,6 +68,12 @@ fn view(
     with(&open, |s| s.view(editing, icon, visible))
 }
 
+/// A file's text now, for the Source tab.
+#[tauri::command]
+fn source(open: State<Open>, file: String) -> Result<Option<Source>, String> {
+    with(&open, |s| s.source(&file))
+}
+
 #[tauri::command]
 fn ask(open: State<Open>, ask: Ask, label: String) -> Result<Answer, String> {
     with(&open, |s| s.ask(&ask, &label))
@@ -112,6 +118,7 @@ fn reload(open: State<Open>) -> Result<(), String> {
 /// the folder is looked at for outside changes every second.
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(Open::default())
         .setup(|app| {
             let handle = app.handle().clone();
@@ -132,6 +139,7 @@ pub fn run() {
             about,
             open,
             view,
+            source,
             ask,
             choose,
             begin_gesture,
