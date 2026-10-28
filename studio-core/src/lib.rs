@@ -11,6 +11,7 @@
 
 use serde::Serialize;
 
+pub mod compile;
 pub mod edit;
 pub mod library;
 pub mod refactor;
