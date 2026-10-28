@@ -119,6 +119,7 @@ pub fn parse_lexicon(files: &[(String, String)]) -> ParseOutcome {
                 for node in doc.nodes() {
                     parse_top(&mut ctx, node, &mut lexicon);
                 }
+                map_sources(&ctx, &doc, &mut lexicon.sources);
             }
             // the reader stops at the first syntax error, and says what it is
             Err(e) => ctx.diag(e.offset, format!("KDL syntax error: {}", e.message)),
@@ -126,6 +127,37 @@ pub fn parse_lexicon(files: &[(String, String)]) -> ParseOutcome {
         diags.append(&mut ctx.diags);
     }
     ParseOutcome { lexicon, diags }
+}
+
+/// Every node of a file into `map`, without recursion (#28): a lexicon
+/// may nest its blocks to any depth.
+fn map_sources(ctx: &FileCtx, doc: &kdl::Document, map: &mut SourceMap) {
+    let mut todo: Vec<kdl::NodeRef> = doc.nodes().collect();
+    while let Some(node) = todo.pop() {
+        let mut args = Vec::new();
+        let mut props = Vec::new();
+        for e in node.entries() {
+            let at = ctx.span(e.value_span());
+            match e.name() {
+                Some(key) => props.push((key.value().to_string(), at)),
+                None => args.push(at),
+            }
+        }
+        let kids: Vec<kdl::NodeRef> = node
+            .children()
+            .map(|c| c.nodes().collect())
+            .unwrap_or_default();
+        map.insert(NodeSource {
+            span: ctx.span(node.span()),
+            name: node.name().value().to_string(),
+            name_span: ctx.span(node.name().span()),
+            args,
+            props,
+            body: node.body().map(|b| ctx.span(b)),
+            children: kids.iter().map(|k| ctx.span(k.span())).collect(),
+        });
+        todo.extend(kids);
+    }
 }
 
 const TOP_NODES: &[&str] = &["lexicon", "base", "icon", "fragment", "axis", "font"];

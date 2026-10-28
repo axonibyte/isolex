@@ -775,4 +775,58 @@ pub struct Lexicon {
     pub files: Vec<String>,
     pub config: Option<LexiconConfig>,
     pub defs: Vec<Definition>,
+    /// Where each node's pieces are written, for tools that edit the
+    /// source; left out of the goldens.
+    #[serde(skip)]
+    pub sources: SourceMap,
+}
+
+/// The pieces of one node of the source, by the span every construct of
+/// the AST carries for the node it was read from: definitions, parts,
+/// params, geometry, and the nodes in their bodies (`extends`,
+/// `describe`, …), which have no construct of their own.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct SourceMap(BTreeMap<(usize, usize), NodeSource>);
+
+impl SourceMap {
+    /// The node whose span this is.
+    pub fn get(&self, span: Span) -> Option<&NodeSource> {
+        self.0
+            .get(&(span.file, span.start))
+            .filter(|n| n.span == span)
+    }
+    pub fn insert(&mut self, source: NodeSource) {
+        self.0.insert((source.span.file, source.span.start), source);
+    }
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+    pub fn iter(&self) -> impl Iterator<Item = &NodeSource> {
+        self.0.values()
+    }
+}
+
+/// Where a node's name, arguments, properties and children are written.
+/// Each value's span is its literal alone, without a key or a type
+/// annotation, so replacing those bytes changes that value and nothing
+/// else.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NodeSource {
+    /// The whole node, as the AST has it.
+    pub span: Span,
+    pub name: String,
+    pub name_span: Span,
+    /// Its arguments, in the order they are written.
+    pub args: Vec<Span>,
+    /// Its properties, in the order they are written; a key given twice
+    /// is listed twice.
+    pub props: Vec<(String, Span)>,
+    /// Inside the braces of its children block: from just after `{` to
+    /// `}`, where a child is inserted.
+    pub body: Option<Span>,
+    /// Its children's spans, in order.
+    pub children: Vec<Span>,
 }

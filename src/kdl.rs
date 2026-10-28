@@ -207,6 +207,9 @@ struct Node {
     entries: Vec<Entry>,
     children: Option<Vec<usize>>,
     span: Span,
+    /// Between the braces of its children block, which is where children
+    /// go: from just after `{` to `}`.
+    body: Option<Span>,
 }
 
 /// A parsed document: every node, and which are at the top level.
@@ -270,6 +273,11 @@ impl<'a> NodeRef<'a> {
     }
     pub fn span(&self) -> Span {
         self.node().span
+    }
+    /// The inside of its children block, between the braces, when it has
+    /// one (a slashdashed block is not one).
+    pub fn body(&self) -> Option<Span> {
+        self.node().body
     }
 }
 
@@ -1048,9 +1056,10 @@ impl<'s> Parser<'s> {
                         return Ok(self.doc);
                     }
                     Some('}') => {
-                        if level.open.is_none() {
+                        let Some(brace) = level.open else {
                             return error(self.i, "a } closes no block");
-                        }
+                        };
+                        let close = self.i;
                         self.i += 1;
                         let closed = levels.pop().expect("an open block");
                         let mut owner = closed.owner.expect("a block belongs to a node");
@@ -1059,6 +1068,9 @@ impl<'s> Parser<'s> {
                             owner.real_block = true;
                             if !owner.discard {
                                 owner.end = self.i;
+                            }
+                            if let Some(idx) = owner.node {
+                                self.doc.nodes[idx].body = Some(span(brace + 1, close));
                             }
                         }
                         open = Some(owner);
@@ -1094,6 +1106,7 @@ impl<'s> Parser<'s> {
                         entries: Vec::new(),
                         children: None,
                         span: span(node_start, self.i),
+                        body: None,
                     });
                     match levels
                         .last()
