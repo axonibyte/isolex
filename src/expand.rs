@@ -6,6 +6,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use serde::Serialize;
 
@@ -558,6 +559,11 @@ struct Ctx<'a> {
     in_glyph: u32,
     /// A limit was passed: expansion of this icon stops everywhere.
     exhausted: bool,
+    /// Set from elsewhere when what is being expanded is no longer
+    /// wanted; looked at between parts and repeat iterations.
+    cancel: Option<&'a AtomicBool>,
+    /// It was set: expansion stopped, and nothing it made is to be used.
+    cancelled: bool,
     /// Each font in each style text has been set in, or None for one
     /// that could not be, once reported.
     fonts: BTreeMap<(String, Vec<String>), Option<Rc<FontInst<'a>>>>,
@@ -573,6 +579,16 @@ struct Ctx<'a> {
 type SharedFonts<'a> = BTreeMap<(String, Vec<String>, Option<u64>, Option<u64>), Rc<FontInst<'a>>>;
 
 impl<'a> Ctx<'a> {
+    /// Whether to stop because the expansion was cancelled; once it was,
+    /// nothing more is expanded.
+    fn stop(&mut self) -> bool {
+        if !self.cancelled && self.cancel.is_some_and(|c| c.load(Ordering::Relaxed)) {
+            self.cancelled = true;
+            self.exhausted = true;
+        }
+        self.cancelled
+    }
+
     fn diag(&mut self, span: Span, message: impl Into<String>) {
         self.diags.push(SpanDiag {
             span,
@@ -627,7 +643,7 @@ impl<'a> Ctx<'a> {
 }
 
 pub fn expand(resolved: &Resolved) -> (Vec<ExpandedIcon>, Vec<SpanDiag>) {
-    let (icons, diags, _, _) = expand_with(resolved, None, SharedFonts::new());
+    let (icons, diags, _, _) = expand_with(resolved, None, SharedFonts::new(), None);
     (icons, diags)
 }
 
@@ -641,21 +657,54 @@ pub fn expand_only(
     expand_many(resolved, std::slice::from_ref(only))
         .pop()
         .expect("one result for one request")
+        .map_err(|refused| refused.to_string())
 }
 
 /// One request's expansion: the icon and those it badges, with what
-/// expanding them said; or why the lexicon cannot answer it.
-pub type Expansion = Result<(Vec<ExpandedIcon>, Vec<SpanDiag>), String>;
+/// expanding them said; or why it has none.
+pub type Expansion = Result<(Vec<ExpandedIcon>, Vec<SpanDiag>), Refused>;
+
+/// Why a request has no expansion.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Refused {
+    /// The lexicon cannot answer it: an icon it does not emit, or a param
+    /// the icon does not have or of another type.
+    Request(String),
+    /// It was cancelled before it was done.
+    Cancelled,
+}
+
+impl std::fmt::Display for Refused {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Refused::Request(why) => f.write_str(why),
+            Refused::Cancelled => f.write_str("cancelled"),
+        }
+    }
+}
 
 /// Several icons, each as [`expand_only`] gives it, sharing the fonts
 /// their text is set in rather than building each again for each.
 pub fn expand_many(resolved: &Resolved, requests: &[Only]) -> Vec<Expansion> {
+    expand_many_until(resolved, requests, None)
+}
+
+/// [`expand_many`], stopping once `cancel` is set: the request being
+/// expanded then, and every one after it, is [`Refused::Cancelled`].
+pub fn expand_many_until(
+    resolved: &Resolved,
+    requests: &[Only],
+    cancel: Option<&AtomicBool>,
+) -> Vec<Expansion> {
     let mut shared = SharedFonts::new();
     requests
         .iter()
         .map(|only| {
+            if cancel.is_some_and(|c| c.load(Ordering::Relaxed)) {
+                return Err(Refused::Cancelled);
+            }
             let (icons, diags, refused, fonts) =
-                expand_with(resolved, Some(only), std::mem::take(&mut shared));
+                expand_with(resolved, Some(only), std::mem::take(&mut shared), cancel);
             shared = fonts;
             match refused {
                 Some(refused) => Err(refused),
@@ -717,6 +766,8 @@ fn new_ctx(resolved: &Resolved) -> Ctx<'_> {
         exhausted: false,
         fonts: BTreeMap::new(),
         shared: SharedFonts::new(),
+        cancel: None,
+        cancelled: false,
     }
 }
 
@@ -725,14 +776,16 @@ fn expand_with<'a>(
     resolved: &'a Resolved,
     only: Option<&Only>,
     shared: SharedFonts<'a>,
+    cancel: Option<&'a AtomicBool>,
 ) -> (
     Vec<ExpandedIcon>,
     Vec<SpanDiag>,
-    Option<String>,
+    Option<Refused>,
     SharedFonts<'a>,
 ) {
     let mut ctx = new_ctx(resolved);
     ctx.shared = shared;
+    ctx.cancel = cancel;
     let mut out = Vec::new();
     // with one icon asked for, every emitted icon, to choose from
     let mut candidates: Vec<(ResolvedDef, String)> = Vec::new();
@@ -812,10 +865,10 @@ fn expand_with<'a>(
             only.icon,
             suggest(&only.icon, candidates.iter().map(|(_, n)| n.as_str()))
         );
-        return (out, ctx.diags, Some(refused), ctx.shared);
+        return (out, ctx.diags, Some(Refused::Request(refused)), ctx.shared);
     };
     if let Some(refused) = refuse_host_params(&candidates[at].0, &only.icon, &only.params) {
-        return (out, ctx.diags, Some(refused), ctx.shared);
+        return (out, ctx.diags, Some(Refused::Request(refused)), ctx.shared);
     }
     let (def, name) = &candidates[at];
     if let Some(exp) = expand_one(&mut ctx, def, name.clone(), Some(&only.params)) {
@@ -840,6 +893,9 @@ fn expand_with<'a>(
                 out.push(exp);
             }
         }
+    }
+    if ctx.cancelled {
+        return (Vec::new(), Vec::new(), Some(Refused::Cancelled), ctx.shared);
     }
     (out, ctx.diags, None, ctx.shared)
 }
@@ -1002,6 +1058,9 @@ fn expand_one(
     let mut origins = Vec::new();
     let env: Env = Rc::new(env);
     for (pname, nodes) in &def.parts {
+        if ctx.stop() {
+            return None;
+        }
         let trail = Trail::of_part(pname);
         run(
             ctx,
@@ -2376,7 +2435,7 @@ fn run<'a: 'n, 'n>(
                 trail,
                 span,
             } => {
-                if i >= n || !ctx.spend(LimitKind::Repeats, span) {
+                if i >= n || ctx.stop() || !ctx.spend(LimitKind::Repeats, span) {
                     continue;
                 }
                 let inner = trail.through(SiteKind::Repeat, span, Some(i));

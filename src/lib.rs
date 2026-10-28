@@ -17,6 +17,7 @@ pub mod resolve;
 pub mod text;
 
 use std::collections::BTreeMap;
+use std::sync::atomic::AtomicBool;
 
 use ast::Span;
 pub use expand::{HostValue, Only};
@@ -26,6 +27,7 @@ use resolve::SpanDiag;
 
 /// What compiling a lexicon came to: the IR, the errors that fail it and
 /// the warnings that don't (SPEC §8).
+#[derive(Debug, Clone)]
 pub struct Compilation {
     /// The IR as far as projection got; only to be used when `errors` is
     /// empty.
@@ -164,14 +166,9 @@ pub fn compile_one(
         icon: icon.to_string(),
         params: params.clone(),
     };
-    let (lexicon, mut each) = compile_many(files, std::slice::from_ref(&only));
-    if !lexicon.errors.is_empty() {
-        return Ok(lexicon);
-    }
-    let mut c = each.pop().expect("one result for one request")?;
-    c.warnings = lexicon.warnings;
-    c.palette = lexicon.palette;
-    Ok(c)
+    Prepared::new(files)
+        .icon(&only, &AtomicBool::new(false))
+        .map_err(|refused| refused.to_string())
 }
 
 /// Compiles several icons of a lexicon, each with params a host sets on
@@ -191,54 +188,121 @@ pub fn compile_many(
     files: &[(String, String)],
     requests: &[expand::Only],
 ) -> (Compilation, Vec<Result<Compilation, String>>) {
-    let outcome = parse_lexicon(files);
-    let mut errors: Vec<Diag> = outcome.diags.clone();
-    let resolved = resolve::resolve(&outcome.lexicon);
-    errors.extend(resolved.diags.iter().map(|d| locate(files, d)));
-    let warnings = resolved.warnings.iter().map(|w| locate(files, w)).collect();
-    let definitions = outcome.lexicon.defs.len();
-    let empty = || IrDocument {
-        ir_version: ir::IR_VERSION,
-        icons: Vec::new(),
-    };
-    let lexicon = Compilation {
-        doc: empty(),
-        definitions,
-        errors,
-        warnings,
-        palette: palette_of(&outcome.lexicon),
-        provenance: Vec::new(),
-    };
-    if !lexicon.errors.is_empty() {
-        return (lexicon, Vec::new());
-    }
-    let vocabulary = project::Vocabulary::of(outcome.lexicon.config.as_ref());
-    let results = expand::expand_many(&resolved, requests)
+    let prepared = Prepared::new(files);
+    let results = prepared
+        .icons(requests, &AtomicBool::new(false))
         .into_iter()
-        .zip(requests)
-        .map(|(expanded, only)| {
-            let (expanded, ediags) = expanded?;
-            let mut errors: Vec<Diag> = ediags.iter().map(|d| locate(files, d)).collect();
-            let (mut doc, mut provenance, pdiags) = project::project_traced(&expanded, &vocabulary);
-            errors.extend(pdiags.iter().map(|d| locate(files, d)));
-            // the icon asked for, and none it badges
-            let keep: Vec<bool> = doc.icons.iter().map(|i| i.name == only.icon).collect();
-            let mut keeping = keep.iter();
-            doc.icons.retain(|_| *keeping.next().expect("one each"));
-            let mut keeping = keep.iter();
-            provenance.retain(|_| *keeping.next().expect("one each"));
-            written_in(&outcome.lexicon, &mut provenance);
-            Ok(Compilation {
-                doc,
-                definitions,
-                errors,
-                warnings: Vec::new(),
-                palette: None,
-                provenance,
-            })
-        })
+        .map(|r| r.map_err(|refused| refused.to_string()))
         .collect();
-    (lexicon, results)
+    (prepared.outcome, results)
+}
+
+/// A lexicon parsed and resolved once, to compile icons of as often as
+/// asked, from as many threads at once as want to: what an editor keeps
+/// while nothing changes, and throws away when something does. Each
+/// compile can be cancelled, from another thread, once it is no longer
+/// wanted.
+pub struct Prepared {
+    files: Vec<(String, String)>,
+    lexicon: ast::Lexicon,
+    resolved: resolve::Resolved,
+    vocabulary: project::Vocabulary,
+    outcome: Compilation,
+}
+
+pub use expand::Refused;
+
+impl Prepared {
+    /// Parses and resolves `files`, in the order given (SPEC §1).
+    pub fn new(files: &[(String, String)]) -> Prepared {
+        let outcome = parse_lexicon(files);
+        let mut errors: Vec<Diag> = outcome.diags.clone();
+        let resolved = resolve::resolve(&outcome.lexicon);
+        errors.extend(resolved.diags.iter().map(|d| locate(files, d)));
+        let warnings = resolved.warnings.iter().map(|w| locate(files, w)).collect();
+        let lexicon = Compilation {
+            doc: IrDocument {
+                ir_version: ir::IR_VERSION,
+                icons: Vec::new(),
+            },
+            definitions: outcome.lexicon.defs.len(),
+            errors,
+            warnings,
+            palette: palette_of(&outcome.lexicon),
+            provenance: Vec::new(),
+        };
+        Prepared {
+            files: files.to_vec(),
+            vocabulary: project::Vocabulary::of(outcome.lexicon.config.as_ref()),
+            lexicon: outcome.lexicon,
+            resolved,
+            outcome: lexicon,
+        }
+    }
+
+    /// The lexicon's own outcome: its definitions, its parse and resolve
+    /// errors, its warnings and its palette, and no icons.
+    pub fn outcome(&self) -> &Compilation {
+        &self.outcome
+    }
+
+    /// One icon, as [`compile_one`] gives it, or [`Refused::Cancelled`]
+    /// once `cancel` is set: it is looked at between parts and between
+    /// iterations of a repeat, so a compile that is no longer wanted stops
+    /// soon after.
+    pub fn icon(&self, request: &Only, cancel: &AtomicBool) -> Result<Compilation, Refused> {
+        if !self.outcome.errors.is_empty() {
+            return Ok(self.outcome.clone());
+        }
+        let mut c = self
+            .icons(std::slice::from_ref(request), cancel)
+            .pop()
+            .expect("one result for one request")?;
+        c.warnings = self.outcome.warnings.clone();
+        c.palette = self.outcome.palette.clone();
+        Ok(c)
+    }
+
+    /// Several icons, as [`compile_many`] gives them after the lexicon's
+    /// own outcome, sharing the fonts their text is set in; none when the
+    /// lexicon has errors. Once `cancel` is set, the icon being compiled
+    /// and every one after it is [`Refused::Cancelled`].
+    pub fn icons(
+        &self,
+        requests: &[Only],
+        cancel: &AtomicBool,
+    ) -> Vec<Result<Compilation, Refused>> {
+        if !self.outcome.errors.is_empty() {
+            return Vec::new();
+        }
+        let files = &self.files;
+        expand::expand_many_until(&self.resolved, requests, Some(cancel))
+            .into_iter()
+            .zip(requests)
+            .map(|(expanded, only)| {
+                let (expanded, ediags) = expanded?;
+                let mut errors: Vec<Diag> = ediags.iter().map(|d| locate(files, d)).collect();
+                let (mut doc, mut provenance, pdiags) =
+                    project::project_traced(&expanded, &self.vocabulary);
+                errors.extend(pdiags.iter().map(|d| locate(files, d)));
+                // the icon asked for, and none it badges
+                let keep: Vec<bool> = doc.icons.iter().map(|i| i.name == only.icon).collect();
+                let mut keeping = keep.iter();
+                doc.icons.retain(|_| *keeping.next().expect("one each"));
+                let mut keeping = keep.iter();
+                provenance.retain(|_| *keeping.next().expect("one each"));
+                written_in(&self.lexicon, &mut provenance);
+                Ok(Compilation {
+                    doc,
+                    definitions: self.outcome.definitions,
+                    errors,
+                    warnings: Vec::new(),
+                    palette: None,
+                    provenance,
+                })
+            })
+            .collect()
+    }
 }
 
 /// A font in some of its styles, as a tool that converts fonts sees it:
