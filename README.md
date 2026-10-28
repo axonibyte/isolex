@@ -66,7 +66,11 @@ publishes it as `isolex-<version>.wasm`.
 A host with a file system reads a lexicon's folder with
 `isolex::library::load`, as the command line does: every `.ilx` file
 under it, in SPEC §1's order, which `isolex::library::order` gives for
-paths it has already.
+paths it has already. A compilation also says where each shape of
+the IR came from (`Compilation::provenance`): the node that drew it, the
+definition and part it is written in, the inserts, repeats, badges and
+texts it came through, and the map from that node's own coordinates to
+the viewBox, so an editor can find the source of a shape on screen.
 
 ## Documentation
 

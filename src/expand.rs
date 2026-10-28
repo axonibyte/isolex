@@ -280,6 +280,12 @@ impl Turn {
         (px + self.t[0], py + self.t[1])
     }
 
+    /// As a matrix: (x, y) goes to (m0·x + m2·y + m4, m1·x + m3·y + m5).
+    pub fn matrix(&self) -> [f64; 6] {
+        let a = self.a.map(f64::from);
+        [a[0], a[2], a[1], a[3], self.t[0], self.t[1]]
+    }
+
     /// Width and depth trade places.
     pub fn swaps(&self) -> bool {
         self.a[0] == 0
@@ -310,6 +316,122 @@ impl Turn {
             _ => None,
         }
     }
+}
+
+/// What a shape was drawn through on its way from its node: an `insert`
+/// of a fragment, an iteration of a `repeat`, a `badge` of another icon,
+/// or a glyph of a `text`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SiteKind {
+    Insert,
+    Repeat,
+    Badge,
+    Text,
+}
+
+/// One place a shape was drawn through: the node, and which iteration of
+/// a repeat or which glyph of a text.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Site {
+    pub kind: SiteKind,
+    pub span: Span,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub index: Option<usize>,
+}
+
+/// The part a node is drawn in, and the sites on the way to it; shared by
+/// everything expanded along the same way. The sites are a chain, each
+/// trail holding only the last and sharing the rest, so a node nested to
+/// any depth (#28) costs one link more than its parent, not a copy.
+#[derive(Clone, Default)]
+pub struct Trail {
+    /// None for a glyph's shapes, which no part holds.
+    pub part: Option<Rc<str>>,
+    last: Option<Rc<Link>>,
+}
+
+/// A site, and the one before it.
+struct Link {
+    site: Site,
+    up: Option<Rc<Link>>,
+}
+
+impl Drop for Link {
+    /// Unlinked a link at a time, since a chain may be as long as a
+    /// lexicon nests deep, and a recursive drop would overflow the stack.
+    fn drop(&mut self) {
+        let mut up = self.up.take();
+        while let Some(link) = up {
+            match Rc::try_unwrap(link) {
+                Ok(mut link) => up = link.up.take(),
+                Err(_) => break,
+            }
+        }
+    }
+}
+
+impl Trail {
+    pub fn of_part(part: &str) -> Rc<Trail> {
+        Rc::new(Trail {
+            part: Some(part.into()),
+            last: None,
+        })
+    }
+
+    /// The sites, outermost first.
+    pub fn sites(&self) -> Vec<Site> {
+        let mut out = Vec::new();
+        let mut at = self.last.as_deref();
+        while let Some(link) = at {
+            out.push(link.site.clone());
+            at = link.up.as_deref();
+        }
+        out.reverse();
+        out
+    }
+
+    /// This, one site further in.
+    pub fn through(&self, kind: SiteKind, span: Span, index: Option<usize>) -> Rc<Trail> {
+        Rc::new(Trail {
+            part: self.part.clone(),
+            last: Some(Rc::new(Link {
+                site: Site { kind, span, index },
+                up: self.last.clone(),
+            })),
+        })
+    }
+
+    /// The same sites, in another part (or none).
+    pub fn in_part(&self, part: Option<Rc<str>>) -> Rc<Trail> {
+        Rc::new(Trail {
+            part,
+            last: self.last.clone(),
+        })
+    }
+}
+
+impl PartialEq for Trail {
+    fn eq(&self, other: &Trail) -> bool {
+        self.part == other.part && self.sites() == other.sites()
+    }
+}
+
+impl std::fmt::Debug for Trail {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Trail")
+            .field("part", &self.part)
+            .field("sites", &self.sites())
+            .finish()
+    }
+}
+
+/// Where an expanded shape came from: its part and sites, and the turn its
+/// node's tile coordinates were drawn through.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Origin {
+    pub trail: Rc<Trail>,
+    pub turn: Turn,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -379,6 +501,9 @@ pub enum Shape {
         y: f64,
         z: f64,
         children: Vec<Shape2>,
+        /// Where each child came from, beside it.
+        #[serde(skip)]
+        origins: Vec<Origin>,
         span: Span,
     },
     Badge {
@@ -405,6 +530,9 @@ pub struct ExpandedIcon {
     pub describe: Vec<String>,
     pub grants: Vec<(String, String)>,
     pub shapes: Vec<Shape>,
+    /// Where each shape came from, beside it.
+    #[serde(skip)]
+    pub origins: Vec<Origin>,
     /// What its transforms do past its frame, unless one says.
     pub transform_bounds: Option<Bounds>,
     /// The icon's definition, for errors projection finds.
@@ -841,9 +969,19 @@ fn expand_one(
     }
 
     let mut shapes = Vec::new();
+    let mut origins = Vec::new();
     let env: Env = Rc::new(env);
-    for (_pname, nodes) in &def.parts {
-        run(ctx, nodes, env.clone(), turn, &mut shapes);
+    for (pname, nodes) in &def.parts {
+        let trail = Trail::of_part(pname);
+        run(
+            ctx,
+            nodes,
+            env.clone(),
+            turn,
+            trail,
+            &mut shapes,
+            &mut origins,
+        );
     }
 
     Some(ExpandedIcon {
@@ -858,6 +996,7 @@ fn expand_one(
             .map(|g| (g.token.clone(), g.reason.clone()))
             .collect(),
         shapes,
+        origins,
         transform_bounds: def.transform_bounds,
         span: def.span,
     })
@@ -2024,6 +2163,7 @@ fn open_insert<'a: 'n, 'n>(
         fragment: &frag.name,
         parts: &frag.body.parts,
         env: Rc::new(frag_env),
+        span,
     })
 }
 
@@ -2060,6 +2200,7 @@ enum Open<'n> {
         fragment: &'n str,
         parts: &'n [PartDecl],
         env: Env,
+        span: Span,
     },
     Transform {
         tf: EvTransform,
@@ -2080,19 +2221,37 @@ enum Open<'n> {
     },
 }
 
-/// Where what is expanded goes: shapes in 3-D or 2-D, or a polygon's
-/// points.
+/// Where what is expanded goes: shapes in 3-D or 2-D, each with where it
+/// came from, or a polygon's points.
 enum Sink {
-    Shapes(Vec<Shape>),
-    Shapes2(Vec<Shape2>),
+    Shapes(Vec<Shape>, Vec<Origin>),
+    Shapes2(Vec<Shape2>, Vec<Origin>),
     Pts3(Vec<[f64; 3]>),
     Pts2(Vec<[EvNum; 2]>),
+}
+
+impl Sink {
+    /// Each shape added since the last call came from `origin`.
+    fn came_from(&mut self, trail: &Rc<Trail>, turn: Turn) {
+        let (len, origins) = match self {
+            Sink::Shapes(shapes, origins) => (shapes.len(), origins),
+            Sink::Shapes2(shapes, origins) => (shapes.len(), origins),
+            _ => return,
+        };
+        origins.resize(
+            len,
+            Origin {
+                trail: trail.clone(),
+                turn,
+            },
+        );
+    }
 }
 
 /// A step of expansion.
 enum Task<'n> {
     /// Expand a node, turned, into whatever sink is on top.
-    Node(&'n Node, Env, Turn),
+    Node(&'n Node, Env, Turn, Rc<Trail>),
     /// Iteration `i` of a repeat's `n`.
     Repeat {
         var: &'n str,
@@ -2101,20 +2260,25 @@ enum Task<'n> {
         n: usize,
         env: Env,
         turn: Turn,
+        trail: Rc<Trail>,
         span: Span,
     },
     /// The children of an `at` are done: its shape, from the sink on top.
     CloseAt {
         at: [f64; 3],
+        trail: Rc<Trail>,
         span: Span,
     },
     /// A polygon's points are done: its shape, from the sink on top.
     ClosePoly3d {
         style: EvStyle,
+        turn: Turn,
+        trail: Rc<Trail>,
         span: Span,
     },
     ClosePoly2d {
         style: EvStyle,
+        trail: Rc<Trail>,
         span: Span,
     },
     /// A fragment's parts are done.
@@ -2123,13 +2287,17 @@ enum Task<'n> {
     /// steps in the chain.
     CloseTransform {
         steps: u64,
+        trail: Rc<Trail>,
     },
     /// A glyph of a text begins at its place on the baseline, or ends.
     StartGlyph {
         pen: f64,
+        trail: Rc<Trail>,
         span: Span,
     },
-    CloseGlyph,
+    CloseGlyph {
+        trail: Rc<Trail>,
+    },
 }
 
 /// Expand `nodes` into `out` with an explicit stack of tasks and sinks
@@ -2137,33 +2305,35 @@ enum Task<'n> {
 /// inserts may nest to any depth (#28). Tasks run in the order a
 /// recursive expansion visited nodes, so diagnostics, limits and the
 /// shapes themselves come out in the same order; a node with children is
-/// counted toward the shape-limit after them, as it was.
+/// counted toward the shape-limit after them, as it was. Each shape's
+/// origin, from `trail` on, goes into `origins` beside it.
 fn run<'a: 'n, 'n>(
     ctx: &mut Ctx<'a>,
     nodes: &'n [Node],
     env: Env,
     turn: Turn,
+    trail: Rc<Trail>,
     out: &mut Vec<Shape>,
+    origins: &mut Vec<Origin>,
 ) {
-    let mut tasks: Vec<Task<'n>> = nodes
-        .iter()
-        .rev()
-        .map(|node| Task::Node(node, env.clone(), turn))
-        .collect();
-    let mut sinks = vec![Sink::Shapes(std::mem::take(out))];
+    let mut tasks: Vec<Task<'n>> = Vec::new();
+    push_nodes(&mut tasks, nodes, env, turn, &trail);
+    let mut sinks = vec![Sink::Shapes(std::mem::take(out), std::mem::take(origins))];
     while let Some(task) = tasks.pop() {
         match task {
-            Task::Node(node, env, turn) => {
-                let opened = match sinks.last_mut().expect("a sink") {
+            Task::Node(node, env, turn, trail) => {
+                let sink = sinks.last_mut().expect("a sink");
+                let opened = match sink {
                     // once a limit is passed, no more shapes are expanded
-                    Sink::Shapes(_) | Sink::Shapes2(_) if ctx.exhausted => None,
-                    Sink::Shapes(out) => expand_node_3d(ctx, node, &env, &turn, out),
-                    Sink::Shapes2(out) => expand_node_2d(ctx, node, &env, &turn, out),
+                    Sink::Shapes(..) | Sink::Shapes2(..) if ctx.exhausted => None,
+                    Sink::Shapes(out, _) => expand_node_3d(ctx, node, &env, &turn, out),
+                    Sink::Shapes2(out, _) => expand_node_2d(ctx, node, &env, &turn, out),
                     Sink::Pts3(out) => collect_pt3(ctx, node, &env, &turn, out),
                     Sink::Pts2(out) => collect_pt2(ctx, node, &env, out),
                 };
+                sink.came_from(&trail, turn);
                 if let Some(open) = opened {
-                    open_children(ctx, open, env, turn, &mut tasks, &mut sinks);
+                    open_children(ctx, open, env, turn, trail, &mut tasks, &mut sinks);
                 }
             }
             Task::Repeat {
@@ -2173,11 +2343,13 @@ fn run<'a: 'n, 'n>(
                 n,
                 env,
                 turn,
+                trail,
                 span,
             } => {
                 if i >= n || !ctx.spend(LimitKind::Repeats, span) {
                     continue;
                 }
+                let inner = trail.through(SiteKind::Repeat, span, Some(i));
                 tasks.push(Task::Repeat {
                     var,
                     children,
@@ -2185,105 +2357,138 @@ fn run<'a: 'n, 'n>(
                     n,
                     env: env.clone(),
                     turn,
+                    trail,
                     span,
                 });
                 let mut env2 = (*env).clone();
                 env2.insert(var.to_string(), i as f64);
-                push_nodes(&mut tasks, children, Rc::new(env2), turn);
+                push_nodes(&mut tasks, children, Rc::new(env2), turn, &inner);
             }
-            Task::CloseAt { at, span } => {
-                let Some(Sink::Shapes2(children)) = sinks.pop() else {
+            Task::CloseAt { at, trail, span } => {
+                let Some(Sink::Shapes2(children, child_origins)) = sinks.pop() else {
                     unreachable!("an at's children are 2-D shapes");
                 };
                 if ctx.spend(LimitKind::Shapes, span) {
-                    let Some(Sink::Shapes(out)) = sinks.last_mut() else {
+                    let Some(sink @ Sink::Shapes(..)) = sinks.last_mut() else {
                         unreachable!("an at stands among 3-D shapes");
                     };
-                    out.push(Shape::At {
-                        x: at[0],
-                        y: at[1],
-                        z: at[2],
-                        children,
-                        span,
-                    });
+                    if let Sink::Shapes(out, _) = sink {
+                        out.push(Shape::At {
+                            x: at[0],
+                            y: at[1],
+                            z: at[2],
+                            children,
+                            origins: child_origins,
+                            span,
+                        });
+                    }
+                    sink.came_from(&trail, Turn::NONE);
                 }
             }
-            Task::ClosePoly3d { style, span } => {
+            Task::ClosePoly3d {
+                style,
+                turn,
+                trail,
+                span,
+            } => {
                 let Some(Sink::Pts3(pts)) = sinks.pop() else {
                     unreachable!("a poly3d's children are 3-D points");
                 };
                 if ctx.spend(LimitKind::Shapes, span) {
-                    let Some(Sink::Shapes(out)) = sinks.last_mut() else {
+                    let Some(sink @ Sink::Shapes(..)) = sinks.last_mut() else {
                         unreachable!("a poly3d stands among 3-D shapes");
                     };
-                    out.push(Shape::Poly3d { pts, style, span });
+                    if let Sink::Shapes(out, _) = sink {
+                        out.push(Shape::Poly3d { pts, style, span });
+                    }
+                    sink.came_from(&trail, turn);
                 }
             }
-            Task::ClosePoly2d { style, span } => {
+            Task::ClosePoly2d { style, trail, span } => {
                 let Some(Sink::Pts2(pts)) = sinks.pop() else {
                     unreachable!("a poly's children are 2-D points");
                 };
                 if ctx.spend(LimitKind::Shapes, span) {
-                    let Some(Sink::Shapes2(out)) = sinks.last_mut() else {
+                    let Some(sink @ Sink::Shapes2(..)) = sinks.last_mut() else {
                         unreachable!("a poly stands among 2-D shapes");
                     };
-                    out.push(Shape2::Poly { pts, style, span });
+                    if let Sink::Shapes2(out, _) = sink {
+                        out.push(Shape2::Poly { pts, style, span });
+                    }
+                    sink.came_from(&trail, Turn::NONE);
                 }
             }
             Task::PopInsert => {
                 ctx.insert_stack.pop();
             }
-            Task::CloseTransform { steps } => {
+            Task::CloseTransform { steps, trail } => {
                 ctx.chain -= steps;
-                match sinks.last_mut() {
-                    Some(Sink::Shapes(out)) => out.push(Shape::TransformEnd),
-                    Some(Sink::Shapes2(out)) => out.push(Shape2::TransformEnd),
+                let sink = sinks.last_mut();
+                match sink {
+                    Some(Sink::Shapes(out, _)) => out.push(Shape::TransformEnd),
+                    Some(Sink::Shapes2(out, _)) => out.push(Shape2::TransformEnd),
                     _ => unreachable!("a transform stands among shapes"),
                 }
+                if let Some(sink) = sinks.last_mut() {
+                    sink.came_from(&trail, Turn::NONE);
+                }
             }
-            Task::StartGlyph { pen, span } => {
+            Task::StartGlyph { pen, trail, span } => {
                 ctx.in_glyph += 1;
                 ctx.chain += 1;
                 // counted, and marked even past the shape-limit, so every
                 // end has its start
                 ctx.spend(LimitKind::Shapes, span);
-                let Some(Sink::Shapes2(out)) = sinks.last_mut() else {
+                let Some(sink @ Sink::Shapes2(..)) = sinks.last_mut() else {
                     unreachable!("a glyph is drawn among 2-D shapes");
                 };
-                out.push(Shape2::TransformStart {
-                    tf: EvTransform {
-                        origin: [EvNum::Lit(0.0), EvNum::Lit(0.0)],
-                        steps: vec![EvStep::Translate([EvNum::Lit(pen), EvNum::Lit(0.0)])],
-                        onto: None,
-                        bounds: None,
-                        strokes: None,
-                        paint: None,
-                    },
-                    span,
-                });
+                if let Sink::Shapes2(out, _) = sink {
+                    out.push(Shape2::TransformStart {
+                        tf: EvTransform {
+                            origin: [EvNum::Lit(0.0), EvNum::Lit(0.0)],
+                            steps: vec![EvStep::Translate([EvNum::Lit(pen), EvNum::Lit(0.0)])],
+                            onto: None,
+                            bounds: None,
+                            strokes: None,
+                            paint: None,
+                        },
+                        span,
+                    });
+                }
+                sink.came_from(&trail, Turn::NONE);
             }
-            Task::CloseGlyph => {
+            Task::CloseGlyph { trail } => {
                 ctx.in_glyph -= 1;
                 ctx.chain -= 1;
-                let Some(Sink::Shapes2(out)) = sinks.last_mut() else {
+                let Some(sink @ Sink::Shapes2(..)) = sinks.last_mut() else {
                     unreachable!("a glyph is drawn among 2-D shapes");
                 };
-                out.push(Shape2::TransformEnd);
+                if let Sink::Shapes2(out, _) = sink {
+                    out.push(Shape2::TransformEnd);
+                }
+                sink.came_from(&trail, Turn::NONE);
             }
         }
     }
-    let Some(Sink::Shapes(shapes)) = sinks.pop() else {
+    let Some(Sink::Shapes(shapes, from)) = sinks.pop() else {
         unreachable!("the icon's own shapes, at the bottom");
     };
     *out = shapes;
+    *origins = from;
 }
 
-fn push_nodes<'n>(tasks: &mut Vec<Task<'n>>, nodes: &'n [Node], env: Env, turn: Turn) {
+fn push_nodes<'n>(
+    tasks: &mut Vec<Task<'n>>,
+    nodes: &'n [Node],
+    env: Env,
+    turn: Turn,
+    trail: &Rc<Trail>,
+) {
     tasks.extend(
         nodes
             .iter()
             .rev()
-            .map(|node| Task::Node(node, env.clone(), turn)),
+            .map(|node| Task::Node(node, env.clone(), turn, trail.clone())),
     );
 }
 
@@ -2314,14 +2519,19 @@ fn open_children<'n>(
     open: Open<'n>,
     env: Env,
     turn: Turn,
+    trail: Rc<Trail>,
     tasks: &mut Vec<Task<'n>>,
     sinks: &mut Vec<Sink>,
 ) {
     match open {
         Open::At { at, children, span } => {
-            tasks.push(Task::CloseAt { at, span });
-            sinks.push(Sink::Shapes2(Vec::new()));
-            push_nodes(tasks, children, env, turn);
+            tasks.push(Task::CloseAt {
+                at,
+                trail: trail.clone(),
+                span,
+            });
+            sinks.push(Sink::Shapes2(Vec::new(), Vec::new()));
+            push_nodes(tasks, children, env, turn, &trail);
         }
         Open::Transform { tf, children, span } => {
             let steps = chain_length(&tf);
@@ -2330,19 +2540,26 @@ fn open_children<'n>(
                 return;
             }
             ctx.chain += steps;
-            match sinks.last_mut() {
-                Some(Sink::Shapes(out)) => out.push(Shape::TransformStart { tf, span }),
-                Some(Sink::Shapes2(out)) => out.push(Shape2::TransformStart { tf, span }),
+            let sink = sinks.last_mut();
+            match sink {
+                Some(Sink::Shapes(out, _)) => out.push(Shape::TransformStart { tf, span }),
+                Some(Sink::Shapes2(out, _)) => out.push(Shape2::TransformStart { tf, span }),
                 _ => {
                     ctx.chain -= steps;
                     ctx.diag(span, "only pt and repeat belong inside a polygon");
                     return;
                 }
             }
-            tasks.push(Task::CloseTransform { steps });
-            push_nodes(tasks, children, env, turn);
+            if let Some(sink) = sinks.last_mut() {
+                sink.came_from(&trail, turn);
+            }
+            tasks.push(Task::CloseTransform {
+                steps,
+                trail: trail.clone(),
+            });
+            push_nodes(tasks, children, env, turn, &trail);
         }
-        Open::Turn { turn, children } => push_nodes(tasks, children, env, turn),
+        Open::Turn { turn, children } => push_nodes(tasks, children, env, turn, &trail),
         Open::Text {
             outer,
             glyphs,
@@ -2353,17 +2570,31 @@ fn open_children<'n>(
             if !within_chain(ctx, ctx.chain + 3, span) || !ctx.spend(LimitKind::Shapes, span) {
                 return;
             }
-            let Some(Sink::Shapes2(out)) = sinks.last_mut() else {
+            let Some(sink @ Sink::Shapes2(..)) = sinks.last_mut() else {
                 ctx.diag(span, "only pt and repeat belong inside a polygon");
                 return;
             };
-            out.push(Shape2::TransformStart { tf: outer, span });
+            if let Sink::Shapes2(out, _) = sink {
+                out.push(Shape2::TransformStart { tf: outer, span });
+            }
+            sink.came_from(&trail, Turn::NONE);
             ctx.chain += 2;
-            tasks.push(Task::CloseTransform { steps: 2 });
-            for (pen, nodes) in glyphs.into_iter().rev() {
-                tasks.push(Task::CloseGlyph);
-                push_nodes(tasks, nodes, font_env.clone(), Turn::NONE);
-                tasks.push(Task::StartGlyph { pen, span });
+            tasks.push(Task::CloseTransform {
+                steps: 2,
+                trail: trail.clone(),
+            });
+            for (i, (pen, nodes)) in glyphs.into_iter().enumerate().rev() {
+                // a glyph's shapes are written in its font, as no part
+                let glyph = trail.through(SiteKind::Text, span, Some(i)).in_part(None);
+                tasks.push(Task::CloseGlyph {
+                    trail: trail.clone(),
+                });
+                push_nodes(tasks, nodes, font_env.clone(), Turn::NONE, &glyph);
+                tasks.push(Task::StartGlyph {
+                    pen,
+                    trail: trail.clone(),
+                    span,
+                });
             }
         }
         Open::Poly3d {
@@ -2371,18 +2602,27 @@ fn open_children<'n>(
             children,
             span,
         } => {
-            tasks.push(Task::ClosePoly3d { style, span });
+            tasks.push(Task::ClosePoly3d {
+                style,
+                turn,
+                trail: trail.clone(),
+                span,
+            });
             sinks.push(Sink::Pts3(Vec::new()));
-            push_nodes(tasks, children, env, turn);
+            push_nodes(tasks, children, env, turn, &trail);
         }
         Open::Poly2d {
             style,
             children,
             span,
         } => {
-            tasks.push(Task::ClosePoly2d { style, span });
+            tasks.push(Task::ClosePoly2d {
+                style,
+                trail: trail.clone(),
+                span,
+            });
             sinks.push(Sink::Pts2(Vec::new()));
-            push_nodes(tasks, children, env, turn);
+            push_nodes(tasks, children, env, turn, &trail);
         }
         Open::Repeat {
             var,
@@ -2396,19 +2636,23 @@ fn open_children<'n>(
             n,
             env,
             turn,
+            trail,
             span,
         }),
         Open::Insert {
             fragment,
             parts,
             env,
+            span,
         } => {
             // on the stack exactly while its parts expand, in the
             // dimension the insert stands in
             ctx.insert_stack.push(fragment.to_string());
             tasks.push(Task::PopInsert);
+            let inside = trail.through(SiteKind::Insert, span, None);
             for part in parts.iter().rev() {
-                push_nodes(tasks, &part.nodes, env.clone(), turn);
+                let part_trail = inside.in_part(Some(part.name.as_str().into()));
+                push_nodes(tasks, &part.nodes, env.clone(), turn, &part_trail);
             }
         }
     }
@@ -2761,12 +3005,15 @@ pub fn expand_font(
             span: def.span,
         };
         let mut shapes = Vec::new();
+        let mut origins = Vec::new();
         run(
             ctx,
             std::slice::from_ref(&at),
             inst.env.clone(),
             Turn::NONE,
+            Rc::new(Trail::default()),
             &mut shapes,
+            &mut origins,
         );
         ExpandedIcon {
             name: name.to_string(),
@@ -2776,6 +3023,7 @@ pub fn expand_font(
             describe: Vec::new(),
             grants: Vec::new(),
             shapes,
+            origins,
             // a glyph has no frame of its own
             transform_bounds: Some(Bounds::Grow),
             span: def.span,

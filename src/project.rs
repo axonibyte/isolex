@@ -4,10 +4,16 @@
 //! reproduce them to the byte.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::rc::Rc;
+
+use serde::Serialize;
 
 use crate::affine::{self, Extent, Mat, IDENTITY};
 use crate::ast::{Bounds, Face, LexiconConfig, MirrorAxis, Span, Strokes};
-use crate::expand::{EvNum, EvStep, EvStyle, EvTransform, ExpandedIcon, PathEv, Shape, Shape2};
+use crate::expand::{
+    EvNum, EvStep, EvStyle, EvTransform, ExpandedIcon, Origin, PathEv, Shape, Shape2, Site,
+    SiteKind, Trail, Turn,
+};
 use crate::expr;
 use crate::ir::{format_number as fmt, IrDocument, IrIcon, IrShape, IR_VERSION};
 use crate::resolve::{suggest, SpanDiag};
@@ -84,6 +90,103 @@ struct Occ {
     /// A text's fill, for the glyphs drawn in it.
     paint: Option<String>,
     span: Span,
+    /// The way to its node.
+    trail: Rc<Trail>,
+}
+
+/// A map from a node's own coordinates to a frame: (x, y, z) goes to
+/// (m0·x + m2·y + m4·z + m6, m1·x + m3·y + m5·z + m7). A 3-D node's own
+/// coordinates are its tile coordinates as written, before any turn; a
+/// 2-D node's are its anchor's plane, with z unused.
+pub type Map3 = [f64; 8];
+
+/// The plane as it is: a 2-D node's own coordinates are output units.
+const PLANE: Map3 = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0];
+
+/// `l`, then `m`.
+fn then(m: &Mat, l: &Map3) -> Map3 {
+    [
+        m[0] * l[0] + m[2] * l[1],
+        m[1] * l[0] + m[3] * l[1],
+        m[0] * l[2] + m[2] * l[3],
+        m[1] * l[2] + m[3] * l[3],
+        m[0] * l[4] + m[2] * l[5],
+        m[1] * l[4] + m[3] * l[5],
+        m[0] * l[6] + m[2] * l[7] + m[4],
+        m[1] * l[6] + m[3] * l[7] + m[5],
+    ]
+}
+
+/// Tile coordinates through `turn`, then the projection.
+fn tile_map(turn: &Turn) -> Map3 {
+    let t = turn.matrix();
+    // x' = t0·x + t2·y + t4 and y' = t1·x + t3·y + t5, then p(x', y', z)
+    let (c, s) = (COS * S, SIN * S);
+    [
+        c * (t[0] - t[1]),
+        s * (t[0] + t[1]),
+        c * (t[2] - t[3]),
+        s * (t[2] + t[3]),
+        0.0,
+        -S,
+        c * (t[4] - t[5]),
+        s * (t[4] + t[5]),
+    ]
+}
+
+/// Where one shape of the IR came from: the node that draws it, the
+/// definition and part it is written in, the sites it was drawn through
+/// (outermost first), and the map from that node's own coordinates to the
+/// icon's viewBox, so a point on screen maps back to the numbers written.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ShapeSource {
+    pub span: Span,
+    pub definition: String,
+    pub part: Option<String>,
+    pub sites: Vec<Site>,
+    pub map: Map3,
+}
+
+/// Where a shape came from while its icon is projected: `local` maps its
+/// node's coordinates to the frame the shape is drawn in.
+#[derive(Debug, Clone)]
+struct Src {
+    span: Span,
+    trail: Rc<Trail>,
+    local: Map3,
+}
+
+impl Src {
+    fn of(span: Span, origin: &Origin, local: Map3) -> Src {
+        Src {
+            span,
+            trail: origin.trail.clone(),
+            local,
+        }
+    }
+
+    /// This, reached through a badge whose own way is `badge`.
+    fn badged(&self, badge: &Rc<Trail>, at: Span) -> Src {
+        let mut trail = badge.through(SiteKind::Badge, at, None);
+        for site in self.trail.sites() {
+            trail = trail.through(site.kind, site.span, site.index);
+        }
+        Src {
+            span: self.span,
+            trail: trail.in_part(self.trail.part.clone()),
+            local: self.local,
+        }
+    }
+
+    fn source(&self, map: Map3) -> ShapeSource {
+        ShapeSource {
+            span: self.span,
+            definition: String::new(),
+            part: self.trail.part.as_deref().map(str::to_string),
+            sites: self.trail.sites(),
+            map,
+        }
+    }
 }
 
 /// What a lexicon block declares the lexicon paints with (SPEC §2): its
@@ -217,6 +320,7 @@ struct PendingBadge {
     corner: String,
     scale: f64,
     span: Span,
+    trail: Rc<Trail>,
 }
 
 /// An icon projected, before its badges are filled and its transforms
@@ -224,6 +328,8 @@ struct PendingBadge {
 /// transform it stands in.
 struct Draft {
     ir: IrIcon,
+    /// Where each shape came from, beside it.
+    sources: Vec<Src>,
     tags: Vec<Option<usize>>,
     occs: Vec<Occ>,
     badges: Vec<PendingBadge>,
@@ -231,6 +337,18 @@ struct Draft {
 }
 
 pub fn project(icons: &[ExpandedIcon], vocabulary: &Vocabulary) -> (IrDocument, Vec<SpanDiag>) {
+    let (doc, _, diags) = project_traced(icons, vocabulary);
+    (doc, diags)
+}
+
+/// [`project`], and where each shape of each icon came from: one
+/// [`ShapeSource`] per shape, a group's before its own, in the order the
+/// IR lists them. Each one's `definition` is left for the caller, which
+/// has the lexicon, to fill in.
+pub fn project_traced(
+    icons: &[ExpandedIcon],
+    vocabulary: &Vocabulary,
+) -> (IrDocument, Vec<Vec<ShapeSource>>, Vec<SpanDiag>) {
     let mut ctx = Ctx {
         diags: Vec::new(),
         vocabulary,
@@ -255,17 +373,17 @@ pub fn project(icons: &[ExpandedIcon], vocabulary: &Vocabulary) -> (IrDocument, 
         .filter(|d| !d.badges.is_empty())
         .map(|d| d.ir.name.clone())
         .collect();
-    let mut finished: Vec<Option<IrIcon>> = vec![None; drafts.len()];
+    let mut finished: Vec<Option<Finished>> = vec![None; drafts.len()];
     let none = BTreeMap::new();
     for (i, draft) in drafts.iter().enumerate() {
         if draft.badges.is_empty() {
             finished[i] = Some(finish(&mut ctx, draft, &none, &badged));
         }
     }
-    let targets: BTreeMap<String, IrIcon> = finished
+    let targets: BTreeMap<String, Finished> = finished
         .iter()
         .flatten()
-        .map(|i| (i.name.clone(), i.clone()))
+        .map(|f| (f.0.name.clone(), f.clone()))
         .collect();
     for (i, draft) in drafts.iter().enumerate() {
         if !draft.badges.is_empty() {
@@ -273,17 +391,26 @@ pub fn project(icons: &[ExpandedIcon], vocabulary: &Vocabulary) -> (IrDocument, 
         }
     }
 
+    let (icons, sources): (Vec<IrIcon>, Vec<Vec<ShapeSource>>) = finished
+        .into_iter()
+        .map(|f| {
+            let (icon, sources) = f.expect("every icon finished");
+            let sources = sources.iter().map(|(s, map)| s.source(*map)).collect();
+            (icon, sources)
+        })
+        .unzip();
     (
         IrDocument {
             ir_version: IR_VERSION,
-            icons: finished
-                .into_iter()
-                .map(|i| i.expect("every icon finished"))
-                .collect(),
+            icons,
         },
+        sources,
         ctx.diags,
     )
 }
+
+/// An icon finished, with where each of its shapes came from.
+type Finished = (IrIcon, Vec<(Src, Map3)>);
 
 /// Finite inputs can still overflow once projected to output units, and
 /// JSON would write the result as null (SPEC §7).
@@ -366,6 +493,9 @@ fn first_non_finite(shapes: &[IrShape]) -> Option<f64> {
 /// stands in, and within that, a badge's map, the clip and fixed strokes
 /// its target's group gave it, if it came from one.
 struct Item {
+    /// Where the shape came from, and what a group of its run stands for.
+    src: Src,
+    group: Src,
     occ: Option<usize>,
     /// Which run within that transform: 0 for its own shapes, and one
     /// number for each badge, and each group of a badge's target.
@@ -495,9 +625,9 @@ fn describe_extent(e: &Extent) -> String {
 fn finish(
     ctx: &mut Ctx,
     draft: &Draft,
-    targets: &BTreeMap<String, IrIcon>,
+    targets: &BTreeMap<String, Finished>,
     badged: &BTreeSet<String>,
-) -> IrIcon {
+) -> Finished {
     let icon = draft.ir.name.clone();
     ctx.icon = icon.clone();
     let frame = Extent::of_viewbox(draft.ir.viewbox);
@@ -509,7 +639,19 @@ fn finish(
     for (i, shape) in draft.ir.shapes.iter().enumerate() {
         let occ = draft.tags[i];
         let Some(badge) = badges.next_if(|b| b.at == i) else {
+            let src = draft.sources[i].clone();
+            // a group of a transform's run stands for the transform
+            let group = match occ {
+                Some(o) => Src {
+                    span: draft.occs[o].span,
+                    trail: draft.occs[o].trail.clone(),
+                    local: PLANE,
+                },
+                None => src.clone(),
+            };
             items.push(Item {
+                src,
+                group,
                 occ,
                 run: 0,
                 pre: IDENTITY,
@@ -520,7 +662,7 @@ fn finish(
             continue;
         };
         let name = &badge.target;
-        let Some(target) = targets.get(name) else {
+        let Some((target, target_sources)) = targets.get(name) else {
             let message = if badged.contains(name) {
                 format!("badge target '{name}' itself contains a badge — one level only")
             } else {
@@ -555,7 +697,16 @@ fn finish(
             continue;
         }
         runs += 1;
+        // the badge itself, and the target's shapes, each reached through it
+        let badge_src = Src {
+            span: badge.span,
+            trail: badge.trail.clone(),
+            local: PLANE,
+        };
+        let mut from = target_sources.iter();
         for t in &target.shapes {
+            let (t_src, _) = from.next().expect("a source for each shape");
+            let t_src = t_src.badged(&badge.trail, badge.span);
             match t {
                 IrShape::Group {
                     matrix,
@@ -568,7 +719,10 @@ fn finish(
                         .map(|c| c.iter().map(|p| affine::apply(&b, *p)).collect());
                     runs += 1;
                     for inner in shapes {
+                        let (inner_src, _) = from.next().expect("a source for each shape");
                         items.push(Item {
+                            src: inner_src.badged(&badge.trail, badge.span),
+                            group: t_src.clone(),
                             occ,
                             run: runs,
                             pre: affine::mul(&b, matrix),
@@ -579,6 +733,8 @@ fn finish(
                     }
                 }
                 plain => items.push(Item {
+                    src: t_src,
+                    group: badge_src.clone(),
                     occ,
                     run: runs,
                     pre: b,
@@ -671,6 +827,7 @@ fn finish(
     // grouped, one group for each run: the shapes of one transform, or of
     // one badge, or one group of its target, side by side
     let mut shapes: Vec<IrShape> = Vec::new();
+    let mut sources: Vec<(Src, Map3)> = Vec::new();
     let mut run_key: Option<(Option<usize>, usize)> = None;
     for item in items {
         let outer = item.occ.map(|o| full_matrix(&occs, o)).unwrap_or(IDENTITY);
@@ -700,16 +857,22 @@ fn finish(
         }
         if affine::is_identity(&matrix) && clip.is_none() && !fixed {
             shapes.push(item.shape);
+            let local = item.src.local;
+            sources.push((item.src, local));
             run_key = None;
             continue;
         }
         let key = (item.occ, item.run);
+        let map = then(&matrix, &item.src.local);
         if run_key == Some(key) {
             if let Some(IrShape::Group { shapes: inner, .. }) = shapes.last_mut() {
                 inner.push(item.shape);
+                sources.push((item.src, map));
                 continue;
             }
         }
+        sources.push((item.group, then(&matrix, &PLANE)));
+        sources.push((item.src, map));
         shapes.push(IrShape::Group {
             matrix,
             clip,
@@ -719,11 +882,14 @@ fn finish(
         run_key = Some(key);
     }
 
-    IrIcon {
-        viewbox: grown.viewbox(),
-        shapes,
-        ..draft.ir.clone()
-    }
+    (
+        IrIcon {
+            viewbox: grown.viewbox(),
+            shapes,
+            ..draft.ir.clone()
+        },
+        sources,
+    )
 }
 
 fn project_icon(ctx: &mut Ctx, icon: &ExpandedIcon) -> Draft {
@@ -744,9 +910,10 @@ fn project_icon(ctx: &mut Ctx, icon: &ExpandedIcon) -> Draft {
         });
     }
     let mut shapes = Vec::new();
+    let mut sources = Vec::new();
     let mut badges = Vec::new();
     let no_anchor = BTreeMap::new();
-    for shape in &icon.shapes {
+    for (shape, origin) in icon.shapes.iter().zip(&icon.origins) {
         match shape {
             Shape::Badge {
                 icon: target,
@@ -760,6 +927,7 @@ fn project_icon(ctx: &mut Ctx, icon: &ExpandedIcon) -> Draft {
                     corner: corner.clone(),
                     scale: scale.unwrap_or(BADGE_SCALE),
                     span: *span,
+                    trail: origin.trail.clone(),
                 });
                 shapes.push(IrShape::Group {
                     matrix: IDENTITY,
@@ -767,11 +935,12 @@ fn project_icon(ctx: &mut Ctx, icon: &ExpandedIcon) -> Draft {
                     strokes: None,
                     shapes: Vec::new(),
                 });
+                sources.push(Src::of(*span, origin, PLANE));
                 ctx.tag_up_to(shapes.len());
                 continue;
             }
             Shape::TransformStart { tf, span } => {
-                open_transform(ctx, tf, &no_anchor, *span);
+                open_transform(ctx, tf, &no_anchor, *span, &origin.trail);
                 continue;
             }
             Shape::TransformEnd => {
@@ -781,7 +950,7 @@ fn project_icon(ctx: &mut Ctx, icon: &ExpandedIcon) -> Draft {
             _ => {}
         }
         let before = shapes.len();
-        project_shape(ctx, shape, &mut shapes);
+        project_shape(ctx, shape, origin, &mut shapes, &mut sources);
         ctx.tag_up_to(shapes.len());
         if let Some(v) = first_non_finite(&shapes[before..]) {
             ctx.diags.push(SpanDiag {
@@ -806,6 +975,7 @@ fn project_icon(ctx: &mut Ctx, icon: &ExpandedIcon) -> Draft {
     };
     Draft {
         ir,
+        sources,
         tags: std::mem::take(&mut ctx.tags),
         occs: std::mem::take(&mut ctx.occs),
         badges,
@@ -814,7 +984,13 @@ fn project_icon(ctx: &mut Ctx, icon: &ExpandedIcon) -> Draft {
 }
 
 /// A transform begins: its map, inside whatever transform is open.
-fn open_transform(ctx: &mut Ctx, tf: &EvTransform, env: &BTreeMap<String, f64>, span: Span) {
+fn open_transform(
+    ctx: &mut Ctx,
+    tf: &EvTransform,
+    env: &BTreeMap<String, f64>,
+    span: Span,
+    trail: &Rc<Trail>,
+) {
     let local = matrix_of(ctx, tf, env, span);
     ctx.occs.push(Occ {
         parent: ctx.open.last().copied(),
@@ -823,6 +999,7 @@ fn open_transform(ctx: &mut Ctx, tf: &EvTransform, env: &BTreeMap<String, f64>, 
         strokes: tf.strokes,
         paint: tf.paint.clone(),
         span,
+        trail: trail.clone(),
     });
     ctx.open.push(ctx.occs.len() - 1);
 }
@@ -947,7 +1124,24 @@ fn polygon(
     }
 }
 
-fn project_shape(ctx: &mut Ctx, shape: &Shape, out: &mut Vec<IrShape>) {
+/// A shape's IR into `out`, and where each came from into `sources`.
+fn project_shape(
+    ctx: &mut Ctx,
+    shape: &Shape,
+    origin: &Origin,
+    out: &mut Vec<IrShape>,
+    sources: &mut Vec<Src>,
+) {
+    let before = out.len();
+    project_3d(ctx, shape, out, sources);
+    // an anchor's children say where each of theirs came from
+    if !matches!(shape, Shape::At { .. }) {
+        let src = Src::of(shape_span(shape), origin, tile_map(&origin.turn));
+        sources.resize(sources.len() + out.len() - before, src);
+    }
+}
+
+fn project_3d(ctx: &mut Ctx, shape: &Shape, out: &mut Vec<IrShape>, sources: &mut Vec<Src>) {
     match shape {
         Shape::Box3 {
             x,
@@ -1124,17 +1318,22 @@ fn project_shape(ctx: &mut Ctx, shape: &Shape, out: &mut Vec<IrShape>) {
             });
         }
         Shape::At {
-            x, y, z, children, ..
+            x,
+            y,
+            z,
+            children,
+            origins,
+            ..
         } => {
             let (sx, sy) = p(*x, *y, *z);
             let mut env = BTreeMap::new();
             env.insert("x".to_string(), sx);
             env.insert("y".to_string(), sy);
-            for child in children {
+            for (child, origin) in children.iter().zip(origins) {
                 match child {
                     Shape2::TransformStart { tf, span } => {
                         ctx.tag_up_to(out.len());
-                        open_transform(ctx, tf, &env, *span);
+                        open_transform(ctx, tf, &env, *span, &origin.trail);
                         continue;
                     }
                     Shape2::TransformEnd => {
@@ -1146,6 +1345,8 @@ fn project_shape(ctx: &mut Ctx, shape: &Shape, out: &mut Vec<IrShape>) {
                 }
                 let before = out.len();
                 project_2d(ctx, child, &env, out);
+                let src = Src::of(shape2_span(child), origin, PLANE);
+                sources.resize(sources.len() + out.len() - before, src);
                 if let Some(paint) = text_paint(ctx) {
                     for shape in &mut out[before..] {
                         repaint(shape, &paint);

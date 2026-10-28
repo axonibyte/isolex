@@ -36,6 +36,29 @@ pub struct Compilation {
     pub warnings: Vec<Diag>,
     /// The lexicon's `palette` block, by token, when it has one (SPEC §2).
     pub palette: Option<BTreeMap<String, Colors>>,
+    /// Where each shape came from, for each icon of `doc` in order: one
+    /// entry per shape, a group's before its own, as the IR lists them.
+    /// Outside the IR, which it never changes.
+    pub provenance: Vec<Vec<ShapeSource>>,
+}
+
+pub use project::{Map3, ShapeSource};
+
+/// Each source's definition: the one its node is written in.
+fn written_in(lexicon: &ast::Lexicon, provenance: &mut [Vec<ShapeSource>]) {
+    for source in provenance.iter_mut().flatten() {
+        let at = source.span;
+        source.definition = lexicon
+            .defs
+            .iter()
+            .find(|d| {
+                d.span.file == at.file
+                    && d.span.start <= at.start
+                    && at.start + at.len <= d.span.start + d.span.len
+            })
+            .map(|d| d.name.clone())
+            .unwrap_or_default();
+    }
 }
 
 /// A token's colors in the `palette` block: on a light ground and on a
@@ -96,10 +119,11 @@ pub fn compile(files: &[(String, String)]) -> Compilation {
     errors.extend(resolved.diags.iter().map(|d| locate(files, d)));
     let (expanded, ediags) = expand::expand(&resolved);
     errors.extend(ediags.iter().map(|d| locate(files, d)));
-    let (doc, pdiags) = project::project(
+    let (doc, mut provenance, pdiags) = project::project_traced(
         &expanded,
         &project::Vocabulary::of(outcome.lexicon.config.as_ref()),
     );
+    written_in(&outcome.lexicon, &mut provenance);
     errors.extend(pdiags.iter().map(|d| locate(files, d)));
     let warnings = resolved
         .warnings
@@ -113,6 +137,7 @@ pub fn compile(files: &[(String, String)]) -> Compilation {
         errors,
         warnings,
         palette: palette_of(&outcome.lexicon),
+        provenance,
     }
 }
 
@@ -180,6 +205,7 @@ pub fn compile_many(
         errors,
         warnings,
         palette: palette_of(&outcome.lexicon),
+        provenance: Vec::new(),
     };
     if !lexicon.errors.is_empty() {
         return (lexicon, Vec::new());
@@ -191,15 +217,22 @@ pub fn compile_many(
         .map(|(expanded, only)| {
             let (expanded, ediags) = expanded?;
             let mut errors: Vec<Diag> = ediags.iter().map(|d| locate(files, d)).collect();
-            let (mut doc, pdiags) = project::project(&expanded, &vocabulary);
+            let (mut doc, mut provenance, pdiags) = project::project_traced(&expanded, &vocabulary);
             errors.extend(pdiags.iter().map(|d| locate(files, d)));
-            doc.icons.retain(|i| i.name == only.icon);
+            // the icon asked for, and none it badges
+            let keep: Vec<bool> = doc.icons.iter().map(|i| i.name == only.icon).collect();
+            let mut keeping = keep.iter();
+            doc.icons.retain(|_| *keeping.next().expect("one each"));
+            let mut keeping = keep.iter();
+            provenance.retain(|_| *keeping.next().expect("one each"));
+            written_in(&outcome.lexicon, &mut provenance);
             Ok(Compilation {
                 doc,
                 definitions,
                 errors,
                 warnings: Vec::new(),
                 palette: None,
+                provenance,
             })
         })
         .collect();
