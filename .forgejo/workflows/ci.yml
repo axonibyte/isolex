@@ -106,6 +106,18 @@ jobs:
           [ "$rc" = 0 ] || { echo "cargo fetch rc=$rc"; tail -10 ../fetch.log; exit 1; }
           echo "crates in the lockfile: $(grep -c '^\[\[package\]\]' Cargo.lock)"
 
+      - name: the workspace never resolves the studio's desktop crates
+        run: |
+          set -o pipefail
+          cd src
+          # studio/ (the Tauri shell) is a workspace of its own and is built
+          # on GitHub; this jail has no webkit or gtk, so a lockfile naming
+          # them would only fail later and less clearly
+          grep -q '^exclude = \["studio"\]' Cargo.toml || { echo "studio/ is not excluded from the workspace"; exit 1; }
+          found=$(grep -E '^name = "(tauri|tauri-build|tauri-runtime|tauri-runtime-wry|wry|tao|webkit2gtk|webkit2gtk-sys|gtk|gtk-sys|gdk|javascriptcore-rs|soup3)"$' Cargo.lock || true)
+          [ -z "$found" ] || { echo "the workspace's lockfile names desktop crates:"; echo "$found"; exit 1; }
+          echo "no tauri, wry, tao, webkit or gtk crate among $(grep -c '^\[\[package\]\]' Cargo.lock) in Cargo.lock; studio-core is a member: $(grep -c '^name = "isolex-studio-core"$' Cargo.lock)"
+
       - name: formatting
         run: |
           set -o pipefail

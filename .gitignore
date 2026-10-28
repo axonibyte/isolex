@@ -1,2 +1,6 @@
 /target
 /out
+/studio/src-tauri/target
+node_modules/
+/studio/dist
+/studio/src-tauri/gen

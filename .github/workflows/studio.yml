@@ -1,0 +1,64 @@
+# isolex studio's desktop shell and interface (studio/), on GitHub, where
+# the push mirror lands. The forge's CI is one FreeBSD jail with Rust and
+# no Node, and Tauri does not build there, so the studio is checked here:
+# the interface (svelte-check, vitest, the Vite build) and the shell (fmt,
+# clippy, its tests and a build against the built interface), on Linux.
+# The studio's core (studio-core/) is pure Rust in the compiler's
+# workspace, and the forge's CI tests it.
+name: studio
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  studio:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: studio
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: the webview's libraries, as Tauri 2 needs them on Linux
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev patchelf
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: studio/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # stable
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: the interface's dependencies, from the lockfile
+        run: npm ci
+
+      - name: svelte-check
+        run: npm run check
+
+      - name: vitest
+        run: npm test
+
+      - name: the interface, built for the shell to serve
+        run: npm run build
+
+      - name: the shell, formatted
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+
+      - name: the shell, clippy with warnings as errors
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
+
+      - name: the shell's tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml --locked
+
+      - name: the shell, built
+        run: cargo build --manifest-path src-tauri/Cargo.toml --locked

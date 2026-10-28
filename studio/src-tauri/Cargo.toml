@@ -1,0 +1,32 @@
+[package]
+name = "isolex-studio"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.97"
+description = "isolex studio: draw and manage an isolex library, with a live tree of its icons."
+authors = ["Axonibyte Innovations, LLC"]
+license = "Apache-2.0"
+repository = "https://github.com/axonibyte/isolex"
+publish = false
+
+# A workspace of its own, with its own lockfile: the compiler's workspace
+# (and the FreeBSD jail that builds it) never resolves the webview's
+# crates. It is built and tested on GitHub Actions (.github/workflows/studio.yml).
+[workspace]
+
+[lib]
+name = "isolex_studio"
+crate-type = ["rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7", features = [] }
+
+[dependencies]
+isolex-studio-core = { path = "../../studio-core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2.12", features = [] }
+
+[profile.release]
+lto = true
+strip = true
