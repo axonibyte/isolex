@@ -55,6 +55,11 @@ fn fixtures_are_checked_out_with_lf() {
         ),
         ("text.ilx", include_str!("fixtures/text.ilx")),
         ("palette.ilx", include_str!("fixtures/palette.ilx")),
+        ("graph.ilx", include_str!("fixtures/graph.ilx")),
+        (
+            "graph.golden.json",
+            include_str!("fixtures/graph.golden.json"),
+        ),
         (
             "palette.svg.golden",
             include_str!("fixtures/palette.svg.golden"),

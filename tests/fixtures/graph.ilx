@@ -1,0 +1,89 @@
+// Every kind of reference a library makes (#57), for the graph's golden:
+// extends as a node and as a property, inserts from an icon and from a
+// fragment, a badge from an axis variant, axes from an icon and from a
+// font, and a text's font.
+
+lexicon {
+  tokens "ink" "outline" "body-top" "body-left" "body-right" "accent"
+}
+
+base "chassis" {
+  category "net"
+  footprint 2 1 0.5
+  part "body" {
+    box 0 0 0 2 1 0.5
+  }
+}
+
+icon "server" {
+  extends "chassis"
+  axes "state"
+  part "lights" {
+    insert "led-row" n=3
+  }
+}
+
+icon "switch" extends="chassis" {
+  part "ports" {
+    repeat 4 "i" {
+      insert "led-row" n=1
+    }
+  }
+  part "name" {
+    at 1 0.5 0.5 {
+      text 0 0 "SW" font="mono" size=4
+    }
+  }
+}
+
+fragment "led-row" {
+  param n 2
+  part "leds" {
+    repeat "n" "i" {
+      insert "led"
+    }
+  }
+}
+
+fragment "led" {
+  part "dot" {
+    facerect "front" 0.1 1 0.1 0.1 0.1 fill="accent"
+  }
+}
+
+icon "down" {
+  category "state"
+  canvas 24 24
+  part "x" {
+    at 0 0 0 {
+      circle 12 12 8 stroke="accent"
+    }
+  }
+}
+
+axis "state" {
+  variant "down" {
+    part "state-badge" {
+      badge "down" corner="ne"
+    }
+  }
+}
+
+font "mono" {
+  em 10
+  ascent 7
+  descent 3
+  kind "stroke"
+  axes "weight"
+  glyph "S" advance=5 {
+    path d="M4,7 H0 V3.5 H4 V0 H0"
+  }
+  glyph "W" advance=5 {
+    path d="M0,7 L1,0 L2,4 L3,0 L4,7"
+  }
+}
+
+axis "weight" {
+  variant "bold" {
+  }
+}

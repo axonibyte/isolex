@@ -70,7 +70,10 @@ paths it has already. A compilation also says where each shape of
 the IR came from (`Compilation::provenance`): the node that drew it, the
 definition and part it is written in, the inserts, repeats, badges and
 texts it came through, and the map from that node's own coordinates to
-the viewBox, so an editor can find the source of a shape on screen.
+the viewBox, so an editor can find the source of a shape on screen. And
+`isolex::graph` gives a library's definitions, with the icons each
+emits, and every reference from one to another (`extends`, `insert`,
+`badge`, `axes` and a text's font), each with where the name is written.
 
 ## Documentation
 

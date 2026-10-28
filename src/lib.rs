@@ -5,6 +5,7 @@ pub mod affine;
 pub mod ast;
 pub mod expand;
 pub mod expr;
+pub mod graph;
 pub mod ir;
 pub mod json;
 pub mod kdl;
@@ -42,6 +43,7 @@ pub struct Compilation {
     pub provenance: Vec<Vec<ShapeSource>>,
 }
 
+pub use graph::graph;
 pub use project::{Map3, ShapeSource};
 
 /// Each source's definition: the one its node is written in.
