@@ -92,6 +92,8 @@ makes it moot. `compile_one` and `compile_many` are built on it.
   example of each.
 - [docs/cookbook.md](docs/cookbook.md) — worked patterns from a real
   ~900-icon lexicon.
+- [docs/studio-interface.md](docs/studio-interface.md) — isolex studio's
+  interface, the specification its interface is built to.
 - [SPEC.md](SPEC.md) — the normative specification.
 
 Every example in the guides is compile-checked against the current
