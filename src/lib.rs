@@ -20,6 +20,9 @@ use std::collections::BTreeMap;
 
 use ast::Span;
 pub use expand::{HostValue, Only};
+
+/// This compiler's version, as its crate and its releases name it.
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 use ir::IrDocument;
 use parser::{parse_lexicon, Diag};
 use resolve::SpanDiag;

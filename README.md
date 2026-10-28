@@ -88,6 +88,8 @@ emits, and every reference from one to another (`extends`, `insert`,
   example of each.
 - [docs/cookbook.md](docs/cookbook.md) — worked patterns from a real
   ~900-icon lexicon.
+- [docs/studio.md](docs/studio.md) — isolex studio, the desktop app
+  to draw a library, and how to build it.
 - [docs/studio-interface.md](docs/studio-interface.md) — isolex studio's
   interface, the specification its interface is built to.
 - [SPEC.md](SPEC.md) — the normative specification.

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-54 -54 108 108" width="1024" height="1024">
+<title>studio</title>
+  <polygon points="-34.64,20.00 0.00,40.00 0.00,0.00 -34.64,-20.00" fill="#9db6ff" stroke="#1b1d22" stroke-width="1.20"/>
+  <polygon points="34.64,20.00 0.00,40.00 0.00,0.00 34.64,-20.00" fill="#5b8cff" stroke="#1b1d22" stroke-width="1.20"/>
+  <polygon points="0.00,-40.00 34.64,-20.00 0.00,0.00 -34.64,-20.00" fill="#e7e9ee" stroke="#1b1d22" stroke-width="1.20"/>
+  <polygon points="-27.71,16.00 -6.93,28.00 -6.93,23.20 -27.71,11.20" fill="#1b1d22" stroke="none"/>
+  <polygon points="-27.71,6.00 -13.86,14.00 -13.86,9.20 -27.71,1.20" fill="#1b1d22" stroke="none"/>
+</svg>

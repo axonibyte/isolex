@@ -1,0 +1,23 @@
+lexicon {
+  tokens "ink" "outline" "body-top" "body-left" "body-right" "accent"
+  stroke-widths 1.2 2.2
+}
+palette {
+  ink light="#1b1d22" dark="#1b1d22"
+  outline light="#1b1d22" dark="#1b1d22"
+  body-top light="#e7e9ee" dark="#e7e9ee"
+  body-left light="#9db6ff" dark="#9db6ff"
+  body-right light="#5b8cff" dark="#5b8cff"
+  accent light="#1b1d22" dark="#1b1d22"
+}
+icon "studio" {
+  category "app"
+  footprint 1 1 1
+  part "cube" {
+    box 0 0 0 1 1 1
+  }
+  part "mark" {
+    facerect "front" 0.2 1 0.2 0.6 0.12 fill="accent"
+    facerect "front" 0.2 1 0.45 0.4 0.12 fill="accent"
+  }
+}
