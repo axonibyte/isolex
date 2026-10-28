@@ -75,6 +75,96 @@ impl Value {
     }
 }
 
+/// A value written as KDL 2.0 that reads back as the same value: a float
+/// in the shortest decimal that does (always with a fraction or an
+/// exponent, so it stays a float), a string as a bare identifier where one
+/// is legal, as a raw string when it holds quotes or backslashes, and
+/// quoted with escapes otherwise.
+pub fn write_value(value: &Value) -> String {
+    match value {
+        Value::String(s) => write_string(s),
+        Value::Integer(n) => n.to_string(),
+        Value::Float(f) if f.is_nan() => "#nan".to_string(),
+        Value::Float(f) if *f == f64::INFINITY => "#inf".to_string(),
+        Value::Float(f) if *f == f64::NEG_INFINITY => "#-inf".to_string(),
+        Value::Float(f) => write_float(*f),
+        Value::Bool(true) => "#true".to_string(),
+        Value::Bool(false) => "#false".to_string(),
+        Value::Null => "#null".to_string(),
+    }
+}
+
+/// Rust prints the shortest digits that read back as the same `f64`, in
+/// plain or exponent form; the shorter of the two is kept.
+fn write_float(f: f64) -> String {
+    let plain = format!("{f}");
+    let plain = if plain.contains(['.', 'e']) {
+        plain
+    } else {
+        format!("{plain}.0")
+    };
+    let exp = format!("{f:e}");
+    if exp.len() < plain.len() {
+        exp
+    } else {
+        plain
+    }
+}
+
+fn write_string(s: &str) -> String {
+    if is_bare_identifier(s) {
+        return s.to_string();
+    }
+    let literal = |c: char| !is_newline(c) && !is_disallowed(c);
+    // one that starts with a quote is quoted instead, since #"" followed
+    // by a quote opens a multi-line raw string
+    if s.contains(['"', '\\']) && !s.starts_with('"') && s.chars().all(literal) {
+        // enough hashes that no `"` in the string closes it
+        let mut hashes = 1;
+        while s.contains(&format!("\"{}", "#".repeat(hashes))) {
+            hashes += 1;
+        }
+        let h = "#".repeat(hashes);
+        return format!("{h}\"{s}\"{h}");
+    }
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('"');
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            '\u{8}' => out.push_str("\\b"),
+            '\u{C}' => out.push_str("\\f"),
+            c if is_newline(c) || is_disallowed(c) => {
+                out.push_str(&format!("\\u{{{:x}}}", c as u32))
+            }
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
+/// Whether `s` can be written bare: read as [`Parser::identifier`] reads
+/// one, and not where an entry would read a number or a keyword instead.
+fn is_bare_identifier(s: &str) -> bool {
+    let mut chars = s.chars();
+    let (first, second, third) = (chars.next(), chars.next(), chars.next());
+    let Some(first) = first else {
+        return false;
+    };
+    let digit = |c: Option<char>| c.is_some_and(|c| c.is_ascii_digit());
+    let looks_like_number = first.is_ascii_digit()
+        || (matches!(first, '+' | '-') && (digit(second) || (second == Some('.') && digit(third))))
+        || (first == '.' && digit(second));
+    s.chars().all(is_identifier_char)
+        && !looks_like_number
+        && !matches!(s, "true" | "false" | "null" | "inf" | "-inf" | "nan")
+}
+
 /// An argument (no name) or a property.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Entry {
@@ -82,6 +172,7 @@ pub struct Entry {
     ty: Option<Ident>,
     value: Value,
     span: Span,
+    value_span: Span,
 }
 
 impl Entry {
@@ -96,6 +187,16 @@ impl Entry {
     }
     pub fn span(&self) -> Span {
         self.span
+    }
+    /// The value's literal alone, without a key or type annotation: the
+    /// bytes to replace to change the value and nothing else.
+    pub fn value_span(&self) -> Span {
+        self.value_span
+    }
+    /// The value's literal as written in `src`, the source this entry was
+    /// parsed from.
+    pub fn raw<'s>(&self, src: &'s str) -> &'s str {
+        &src[self.value_span.offset..self.value_span.offset + self.value_span.len]
     }
 }
 
@@ -842,12 +943,14 @@ impl<'s> Parser<'s> {
         }
     }
 
-    /// A value: a typed or untyped string, number or keyword.
-    fn value(&mut self) -> Result<(Option<Ident>, Value), Error> {
+    /// A value: a typed or untyped string, number or keyword, and the
+    /// span of its literal.
+    fn value(&mut self) -> Result<(Option<Ident>, Value, Span), Error> {
         let ty = self.type_annotation()?;
         if ty.is_some() {
             self.node_space()?;
         }
+        let start = self.i;
         let value = match self.peek() {
             Some('#') => self.keyword_or_raw()?,
             Some('"') => Value::String(self.quoted()?),
@@ -857,7 +960,7 @@ impl<'s> Parser<'s> {
             }
             _ => Value::String(self.identifier()?),
         };
-        Ok((ty, value))
+        Ok((ty, value, span(start, self.i)))
     }
 
     /// An entry: a property (`key=value`) or an argument.
@@ -878,12 +981,13 @@ impl<'s> Parser<'s> {
             if self.peek() == Some('=') {
                 self.i += 1;
                 self.node_space()?;
-                let (ty, value) = self.value()?;
+                let (ty, value, value_span) = self.value()?;
                 return Ok(Entry {
                     name: Some(key),
                     ty,
                     value,
                     span: span(start, self.i),
+                    value_span,
                 });
             }
             // an argument after all; what followed is the separator
@@ -893,14 +997,16 @@ impl<'s> Parser<'s> {
                 ty: None,
                 value: Value::String(key.value),
                 span: span(start, after_key),
+                value_span: span(start, after_key),
             });
         }
-        let (ty, value) = self.value()?;
+        let (ty, value, value_span) = self.value()?;
         Ok(Entry {
             name: None,
             ty,
             value,
             span: span(start, self.i),
+            value_span,
         })
     }
 
