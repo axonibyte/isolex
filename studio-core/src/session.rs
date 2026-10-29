@@ -14,7 +14,7 @@ use isolex::ir::IrIcon;
 use isolex::kdl::Value;
 use serde::{Deserialize, Serialize};
 
-use crate::compile::{Background, Diag, Drawing, Event, Isolex, Origin};
+use crate::compile::{Background, Diag, Drawing, Event, Inline, Isolex, Origin};
 use crate::edit::{self, Choice, Intent, NodeRef, Plan, Request, Slot};
 use crate::library::Library;
 use crate::outline::Outline;
@@ -227,7 +227,7 @@ pub struct Source {
 pub struct Session {
     lib: Library,
     sink: Arc<dyn Sink>,
-    background: Background,
+    compiling: Compiling,
     watcher: Option<PollingWatcher>,
     pending: BTreeMap<u64, Vec<Choice>>,
     next_choice: u64,
@@ -248,10 +248,31 @@ impl Session {
     pub fn with(lib: Library, watcher: Option<PollingWatcher>, sink: Arc<dyn Sink>) -> Session {
         let (background, events) = Background::start(Isolex, workers());
         forward(events, sink.clone());
+        Session::start(lib, watcher, sink, Compiling::Background(background))
+    }
+
+    /// A library kept in memory alone, compiled as it changes before each
+    /// call returns, for a host with no threads, clock or disk: the
+    /// studio's core in a browser. Saving there marks it saved.
+    pub fn in_memory(lib: Library, sink: Arc<dyn Sink>) -> Session {
+        Session::start(
+            lib,
+            None,
+            sink,
+            Compiling::Inline(Box::new(Inline::new(Isolex))),
+        )
+    }
+
+    fn start(
+        lib: Library,
+        watcher: Option<PollingWatcher>,
+        sink: Arc<dyn Sink>,
+        compiling: Compiling,
+    ) -> Session {
         let mut s = Session {
             lib,
             sink,
-            background,
+            compiling,
             watcher,
             pending: BTreeMap::new(),
             next_choice: 0,
@@ -282,7 +303,10 @@ impl Session {
     /// thumbnails on screen, which compile first.
     pub fn view(&mut self, editing: Option<String>, open: Option<String>, visible: Vec<String>) {
         self.editing = editing;
-        self.background.view(open, visible);
+        match &mut self.compiling {
+            Compiling::Background(b) => b.view(open, visible),
+            Compiling::Inline(i) => i.view(open, visible),
+        }
     }
 
     /// Plans and, if it is unambiguous, applies `ask`.
@@ -368,7 +392,12 @@ impl Session {
     }
 
     pub fn save(&mut self) -> std::io::Result<()> {
-        self.lib.save()?;
+        match self.compiling {
+            Compiling::Background(_) => {
+                self.lib.save()?;
+            }
+            Compiling::Inline(_) => self.lib.mark_saved(),
+        }
         self.state();
         Ok(())
     }
@@ -409,7 +438,15 @@ impl Session {
             graph: isolex::graph(&sources),
         });
         self.state();
-        self.background.edit(self.lib.revision(), Arc::new(sources));
+        let (revision, files) = (self.lib.revision(), Arc::new(sources));
+        match &mut self.compiling {
+            Compiling::Background(b) => b.edit(revision, files),
+            Compiling::Inline(i) => {
+                for e in i.edit(revision, files) {
+                    self.sink.notify(notice(e));
+                }
+            }
+        }
     }
 
     fn state(&self) {
@@ -437,33 +474,44 @@ fn workers() -> usize {
 fn forward(events: Receiver<Event>, sink: Arc<dyn Sink>) {
     std::thread::spawn(move || {
         for e in events {
-            sink.notify(match e {
-                Event::Lexicon {
-                    generation,
-                    revision,
-                    problems,
-                    icons,
-                } => Notice::Compiled {
-                    generation,
-                    revision,
-                    errors: problems.errors,
-                    warnings: problems.warnings,
-                    palette: problems.palette,
-                    icons,
-                },
-                Event::Changed { name, drawing, .. } => {
-                    let Drawing { ir, sources } = (*drawing).clone();
-                    Notice::Icon { name, ir, sources }
-                }
-                Event::Broken { name, diags, last } => Notice::Broken {
-                    name,
-                    diagnostics: diags,
-                    last: last.map(|l| (*l).clone()),
-                },
-                Event::Gone { name } => Notice::Gone { name },
-            });
+            sink.notify(notice(e));
         }
     });
+}
+
+/// How the compiler's event is told to the interface.
+fn notice(e: Event) -> Notice {
+    match e {
+        Event::Lexicon {
+            generation,
+            revision,
+            problems,
+            icons,
+        } => Notice::Compiled {
+            generation,
+            revision,
+            errors: problems.errors,
+            warnings: problems.warnings,
+            palette: problems.palette,
+            icons,
+        },
+        Event::Changed { name, drawing, .. } => {
+            let Drawing { ir, sources } = (*drawing).clone();
+            Notice::Icon { name, ir, sources }
+        }
+        Event::Broken { name, diags, last } => Notice::Broken {
+            name,
+            diagnostics: diags,
+            last: last.map(|l| (*l).clone()),
+        },
+        Event::Gone { name } => Notice::Gone { name },
+    }
+}
+
+/// How a session compiles: on threads of its own, or as it is called.
+enum Compiling {
+    Background(Background),
+    Inline(Box<Inline>),
 }
 
 /// A choice as the interface shows it.

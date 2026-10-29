@@ -34,8 +34,11 @@ npm run tauri build  # an installer for this platform
 
 `npm run dev` serves the interface alone in a browser, over the
 compiler's sample library (`tests/fixtures/sample.ilx`) instead of a
-folder: it takes typing in the Source tab, undo and save, and nothing
-else. The browser tests run against it.
+folder, with the studio's core built as a WebAssembly module
+(`studio-core/wasm`, which `npm run core` builds and `dev`, `test` and
+`e2e` build first; it needs the `wasm32-unknown-unknown` target). It
+edits, undoes and compiles as the app does, in memory: saving keeps the
+library as it is. vitest and the browser tests run against it.
 
 `cargo test --manifest-path studio/src-tauri/Cargo.toml` runs the
 shell's own tests. The same checks run on every push to the GitHub

@@ -5,6 +5,7 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 use isolex_studio_core::session::{Answer, Ask, JsonValue, Node, Notice, Session, Sink};
+use isolex_studio_core::Library;
 
 /// A window that keeps every notice, and wakes whoever waits for one.
 #[derive(Default)]
@@ -322,4 +323,62 @@ fn asks_and_notices_are_the_json_the_interface_speaks() {
         answer,
         serde_json::json!({"kind": "refused", "reason": "no"})
     );
+}
+
+#[test]
+fn in_memory_every_call_returns_compiled() {
+    let files = [(
+        "sample.ilx".to_string(),
+        include_str!("../../tests/fixtures/sample.ilx").to_string(),
+    )]
+    .into_iter()
+    .collect();
+    let window = Arc::new(Window::default());
+    let mut s = Session::in_memory(Library::new("sample", files), window.clone());
+    // opened: everything compiled before it returns
+    let icons = |from: usize| -> Vec<String> {
+        window.seen.lock().unwrap()[from..]
+            .iter()
+            .filter_map(|n| match n {
+                Notice::Icon { name, .. } => Some(name.clone()),
+                _ => None,
+            })
+            .collect()
+    };
+    let all = isolex::compile(&s.library().sources()).doc.icons.len();
+    assert_eq!(icons(0).len(), all);
+
+    // an edit: only what it changed, compiled by the time it returns (a
+    // value as long as before, so nothing after it moves)
+    let mark = window.len();
+    let seg = node(&s, "seg 0 0 0 2 0 0");
+    let answer = s.ask(
+        &Ask::SetArg {
+            node: seg,
+            index: 3,
+            value: JsonValue::Number(3.0),
+        },
+        "Move seg",
+    );
+    assert_eq!(answer, Answer::Applied { revision: 1 });
+    assert_eq!(
+        icons(mark),
+        ["switch-poe", "switch-poe-down", "switch-poe-planned"]
+    );
+
+    // saving keeps it, in memory
+    let Notice::Library { modified: true, .. } = window.last_library() else {
+        panic!()
+    };
+    s.save().unwrap();
+    let Notice::Library {
+        modified: false, ..
+    } = window.last_library()
+    else {
+        panic!("saved")
+    };
+    // and undo compiles at once too
+    let mark = window.len();
+    assert_eq!(s.undo().as_deref(), Some("Move seg"));
+    assert_eq!(icons(mark).len(), 3);
 }

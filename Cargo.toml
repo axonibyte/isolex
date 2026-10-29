@@ -32,10 +32,11 @@ font-tools = ["dep:ttf-parser", "dep:miniz_oxide"]
 lto = true
 strip = true
 
-# The compiler as a WebAssembly module (wasm/src/lib.rs). The root package
+# The compiler as a WebAssembly module (wasm/src/lib.rs), and the studio's
+# core as one (studio-core/wasm/src/lib.rs). The root package
 # stays the default member, so a plain `cargo build` is the CLI alone.
 [workspace]
-members = ["wasm", "studio-core"]
+members = ["wasm", "studio-core", "studio-core/wasm"]
 # The studio's desktop shell is a workspace of its own, with its own
 # lockfile, so building and testing this one (the FreeBSD jail's CI)
 # never resolves webkit, gtk or tauri.

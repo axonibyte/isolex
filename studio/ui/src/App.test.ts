@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import App from './App.svelte';
-import { fake } from './lib/fake';
+import { core } from './lib/core';
 import type { Backend } from './lib/backend';
 import sampleIr from '../../../tests/fixtures/sample.ir.golden.json';
 
@@ -14,7 +14,8 @@ afterEach(() => {
   delete document.documentElement.dataset.canvas;
 });
 
-async function opened(backend: Backend = fake()) {
+async function opened(given?: Backend) {
+  const backend = given ?? (await core());
   render(App, { backend, sample: true });
   await fireEvent.click(screen.getByRole('button', { name: 'Open the sample library' }));
   await screen.findByRole('application', { name: `Canvas: ${names[0]}` });
@@ -23,13 +24,13 @@ async function opened(backend: Backend = fake()) {
 
 describe('App', () => {
   it('welcomes with no library open', async () => {
-    const backend = fake();
+    const backend = await core();
     const pick = vi.spyOn(backend, 'pickFolder');
     render(App, { backend });
     expect(screen.queryByRole('button', { name: 'Open the sample library' })).toBeNull();
     await fireEvent.click(screen.getByRole('button', { name: 'Open library folder…' }));
     expect(pick).toHaveBeenCalled();
-    // the fake picks the sample
+    // outside the app, the sample
     await screen.findByRole('navigation', { name: 'Tools' });
   });
 
@@ -73,7 +74,7 @@ describe('App', () => {
   });
 
   it('types in the Source tab, as one undo step a word', async () => {
-    const backend = fake();
+    const backend = await core();
     const ask = vi.spyOn(backend, 'ask');
     const begin = vi.spyOn(backend, 'beginGesture');
     const end = vi.spyOn(backend, 'endGesture');
@@ -95,7 +96,7 @@ describe('App', () => {
   });
 
   it('undoes and redoes from the keyboard', async () => {
-    const backend = fake();
+    const backend = await core();
     await opened(backend);
     await backend.ask({ kind: 'type', file: 'sample.ilx', at: 0, len: 0, text: '// a\n' }, 'Type');
     const undo = screen.getByRole('button', { name: 'Undo' });
@@ -108,7 +109,7 @@ describe('App', () => {
   });
 
   it('offers to reload or save over a library changed on disk', async () => {
-    const backend = fake();
+    const backend = await core();
     let tell: ((n: Parameters<Parameters<Backend['listen']>[0]>[0]) => void) | undefined;
     const listen = backend.listen;
     backend.listen = async (hear) => {

@@ -5,10 +5,14 @@
   "type": "module",
   "description": "isolex studio's interface, in the Tauri shell's window (src-tauri).",
   "scripts": {
+    "core": "cargo build --release --locked -p isolex-studio-wasm --target wasm32-unknown-unknown --manifest-path ../Cargo.toml && node -e \"require('fs').copyFileSync('../target/wasm32-unknown-unknown/release/isolex_studio_wasm.wasm', 'ui/src/lib/studio-core.wasm')\"",
+    "predev": "npm run core",
     "dev": "vite",
     "build": "vite build",
     "check": "svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
+    "pretest": "npm run core",
     "test": "vitest run",
+    "pree2e": "npm run core",
     "e2e": "playwright test",
     "tauri": "tauri"
   },

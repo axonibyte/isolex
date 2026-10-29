@@ -1,7 +1,7 @@
 // What the interface says to the studio's core, and hears from it: the
 // shell's commands and the `isolex` event's notices (studio-core's
 // session), as types; and the backend that carries them, in the app or a
-// stand-in elsewhere (lib/fake.ts).
+// stand-in elsewhere (lib/core.ts).
 
 import type { IrIcon } from './isolex/ir';
 

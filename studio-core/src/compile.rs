@@ -294,22 +294,28 @@ pub fn run_generation<C: Compiler>(
         icons,
     });
     let next = AtomicUsize::new(0);
-    std::thread::scope(|scope| {
-        for _ in 0..workers.max(1) {
-            scope.spawn(|| loop {
-                if generation.cancel.load(Ordering::Relaxed) {
-                    return;
-                }
-                let i = next.fetch_add(1, Ordering::Relaxed);
-                let Some(name) = queue.get(i) else { return };
-                if let Some(outcome) = compiler.icon(&prepared, name, &generation.cancel) {
-                    send(Report::Icon {
-                        generation: generation.number,
-                        name: name.clone(),
-                        outcome,
-                    });
-                }
+    let work = || loop {
+        if generation.cancel.load(Ordering::Relaxed) {
+            return;
+        }
+        let i = next.fetch_add(1, Ordering::Relaxed);
+        let Some(name) = queue.get(i) else { return };
+        if let Some(outcome) = compiler.icon(&prepared, name, &generation.cancel) {
+            send(Report::Icon {
+                generation: generation.number,
+                name: name.clone(),
+                outcome,
             });
+        }
+    };
+    // one worker is the caller, which a host without threads needs
+    if workers <= 1 {
+        work();
+        return;
+    }
+    std::thread::scope(|scope| {
+        for _ in 0..workers {
+            scope.spawn(work);
         }
     });
 }
@@ -573,6 +579,58 @@ impl Background {
     /// screen, which compile first.
     pub fn view(&self, open: Option<String>, visible: Vec<String>) {
         let _ = self.send.send(Message::View(open, visible));
+    }
+}
+
+/// Compiles the library as soon as it changes, on the caller's thread,
+/// for a host without threads or a clock (the studio's core in a browser):
+/// an edit returns once its generation has compiled, with what it made.
+pub struct Inline<C: Compiler = Isolex> {
+    compiler: C,
+    tracker: Tracker,
+    generation: u64,
+    view: (Option<String>, Vec<String>),
+}
+
+impl<C: Compiler> Inline<C> {
+    pub fn new(compiler: C) -> Inline<C> {
+        Inline {
+            compiler,
+            tracker: Tracker::default(),
+            generation: 0,
+            view: (None, Vec::new()),
+        }
+    }
+
+    /// The library is now `files`, at `revision`: its events, in order.
+    pub fn edit(&mut self, revision: u64, files: Snapshot) -> Vec<Event> {
+        self.generation += 1;
+        let generation = Generation {
+            number: self.generation,
+            revision,
+            files,
+            cancel: Arc::new(AtomicBool::new(false)),
+        };
+        let reports = std::sync::Mutex::new(Vec::new());
+        let send = |r: Report| reports.lock().expect("the reports").push(r);
+        run_generation(
+            &self.compiler,
+            &generation,
+            self.view.0.as_deref(),
+            &self.view.1,
+            1,
+            &send,
+        );
+        let reports = reports.into_inner().expect("the reports");
+        reports
+            .into_iter()
+            .flat_map(|r| self.tracker.accept(r))
+            .collect()
+    }
+
+    /// The icon open, and the thumbnails on screen, which compile first.
+    pub fn view(&mut self, open: Option<String>, visible: Vec<String>) {
+        self.view = (open, visible);
     }
 }
 

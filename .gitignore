@@ -6,3 +6,4 @@ node_modules/
 /studio/src-tauri/gen
 /studio/test-results
 /studio/playwright-report
+/studio/ui/src/lib/studio-core.wasm

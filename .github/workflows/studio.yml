@@ -39,6 +39,9 @@ jobs:
         with:
           toolchain: stable
           components: rustfmt, clippy
+          # the studio's core as a WebAssembly module, for the interface's
+          # tests (npm run core)
+          targets: wasm32-unknown-unknown
 
       - name: the interface's dependencies, from the lockfile
         run: npm ci

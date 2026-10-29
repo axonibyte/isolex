@@ -5,7 +5,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import App from './App.svelte';
-import { fake } from './lib/fake';
+import { core } from './lib/core';
 import type { Backend, Origin, Outline } from './lib/backend';
 import source from '../../../tests/fixtures/sample.ilx?raw';
 import sampleStudio from '../../../tests/fixtures/sample.studio.golden.json';
@@ -19,7 +19,8 @@ afterEach(() => {
 });
 
 /** The window, editing the icon `name`. */
-async function editing(name: string, backend: Backend = fake()) {
+async function editing(name: string, given?: Backend) {
+  const backend = given ?? (await core());
   render(App, { backend, sample: true });
   await fireEvent.click(screen.getByRole('button', { name: 'Open the sample library' }));
   await screen.findByRole('application', { name: /^Canvas: / });
@@ -104,7 +105,7 @@ describe('Parts and selection', () => {
   });
 
   it('hides and locks a part in the editor only', async () => {
-    const backend = fake();
+    const backend = await core();
     const ask = vi.spyOn(backend, 'ask');
     const parts = await editing('switch-l3', backend);
     const before = shapes().length;
@@ -118,16 +119,20 @@ describe('Parts and selection', () => {
     expect(ask).not.toHaveBeenCalled();
   });
 
-  it('reorders by key, renames and adds parts, as asks', async () => {
-    const backend = fake();
+  it('reorders by key, renames and adds parts, each one undo step', async () => {
+    const backend = await core();
     const ask = vi.spyOn(backend, 'ask');
     const parts = await editing('switch-poe', backend);
+    const text = async () => (await backend.source('sample.ilx'))!.text;
     const outline = studio.outlines['switch-poe']!;
     const rows = outline.parts[2]!.shapes;
+    const listed = () => within(parts).getAllByRole('button').map((b) => b.querySelector('.kind')?.textContent);
+
     await fireEvent.keyDown(within(parts).getByRole('button', { name: /^seg/ }), { key: 'PageUp' });
     expect(ask).toHaveBeenLastCalledWith({ kind: 'move-before', node: rows[4]!.node, before: rows[6]!.node }, 'Move seg in switch-poe');
-    // the stand-in takes typing only, and says so
-    await screen.findByText(/takes typing only/);
+    // drawn after the at now: listed above it
+    await waitFor(async () => expect((await text()).indexOf('seg 0 0 0 2')).toBeGreaterThan((await text()).indexOf('at 0.5 0.5 0.6')));
+    await waitFor(() => expect(listed().indexOf('seg')).toBeLessThan(listed().indexOf('at')));
     // the bottom shape cannot go lower
     await fireEvent.keyDown(within(parts).getByRole('button', { name: /^tile/ }), { key: 'End' });
     expect(ask).toHaveBeenCalledTimes(1);
@@ -140,11 +145,16 @@ describe('Parts and selection', () => {
       { kind: 'set-arg', node: outline.parts[2]!.node, index: 0, value: 'rest' },
       'Rename part everything-else to rest',
     );
+    await within(parts).findByRole('button', { name: /^rest/ });
 
     await fireEvent.click(within(parts).getByRole('button', { name: 'Add a part' }));
-    expect(ask).toHaveBeenLastCalledWith(
-      { kind: 'insert', parent: outline.node, text: 'part "part-1" {\n}', before: null },
-      'Add part part-1 to switch-poe',
-    );
+    expect(ask.mock.lastCall![0]).toMatchObject({ kind: 'insert', text: 'part "part-1" {\n}', before: null });
+    await within(parts).findByRole('button', { name: /^part-1/ });
+    expect(within(parts).getByText('drawing here').closest('.head')!.textContent).toContain('part-1');
+    expect(await text()).toContain('  part "part-1" {\n  }\n}');
+
+    // three steps back is the sample again
+    for (let k = 0; k < 3; k++) await fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    await waitFor(async () => expect(await text()).toBe(source));
   });
 });

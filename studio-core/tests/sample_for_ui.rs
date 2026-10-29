@@ -1,8 +1,8 @@
 //! What the studio's core says of the compiler's sample library (its
-//! graph, each definition's outline, each icon's sources), kept as
-//! a golden (`tests/fixtures/sample.studio.golden.json`) for the
-//! interface's stand-in for the core (`studio/ui/src/lib/fake.ts`), so the
-//! interface outside the app selects and lists parts as it does inside.
+//! graph, each definition's outline, each icon's sources), kept as a
+//! golden (`tests/fixtures/sample.studio.golden.json`): the data the
+//! interface's tests select and list parts by (`studio/ui/src/lib/
+//! select.test.ts`, `App.parts.test.ts`), checked here against the core.
 //! UPDATE_GOLDENS=1 writes it again.
 
 use std::collections::BTreeMap;

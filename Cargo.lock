@@ -51,6 +51,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "isolex-studio-wasm"
+version = "0.1.0"
+dependencies = [
+ "isolex-studio-core",
+ "serde_json",
+]
+
+[[package]]
 name = "isolex-wasm"
 version = "0.5.0"
 dependencies = [

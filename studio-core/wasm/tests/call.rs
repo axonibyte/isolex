@@ -1,0 +1,81 @@
+//! The module's calls, natively: what the interface outside the app is
+//! told, call by call.
+
+use isolex_studio_wasm::call;
+use serde_json::{json, Value};
+
+fn send(v: Value) -> Value {
+    serde_json::from_str(&call(&v.to_string())).unwrap()
+}
+
+fn kinds(reply: &Value) -> Vec<String> {
+    reply["notices"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|n| n["kind"].as_str().unwrap().to_string())
+        .collect()
+}
+
+const SAMPLE: &str = include_str!("../../../tests/fixtures/sample.ilx");
+
+#[test]
+fn a_library_opened_edited_undone_and_saved() {
+    let opened = send(json!({ "call": "open", "files": [["sample.ilx", SAMPLE]] }));
+    let k = kinds(&opened);
+    assert_eq!(k[..3], ["graph", "library", "compiled"]);
+    assert!(k.iter().filter(|k| *k == "icon").count() > 5);
+
+    let source = send(json!({ "call": "source", "file": "sample.ilx" }));
+    assert_eq!(source["result"]["text"], SAMPLE);
+    let outline = send(json!({ "call": "outline", "definition": "switch-poe" }));
+    assert_eq!(outline["result"]["parts"].as_array().unwrap().len(), 3);
+
+    // a box added to switch-l3, compiled by the time the call returns
+    let node = &outline["result"]["node"];
+    let l3 =
+        send(json!({ "call": "outline", "definition": "switch-l3" }))["result"]["node"].clone();
+    assert_ne!(node, &l3);
+    let asked = send(json!({
+        "call": "ask",
+        "label": "Add part",
+        "ask": { "kind": "insert", "parent": l3, "text": "part \"x\" {\n  box 0 0 0.28 1 1 0.5\n}", "before": null }
+    }));
+    assert_eq!(asked["result"], json!({ "kind": "applied", "revision": 1 }));
+    assert!(kinds(&asked).contains(&"icon".to_string()));
+    let text = send(json!({ "call": "source", "file": "sample.ilx" }))["result"]["text"].clone();
+    assert!(text
+        .as_str()
+        .unwrap()
+        .contains("    box 0 0 0.28 1 1 0.5\n"));
+
+    assert_eq!(send(json!({ "call": "save" }))["error"], Value::Null);
+    let undone = send(json!({ "call": "undo" }));
+    assert_eq!(undone["result"], "Add part");
+    let library = undone["notices"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|n| n["kind"] == "library")
+        .unwrap();
+    assert_eq!(library["modified"], true, "undone past the save");
+}
+
+#[test]
+fn what_it_refuses() {
+    assert!(send(json!("nope"))["error"].is_string());
+    assert!(call("{").contains("not JSON"));
+    assert_eq!(send(json!({ "call": "undo" }))["error"], "no library open");
+    send(json!({ "call": "open", "files": [["a.ilx", ""]] }));
+    assert_eq!(send(json!({ "call": "nope" }))["error"], "no call nope");
+    assert!(
+        send(json!({ "call": "ask", "ask": { "kind": "nope" } }))["error"]
+            .as_str()
+            .unwrap()
+            .starts_with("ask: ")
+    );
+    assert_eq!(
+        send(json!({ "call": "about" }))["result"]["studio"],
+        "0.1.0"
+    );
+}

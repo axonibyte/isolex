@@ -1,0 +1,17 @@
+[package]
+name = "isolex-studio-wasm"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.97"
+description = "isolex studio's core as a WebAssembly module, for its interface outside the app: JSON in, JSON out, nothing imported."
+authors = ["Axonibyte Innovations, LLC"]
+license = "Apache-2.0"
+repository = "https://github.com/axonibyte/isolex"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+isolex-studio-core = { path = ".." }
+serde_json = "1"
