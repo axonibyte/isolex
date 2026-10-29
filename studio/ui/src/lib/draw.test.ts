@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { BOUND, TOOLS, fits, keyName, toolFor } from './keymap';
 import { angleOf, angled, arcText, ellipseText, flatStep, lineText, moveFlat, plainData, polyText, rectText, resizeRect, resizeRound, snapAngle, squared, withPoints } from './flat';
-import { fewest, insertPoint, moveHandle, movePoint, nearestSide, parse, removePoint, shiftData, toD, toggle, type Path } from './path';
+import { fewest, insertPoint, moveHandle, movePoint, nearestSide, parse, parseAll, removePoint, shiftData, toD, toDAll, toggle, type Path } from './path';
 import { cylinderText, faceRectText, poly3dText, segText, shadowText } from './gesture';
 import { argSpans, argText, counter, inRepeat, propsOf, stepIn, withArg } from './kdl';
 
@@ -137,6 +137,34 @@ describe('paths', () => {
     // two subpaths, or an arc, are not one path the node tool shapes
     expect(parse('M8,8 L16,16 M16,8 L8,16')).toBeNull();
     expect(parse('M0,0 A5 5 0 0 0 10,0')).toBeNull();
+  });
+
+  it('read every subpath, and a quadratic curve as the cubic it is', () => {
+    // a glyph's A: its legs, and its bar
+    const a = parseAll('M0,0 L2,7 L4,0 M0.8,2.5 H3.2')!;
+    expect(a.map((p) => p.knots.map((k) => k.p))).toEqual([
+      [
+        [0, 0],
+        [2, 7],
+        [4, 0],
+      ],
+      [
+        [0.8, 2.5],
+        [3.2, 2.5],
+      ],
+    ]);
+    expect(toDAll(a)).toBe('M0,0 L2,7 L4,0 M0.8,2.5 L3.2,2.5');
+    // Q0,7 2,7 from 0,6: handles two thirds of the way to the control
+    const q = parseAll('M0,6 Q0,7 2,7')![0]!;
+    expect(q.knots[0]!.out![1]).toBeCloseTo(6 + 2 / 3, 9);
+    expect(q.knots[1]!.in![0]).toBeCloseTo(2 / 3, 9);
+    // a closed contour, then another from where it closed
+    const o = parseAll('M0,0 H5 V7 H0 Z M1.2,1.2 V5.8 H3.8 V1.2 Z')!;
+    expect(o.map((p) => [p.closed, p.knots.length])).toEqual([
+      [true, 4],
+      [true, 4],
+    ]);
+    expect(parseAll('M0,0 A5 5 0 0 0 10,0')).toBeNull();
   });
 
   it('move a point with its handles', () => {

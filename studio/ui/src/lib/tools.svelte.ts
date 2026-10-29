@@ -30,7 +30,7 @@ import {
   type Change,
 } from './gesture';
 import { angleOf, angled, arcPoints, arcText, atAngle, ellipsePoints, ellipseText, flatStep, lineText, moveFlat, plainData, polyText, rectText, resizeRect, resizeRound, snapAngle, squared, withPoints } from './flat';
-import { insertPoint, moveHandle, movePoint, nearestSide, parse, polyline, removePoint, shiftData, toD, toggle, type Path } from './path';
+import { insertPoint, moveHandle, movePoint, nearestSide, parseAll, polyline, removePoint, shiftData, toD, toDAll, toggle, type Path } from './path';
 import { clean, PULL, snapPoint, snapValue, type Snapped } from './snap';
 import { atPath, find, same, within } from './select';
 
@@ -58,7 +58,7 @@ export interface Press {
 export interface Handle {
   id: string;
   at: Point;
-  kind: 'corner' | 'height' | 'radius' | 'point' | 'control';
+  kind: 'corner' | 'height' | 'radius' | 'point' | 'control' | 'advance';
   label: string;
   /** A curve's handle is drawn from its point. */
   from?: Point;
@@ -69,7 +69,7 @@ export interface Handle {
 /** The tools that draw by clicking point after point. */
 const CLICKED = new Set(['seg', 'poly3d', 'poly', 'pen']);
 /** The tools that draw. */
-const DRAWS = new Set(['box', 'tile', 'cylinder', 'facerect', 'shadow', 'seg', 'poly3d', 'line', 'rect', 'ellipse', 'arc', 'poly', 'pen']);
+const DRAWS = new Set(['box', 'tile', 'cylinder', 'facerect', 'shadow', 'seg', 'poly3d', 'line', 'rect', 'ellipse', 'arc', 'poly', 'pen', 'text']);
 
 /** What a drag changes, from the numbers it started with. */
 type Drag =
@@ -127,10 +127,29 @@ export class Tools {
 
   constructor(private readonly studio: Studio) {}
 
-  /** The icon open is flat: a canvas, not a footprint. */
+  /** What is open is flat: a canvas, not a footprint (a font's sketch
+      is one). */
   get flat(): boolean {
-    const s = this.studio;
-    return !!(s.icon && s.view.icons[s.icon]?.canvas);
+    return !!this.studio.drawing?.ir.canvas;
+  }
+
+  /** The sheet flat shapes are drawn on: output units, or the em grid of
+      the glyph open (x right, y up). */
+  get sheet(): Map3 {
+    return this.studio.sketch?.glyph?.map ?? PLANE;
+  }
+
+  /** The step flat points snap to, in the plane's units: four units a
+      tile step, or in a glyph a tenth of the em a tile step. */
+  get planeStep(): number {
+    const g = this.studio.sketch?.glyph;
+    if (!g) return flatStep(this.step);
+    return this.step ? (g.metrics.em * this.step) / 10 : 0;
+  }
+
+  /** Points of the plane, on the viewBox. */
+  private inPlane(lines: Point[][]): Point[][] {
+    return lines.map((l) => l.map((p) => apply(this.sheet, [p[0], p[1], 0])));
   }
 
   /** Something is being drawn. */
@@ -141,8 +160,8 @@ export class Tools {
   /** The solids drawn now, a face rect's wall from the outline. */
   get solids(): Solid[] {
     const s = this.studio;
-    const ir = s.icon ? s.view.icons[s.icon] : null;
-    const all = solidsOf(s.icon ? (s.view.sources[s.icon] ?? []) : [], s.editingNode, ir ? counted(ir.shapes) : []);
+    const d = s.drawing;
+    const all = solidsOf(d?.sources ?? [], s.editingNode, d ? counted(d.ir.shapes) : []);
     for (const solid of all) {
       if (solid.kind === 'facerect' && solid.select) {
         const note = find(s.outline, solid.select)?.row?.note;
@@ -163,6 +182,18 @@ export class Tools {
   /** The selected solid's handles: its size with the select tool, its
       points with the node tool. */
   get handles(): Handle[] {
+    // a glyph's advance, with the select tool, whatever is selected
+    const g = this.studio.sketch?.glyph;
+    const advance: Handle[] =
+      g && this.tool === 'select' ? [{ id: 'advance', at: apply(g.map, [this.advanceAt ?? g.advance, 0, 0]), kind: 'advance', label: 'Advance' }] : [];
+    return [...this.shapeHandles, ...advance];
+  }
+
+  /** Where a glyph's advance is being dragged to, in its em grid. */
+  advanceAt = $state<number | null>(null);
+  private advancing = false;
+
+  private get shapeHandles(): Handle[] {
     const s = this.selected;
     // a preview is drawn from other numbers: nothing on it is the source's
     if (!s || this.studio.previewing) return [];
@@ -220,12 +251,14 @@ export class Tools {
     const at = (p: Point) => apply(s.map, [p[0], p[1], 0]);
     const out: Handle[] = [];
     if (s.kind === 'path') {
-      const path = s.d ? parse(s.d) : null;
-      path?.knots.forEach((k, i) => {
+      // every subpath's points, numbered on from one to the next
+      const paths = s.d ? (parseAll(s.d) ?? []) : [];
+      const knots = paths.flatMap((q) => q.knots.map((k, i) => ({ k, first: i === 0 })));
+      knots.forEach(({ k }, i) => {
         if (k.in) out.push({ id: `in-${i}`, at: at(k.in), from: at(k.p), kind: 'control', label: `Handle into point ${i + 1}` });
         if (k.out) out.push({ id: `out-${i}`, at: at(k.out), from: at(k.p), kind: 'control', label: `Handle out of point ${i + 1}` });
       });
-      path?.knots.forEach((k, i) => out.push({ id: `pt-${i}`, at: at(k.p), kind: 'point', label: `Point ${i + 1}${k.smooth ? ', smooth' : ''}`, first: i === 0 }));
+      knots.forEach(({ k, first }, i) => out.push({ id: `pt-${i}`, at: at(k.p), kind: 'point', label: `Point ${i + 1}${k.smooth ? ', smooth' : ''}`, first }));
     } else if (s.kind === 'poly' || s.kind === 'line') {
       pairs(s.values).forEach((p, i) => out.push({ id: `pt-${i}`, at: at(p), kind: 'point', label: `Point ${i + 1}`, first: i === 0 }));
     }
@@ -243,6 +276,10 @@ export class Tools {
     if (DRAWS.has(this.tool)) return this.downDraw(p);
     if (this.tool === 'node') return this.downNode(p);
     if (this.tool !== 'select') return;
+    if (p.handle === 'advance') {
+      this.advancing = true;
+      return;
+    }
     const sel = this.selected;
     if (p.handle && sel) {
       this.drag = { kind: 'handle', solid: sel, handle: p.handle, from: p.at };
@@ -250,8 +287,14 @@ export class Tools {
     }
     const solid = p.shape === null ? null : (this.solids.find((s) => s.shapes.includes(p.shape!)) ?? null);
     if (solid?.select && !this.locked(solid.select)) {
-      // a press on a shape selects it, and a drag from there moves it
+      // a press on a shape selects it, and a drag from there moves it; one
+      // drawn through what it selects (a text's glyph, a fragment's shape)
+      // is not the selection's to move
       if (!this.studio.selected || !within(solid.select, this.studio.selected)) this.studio.select(solid.select);
+      if (!same(solid.select, solid.node)) {
+        this.drag = null;
+        return;
+      }
       this.drag = { kind: 'pending', solid, from: p.at };
       return this.begin(solid);
     }
@@ -264,6 +307,7 @@ export class Tools {
     if (this.drawing) return this.moveDraw(p, held);
     if (!held) return this.hover(p);
     const d = this.drag;
+    if (this.advancing) return this.moveAdvance(p);
     if (!d) return;
     if (d.kind === 'node') return this.moveNode(d, p);
     if (d.kind === 'pending') {
@@ -288,6 +332,10 @@ export class Tools {
     this.indicator = null;
     this.feedback = null;
     if (d?.kind === 'node' && !d.moved && d.alt && d.handle.startsWith('pt-')) this.toggleNode(d.solid, Number(d.handle.slice(3)));
+    if (this.advancing) {
+      this.advancing = false;
+      this.setAdvance(p);
+    }
     this.end();
     return d?.kind === 'pending' || !d;
   }
@@ -302,11 +350,18 @@ export class Tools {
     if (!here) return;
     const reach = PULL / (p.scale * Math.abs(s.map[0] || 1));
     if (s.kind === 'path') {
-      const path = s.d ? parse(s.d) : null;
-      const near = path && nearestSide(path, here);
-      if (!path || !near || near.d > reach) return;
+      const paths = s.d ? parseAll(s.d) : null;
+      if (!paths) return;
+      // the nearest side of any subpath
+      let best: { j: number; side: number; t: number; d: number } | null = null;
+      paths.forEach((q, j) => {
+        const near = nearestSide(q, here);
+        if (near && (!best || near.d < best.d)) best = { j, ...near };
+      });
+      const b = best as { j: number; side: number; t: number; d: number } | null;
+      if (!b || b.d > reach) return;
       this.begin(s);
-      this.writePath(s, insertPoint(path, near.side, near.t), `Add a point to path in ${this.studio.editing}`);
+      this.writePaths(s, replaced(paths, b.j, insertPoint(paths[b.j]!, b.side, b.t)), `Add a point to path in ${this.studio.editing}`);
       this.end();
     } else if (s.kind === 'poly') {
       const pts = pairs(s.values);
@@ -471,13 +526,15 @@ export class Tools {
     return snapped;
   }
 
-  /** Snaps a flat point, in the plane `s` (or the anchor at the origin)
-      is drawn in, to another flat shape's point or the flat step. */
-  private snapFlat(p: Point, s: Solid | null, scale: number): Point {
-    const map = s?.map ?? PLANE;
+  /** Snaps a flat point to another flat shape's point or the flat step:
+      one in the plane `s` is drawn in, or, with no `s`, one of the viewBox
+      in the plane drawn on (`plane`). */
+  private snapFlat(at: Point, s: Solid | null, scale: number): Point {
+    const map = s?.map ?? this.sheet;
+    const p = s ? at : (onFloor(map, at, 0) ?? at);
     const snapped = snapPoint(
       p,
-      flatStep(this.step),
+      this.planeStep,
       flatTargets(this.solids, s?.node ?? null),
       (q) => apply(map, [q[0], q[1], 0]),
       (v) => onFloor(map, v, 0),
@@ -489,6 +546,27 @@ export class Tools {
 
   private locked(node: NodeAt): boolean {
     return !!this.studio.outline?.parts.some((p) => this.studio.locked.has(p.name) && within(node, p.node));
+  }
+
+  // --- a glyph's advance -------------------------------------------------------
+
+  private moveAdvance(p: Press) {
+    const g = this.studio.sketch?.glyph;
+    const at = g && onFloor(g.map, p.at, 0);
+    if (!g || !at) return;
+    this.advanceAt = Math.max(0, snapValue(at[0], this.planeStep));
+    this.feedback = { at: p.at, text: `advance ${this.advanceAt}` };
+  }
+
+  /** The advance dragged to, written once, on release: its node's span
+      changes with it. */
+  private setAdvance(p: Press) {
+    const to = this.advanceAt;
+    const s = this.studio;
+    this.advanceAt = null;
+    const part = s.outline?.parts.find((q) => q.name === s.glyph);
+    if (to === null || !part || to === s.sketch?.glyph?.advance) return;
+    void this.change(part.node, `Set the advance of ${part.name}`, p.at, [(node) => ({ kind: 'set-prop', node, key: 'advance', value: to })]);
   }
 
   // --- the node tool ------------------------------------------------------------
@@ -520,9 +598,12 @@ export class Tools {
     this.feedback = { at: p.at, text: `x ${to[0]} · y ${to[1]}` };
     const label = `Shape ${s.kind} in ${this.studio.editing}`;
     if (s.kind === 'path') {
-      const path = s.d ? parse(s.d) : null;
-      if (!path) return;
-      return this.writePath(s, which === 'pt' ? movePoint(path, i, to) : moveHandle(path, i, which, to, p.alt), label);
+      const paths = s.d ? parseAll(s.d) : null;
+      const at = paths && locate(paths, i);
+      if (!paths || !at) return;
+      const [j, k] = at;
+      const path = paths[j]!;
+      return this.writePaths(s, replaced(paths, j, which === 'pt' ? movePoint(path, k, to) : moveHandle(path, k, which, to, p.alt)), label);
     }
     const pts = pairs(s.values);
     pts[i] = to;
@@ -536,10 +617,12 @@ export class Tools {
 
   /** Alt+click on a path's point: corner to smooth, or back. */
   private toggleNode(s: Solid, i: number) {
-    const path = s.kind === 'path' && s.d ? parse(s.d) : null;
-    if (!path) return;
+    const paths = s.kind === 'path' && s.d ? parseAll(s.d) : null;
+    const at = paths && locate(paths, i);
+    if (!paths || !at) return;
+    const [j, k] = at;
     this.begin(s);
-    this.writePath(s, toggle(path, i), `${path.knots[i]?.smooth ? 'Make a corner' : 'Smooth a point'} of path in ${this.studio.editing}`);
+    this.writePaths(s, replaced(paths, j, toggle(paths[j]!, k)), `${paths[j]!.knots[k]?.smooth ? 'Make a corner' : 'Smooth a point'} of path in ${this.studio.editing}`);
   }
 
   /** Delete with the node tool: the point touched last, while the shape
@@ -551,13 +634,14 @@ export class Tools {
     this.begin(s);
     const label = `Delete a point of ${s.kind} in ${this.studio.editing}`;
     if (s.kind === 'path') {
-      const path = s.d ? parse(s.d) : null;
-      const next = path && removePoint(path, i);
-      if (!next) {
+      const paths = s.d ? parseAll(s.d) : null;
+      const at = paths && locate(paths, i);
+      const next = paths && at && removePoint(paths[at[0]]!, at[1]);
+      if (!paths || !at || !next) {
         this.studio.message = 'A path keeps two points at least, three when closed';
         return true;
       }
-      this.writePath(s, next, label);
+      this.writePaths(s, replaced(paths, at[0], next), label);
     } else if (s.kind === 'poly') {
       const pts = pairs(s.values);
       if (pts.length <= 3) {
@@ -591,8 +675,9 @@ export class Tools {
   }
 
   /** A path's data written anew. */
-  private writePath(s: Solid, path: Path, label: string) {
-    this.writeData(s, toD(path), label);
+  /** A path's subpaths written anew. */
+  private writePaths(s: Solid, paths: Path[], label: string) {
+    this.writeData(s, toDAll(paths), label);
   }
 
   private writeData(s: Solid, d: string, label: string) {
@@ -653,7 +738,8 @@ export class Tools {
       }
       for (const step of steps) {
         const f = path ? atPath(this.studio.outline, path) : null;
-        const node = fixed ?? f?.row?.node;
+        // a row's node, or a part's: a font's glyph is one
+        const node = fixed ?? f?.row?.node ?? f?.part.node;
         if (!node) return;
         const ask = await step(node);
         if (!ask) return;
@@ -722,8 +808,12 @@ export class Tools {
     if (!s) return false;
     this.begin(s);
     if (FLAT.has(s.kind)) {
-      const by = e.shift ? 4 : flatStep(this.step) || 0.5;
-      const d = ({ ArrowRight: [by, 0], ArrowLeft: [-by, 0], ArrowDown: [0, by], ArrowUp: [0, -by] } as Record<string, Point>)[e.key];
+      // by the step, or with Shift a tile's worth (a tenth of a glyph's em);
+      // up is up, in a glyph's grid as on the canvas
+      const glyph = this.studio.sketch?.glyph;
+      const by = e.shift ? (glyph ? glyph.metrics.em / 10 : 4) : this.planeStep || (glyph ? glyph.metrics.em / 100 : 0.5);
+      const up = glyph ? by : -by;
+      const d = ({ ArrowRight: [by, 0], ArrowLeft: [-by, 0], ArrowDown: [0, -up], ArrowUp: [0, up] } as Record<string, Point>)[e.key];
       if (!d) return false;
       this.moveFlatBy(s, d, `Nudge ${s.kind} in ${this.studio.editing}`);
       this.end();
@@ -866,6 +956,17 @@ export class Tools {
         this.studio.message = 'Click each point; click the first, or press Enter, to close';
         return;
       }
+      case 'text': {
+        // words, set in the library's first font, on the anchor drawn on
+        const font = this.studio.view.tree?.fonts[0]?.name;
+        if (this.studio.font) this.studio.message = 'A glyph cannot set text: draw it with the pen and the shapes';
+        else if (!font) this.studio.message = 'The library has no font: import one from the Tree tab';
+        else {
+          const at = this.snapFlat(p.at, null, p.scale);
+          void this.insertFlat(`text ${clean(at[0])} ${clean(at[1])} "Text" font="${font}" size=8`, 'text');
+        }
+        return;
+      }
       case 'line':
       case 'rect':
       case 'ellipse': {
@@ -979,14 +1080,14 @@ export class Tools {
       case 'flat': {
         if (!held) return;
         let b = this.snapFlat(p.at, null, p.scale);
-        if (p.shift) b = d.tool === 'line' ? angled(d.a, b, flatStep(this.step)) : squared(d.a, b);
+        if (p.shift) b = d.tool === 'line' ? angled(d.a, b, this.planeStep) : squared(d.a, b);
         d.b = b;
         const [x, y, w, h] = rect(d.a, b);
         if (d.tool === 'line') {
-          this.preview = [[d.a, b]];
+          this.preview = this.inPlane([[d.a, b]]);
           this.feedback = { at: p.at, text: `${clean(Math.hypot(b[0] - d.a[0], b[1] - d.a[1]))} · ${clean(angleOf(d.a, b))}°` };
         } else if (d.tool === 'rect') {
-          this.preview = [
+          this.preview = this.inPlane([
             [
               [x, y],
               [x + w, y],
@@ -994,10 +1095,10 @@ export class Tools {
               [x, y + h],
               [x, y],
             ],
-          ];
+          ]);
           this.feedback = { at: p.at, text: size(w, h) };
         } else {
-          this.preview = [ellipsePoints([x + w / 2, y + h / 2], w / 2, h / 2)];
+          this.preview = this.inPlane([ellipsePoints([x + w / 2, y + h / 2], w / 2, h / 2)]);
           this.feedback = { at: p.at, text: size(w, h) };
         }
         return;
@@ -1007,7 +1108,7 @@ export class Tools {
         const b = this.snapFlat(p.at, null, p.scale);
         d.r = clean(Math.hypot(b[0] - d.c[0], b[1] - d.c[1]));
         d.a0 = snapAngle(angleOf(d.c, b), p.shift);
-        this.preview = [[d.c, atAngle(d.c, d.r, d.a0)]];
+        this.preview = this.inPlane([[d.c, atAngle(d.c, d.r, d.a0)]]);
         this.feedback = { at: p.at, text: `r ${d.r} · ${d.a0}°` };
         return;
       }
@@ -1015,7 +1116,7 @@ export class Tools {
         const a = snapAngle(angleOf(d.c, p.at), p.shift);
         // counter-clockwise from where it starts
         d.a1 = clean(d.a0 + ((((a - d.a0) % 360) + 360) % 360));
-        this.preview = d.a1 === d.a0 ? [] : [arcPoints(d.c, d.r, d.a0, d.a1)];
+        this.preview = d.a1 === d.a0 ? [] : this.inPlane([arcPoints(d.c, d.r, d.a0, d.a1)]);
         this.feedback = { at: p.at, text: `${d.a0}° to ${d.a1}°` };
         return;
       }
@@ -1138,8 +1239,8 @@ export class Tools {
   private drawPoints(to?: Point) {
     const d = this.drawing;
     if (d?.phase !== 'poly') return;
-    this.preview = to ? [d.pts, [d.pts.at(-1)!, to]] : [d.pts];
-    this.dots = d.pts.map((at, i) => ({ at, first: i === 0 }));
+    this.preview = this.inPlane(to ? [d.pts, [d.pts.at(-1)!, to]] : [d.pts]);
+    this.dots = this.inPlane([d.pts])[0]!.map((at, i) => ({ at, first: i === 0 }));
   }
 
   /** The path being drawn, the side to the pointer dashed, its points and
@@ -1156,8 +1257,8 @@ export class Tools {
       if (k.in) lines.push([k.in, k.p]);
       if (k.out) lines.push([k.p, k.out]);
     }
-    this.preview = lines;
-    this.dots = d.path.knots.map((k, i) => ({ at: k.p, first: i === 0 }));
+    this.preview = this.inPlane(lines);
+    this.dots = this.inPlane([d.path.knots.map((k) => k.p)])[0]!.map((at, i) => ({ at, first: i === 0 }));
   }
 
   /** The point on the floor at `z` under a press, snapped. */
@@ -1226,6 +1327,21 @@ export class Tools {
     const s = this.studio;
     const o = s.outline;
     if (!o) return;
+    // in a font, into the glyph open: a glyph's nodes are its own plane's
+    if (o.kind === 'font') {
+      const glyph = o.parts.find((p) => p.name === s.glyph);
+      if (!glyph) {
+        s.message = 'Open a glyph to draw in it: click one';
+        return;
+      }
+      const answer = await s.ask({ kind: 'insert', parent: glyph.node, text, before: null }, `Draw ${kind} in ${glyph.name} of ${o.definition}`);
+      if (answer.kind !== 'applied') return;
+      await s.refresh();
+      const row = s.outline?.parts.find((q) => q.name === glyph.name)?.shapes.at(-1);
+      if (row) s.select(row.node);
+      s.message = '';
+      return;
+    }
     const part = o.parts.find((p) => p.name === s.target && p.op !== 'remove');
     const name = part?.name ?? this.newPart();
     const anchor = part?.shapes.at(-1);
@@ -1254,6 +1370,20 @@ export class Tools {
     return `part-${k}`;
   }
 }
+
+/** Which subpath, and which of its points, point `n` is: the points of a
+    path's subpaths numbered on from one to the next. */
+function locate(paths: Path[], n: number): [number, number] | null {
+  for (let j = 0; j < paths.length; j++) {
+    const len = paths[j]!.knots.length;
+    if (n < len) return [j, n];
+    n -= len;
+  }
+  return null;
+}
+
+/** The subpaths, subpath `j` as `path`. */
+const replaced = (paths: Path[], j: number, path: Path): Path[] => paths.map((q, k) => (k === j ? path : q));
 
 /** A list of numbers as points, x then y. */
 const pairs = (v: number[]): Point[] => {

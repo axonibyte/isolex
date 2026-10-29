@@ -12,6 +12,8 @@
   import type { Tools } from '../lib/tools.svelte';
   import type { Ask, NodeAt } from '../lib/backend';
   import type { IrIcon } from '../lib/isolex/ir';
+  import FontDesign from './FontDesign.svelte';
+  import TextDesign from './TextDesign.svelte';
   import { DEFAULT_PALETTE } from '../lib/theme';
   import { apply, SLOTS, FLAT, type Point } from '../lib/geometry';
   import { argText, counter, inRepeat, propsOf, stepIn, withArg } from '../lib/kdl';
@@ -246,7 +248,9 @@
 </script>
 
 <div class="design {look}">
-  {#if !row}
+  {#if !row && studio.font}
+    <FontDesign {studio} {tools} {look} />
+  {:else if !row}
     <h2>{studio.editing ?? 'Nothing open'} <small>{studio.outline?.kind ?? ''}</small></h2>
     {#if frame}
       <section aria-labelledby="frame">
@@ -317,6 +321,9 @@
       <p class="note">Its points are shaped with the node tool, or in the Source tab.</p>
     {/if}
 
+    {#if kind === 'text' && studio.selected}
+      <TextDesign {studio} {tools} node={studio.selected} {text} />
+    {:else}
     <section aria-labelledby="paint">
       <h3 id="paint">Paint</h3>
       {#if kind === 'box'}
@@ -365,6 +372,7 @@
         <p class="note">This is painted where it is written.</p>
       {/if}
     </section>
+    {/if}
 
     {#if kind !== 'shadow' && SLOTS[kind]}
       <section aria-labelledby="opacity">

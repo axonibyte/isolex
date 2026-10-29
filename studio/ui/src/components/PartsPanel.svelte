@@ -7,6 +7,7 @@
   each opening the definition it comes from.
 -->
 <script lang="ts">
+  import { kdlString, metricsOf } from '../lib/font';
   import type { NodeAt, Part, Row } from '../lib/backend';
   import type { Studio } from '../lib/state.svelte';
   import { dropAbove, move, same, type Move } from '../lib/select';
@@ -28,6 +29,11 @@
   const isSelected = (n: NodeAt) => !!studio.selected && same(studio.selected, n);
 
   function pickPart(p: Part) {
+    // a font's glyph opens on the canvas, to draw in
+    if (p.op === 'glyph' || p.op === 'notdef') {
+      studio.openGlyph(p.name);
+      return;
+    }
     if (p.op !== 'remove') studio.target = p.name;
     studio.select(p.node);
   }
@@ -49,9 +55,36 @@
     if (studio.target === p.name) studio.target = name;
   }
 
+  /** A new glyph's characters, while they are typed. */
+  let adding = $state<string | null>(null);
+
+  /** A glyph for the characters typed, half an em wide, before the
+      notdef; opened to draw in. */
+  async function addGlyph() {
+    const o = outline;
+    const name = (adding ?? '').trim() ? adding! : '';
+    adding = null;
+    if (!o || !name) return;
+    if (o.parts.some((p) => p.op === 'glyph' && p.name === name)) {
+      studio.openGlyph(name);
+      return;
+    }
+    const em = metricsOf(o).em;
+    const notdef = o.parts.find((p) => p.op === 'notdef');
+    const answer = await studio.ask({ kind: 'insert', parent: o.node, text: `glyph ${kdlString(name)} advance=${em / 2}`, before: notdef?.node ?? null }, `Add glyph ${name} to ${o.definition}`);
+    if (answer.kind === 'applied') {
+      await studio.refresh();
+      studio.openGlyph(name);
+    }
+  }
+
   async function addPart() {
     const o = outline;
     if (!o) return;
+    if (o.kind === 'font') {
+      adding = '';
+      return;
+    }
     const taken = new Set(o.parts.map((p) => p.name).concat(o.inherited.map((p) => p.name)));
     let k = 1;
     while (taken.has(`part-${k}`)) k++;
@@ -117,11 +150,29 @@
 
 <div class="parts">
   <div class="top">
-    <h2>Parts</h2>
+    <h2>{studio.font ? 'Glyphs' : 'Parts'}</h2>
+    {#if studio.font && studio.glyph}
+      <button class="all" onclick={() => studio.openGlyph(null)}>All glyphs</button>
+    {/if}
     {#if outline}
-      <button class="add" onclick={addPart} aria-label="Add a part" title="Add a part">+</button>
+      <button class="add" onclick={addPart} aria-label={studio.font ? 'Add a glyph' : 'Add a part'} title={studio.font ? 'Add a glyph' : 'Add a part'}>+</button>
     {/if}
   </div>
+  {#if adding !== null}
+    <!-- svelte-ignore a11y_autofocus -->
+    <input
+      class="adding"
+      aria-label="Characters of the new glyph"
+      placeholder="A, or fi for a ligature"
+      bind:value={adding}
+      autofocus
+      onkeydown={(e) => {
+        if (e.key === 'Enter') void addGlyph();
+        else if (e.key === 'Escape') adding = null;
+      }}
+      onblur={() => void addGlyph()}
+    />
+  {/if}
   {#if !outline}
     <p class="empty">{studio.editing ? 'Reading the definition…' : 'Open an icon to see its parts.'}</p>
   {:else}
@@ -156,7 +207,7 @@
                 onkeydown={(e) => {
                   if (e.key === 'F2') startRename(p);
                 }}
-                >{#if p.op !== 'part'}<span class="op">{p.op}</span>{/if}{p.name}{#if p.variant}<span class="note">
+                >{#if p.op !== 'part' && p.op !== 'glyph' && p.op !== 'notdef'}<span class="op">{p.op}</span>{/if}{p.name === ' ' ? 'space' : p.name}{#if p.variant}<span class="note">
                     in {p.variant}</span
                   >{/if}</button
               >
@@ -293,6 +344,18 @@
     border: 1px solid var(--accent);
     border-radius: 6px;
     background: var(--bg);
+  }
+  .all {
+    margin-left: auto;
+    border: 0;
+    background: transparent;
+    color: var(--accent);
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .adding {
+    margin: 4px 12px;
+    font: 12px var(--font-mono);
   }
   .op {
     margin-right: 6px;

@@ -1,7 +1,8 @@
 <!--
   The Tree tab (docs/studio-interface.md, Tree): every icon of the library
   as a live thumbnail, nested by `extends`, each icon's axis variants under
-  it, and fonts in a section of their own (#71). An icon an edit redrew
+  it, and fonts in a section of their own (#71), each with a sample line
+  set in it and its styles under it, and a font imported from there (#84). An icon an edit redrew
   gets a dot that fades; one it broke a warning mark, its last drawing
   kept and its errors on hover; one it did not change is not drawn again.
   A click opens that icon, or that variant, for editing; the one being
@@ -12,6 +13,10 @@
   import type { TreeRow } from '../lib/backend';
   import { relation } from '../lib/tree';
   import IsoIcon from './IsoIcon.svelte';
+  import ImportFont from './ImportFont.svelte';
+  import { sampleSource } from '../lib/font';
+  import type { IrIcon } from '../lib/isolex/ir';
+  import { inShell } from '../lib/backend';
 
   interface Props {
     studio: Studio;
@@ -27,7 +32,37 @@
 
   /** The row open: its definition edited, its icon (if it has one) drawn. */
   const open = (r: TreeRow) => r.definition === studio.editing && (!r.icon || r.icon === studio.icon);
+  /** Each font's and style's sample line, as the font sets it now. */
+  let samples = $state<Record<string, IrIcon>>({});
+  $effect(() => {
+    void view.library?.revision;
+    const fonts = view.tree?.fonts ?? [];
+    void (async () => {
+      const next: Record<string, IrIcon> = {};
+      for (const f of fonts) {
+        const o = await studio.backend.outline(f.name);
+        if (!o) continue;
+        for (const r of [f, ...f.children]) {
+          const d = await studio.backend.sketch(sampleSource(f.name, o, r.variant ? [r.variant] : []));
+          if (d) next[r.name] = d.ir;
+        }
+      }
+      samples = next;
+    })();
+  });
+
+  let importing = $state(false);
+
   const kindNote = (r: TreeRow) => (r.kind === 'variant' ? `variant ${r.variant ?? ''}`.trim() : r.kind === 'icon' ? '' : r.kind);
+</script>
+
+<script module lang="ts">
+  /** A thumbnail's height that fits its icon in the 40 by 32 box, by its
+      longer side: a wide icon is no wider than the box. */
+  export function thumbHeight(icon: IrIcon): number {
+    const [, , w, h] = icon.viewbox;
+    return Math.min(32, (40 * h) / (w || 1));
+  }
 </script>
 
 {#snippet rows(list: TreeRow[], depth: number)}
@@ -47,9 +82,11 @@
         onfocus={() => (hovered = r)}
         onblur={() => (hovered = null)}
       >
-        <span class="thumb">
-          {#if r.icon && view.icons[r.icon]}
-            <IsoIcon icon={view.icons[r.icon]!} height={32} />
+        <span class="thumb" class:sample={!!samples[r.name]}>
+          {#if samples[r.name]}
+            <IsoIcon icon={samples[r.name]!} height={14} />
+          {:else if r.icon && view.icons[r.icon]}
+            <IsoIcon icon={view.icons[r.icon]!} height={thumbHeight(view.icons[r.icon]!)} />
           {:else}
             <span class="glyph" aria-hidden="true">{r.kind === 'font' ? 'Aa' : r.kind === 'base' ? '◇' : '·'}</span>
           {/if}
@@ -73,12 +110,18 @@
   <ul class="top" aria-label="Icons">
     {@render rows(view.tree?.icons ?? [], 0)}
   </ul>
-  {#if view.tree?.fonts.length}
+  <div class="fonts-head">
     <h3>Fonts</h3>
+    <button onclick={() => (importing = true)} disabled={!inShell()} title={inShell() ? 'A TrueType, OpenType or WOFF font, as an isolex font' : 'Fonts are imported in the studio’s app'}>Import…</button>
+  </div>
+  {#if view.tree?.fonts.length}
     <ul class="top" aria-label="Fonts">
       {@render rows(view.tree.fonts, 0)}
     </ul>
+  {:else}
+    <p class="none">No fonts yet: import one to set text.</p>
   {/if}
+  {#if importing}<ImportFont {studio} onclose={() => (importing = false)} />{/if}
   <p class="said" role="status">{said ? `${hovered!.name}: ${said}` : ''}</p>
 </div>
 
@@ -95,8 +138,38 @@
     padding: 0;
     list-style: none;
   }
+  .fonts-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 12px 12px 4px 0;
+  }
+  .fonts-head button {
+    padding: 2px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    background: var(--raised);
+    color: var(--fg);
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .fonts-head button:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+  .none {
+    margin: 0 12px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .thumb.sample {
+    width: 96px;
+    justify-content: start;
+    padding: 0 4px;
+    overflow: hidden;
+  }
   h3 {
-    margin: 12px 12px 4px;
+    margin: 0 12px;
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 0.05em;

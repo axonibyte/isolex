@@ -17,6 +17,12 @@
 
   interface Props {
     icon: IrIcon | null;
+    /** What the canvas is called, when not its icon's name: a font, or a
+        glyph of one. */
+    label?: string | null;
+    /** Lines drawn over the icon, each with its name: a glyph's
+        baseline, ascent, descent and advance. */
+    guides?: { a: Point; b: Point; label: string }[];
     /** The tools; without them, a click selects and nothing more. */
     tools?: Tools;
     /** The shapes, by index, marked as selected, and those left out. */
@@ -30,7 +36,7 @@
     onhover?: (shape: number | null) => void;
   }
 
-  let { icon, tools, marked, hidden, onpointer, onpick, onhover }: Props = $props();
+  let { icon, label, guides = [], tools, marked, hidden, onpointer, onpick, onhover }: Props = $props();
 
   let host: HTMLDivElement;
   // unmeasured until the window lays it out
@@ -57,8 +63,11 @@
 
   /** The icon fitted to the window, when it first shows. */
   $effect(() => {
-    if (icon && icon.name !== fitted && size.w > 0 && size.h > 0) {
-      fitted = icon.name;
+    // a font's sketches are all one icon: each is known by its label and
+    // its frame, which comes a moment after the label does
+    const key = icon ? `${label ?? icon.name}|${icon.viewbox.join(' ')}` : null;
+    if (icon && key !== fitted && size.w > 0 && size.h > 0) {
+      fitted = key;
       camera = fit(icon.viewbox, size.w, size.h);
     }
   });
@@ -176,7 +185,7 @@
   bind:clientWidth={size.w}
   bind:clientHeight={size.h}
   role="application"
-  aria-label={icon ? `Canvas: ${icon.name}` : 'Canvas'}
+  aria-label={icon ? `Canvas: ${label ?? icon.name}` : 'Canvas'}
   {onwheel}
   {onpointerdown}
   {onpointermove}
@@ -207,6 +216,15 @@
           height={icon.viewbox[3]}
           vector-effect="non-scaling-stroke"
         />
+        {#each guides as g, i (i)}
+          <line class="guide" x1={g.a[0]} y1={g.a[1]} x2={g.b[0]} y2={g.b[1]} vector-effect="non-scaling-stroke" />
+          {#if g.label}
+            <!-- an upright guide is named at its foot, one across at its end -->
+            {@const upright = Math.abs(g.a[0] - g.b[0]) < Math.abs(g.a[1] - g.b[1])}
+            {@const at = upright ? g.a : g.b}
+            <text class="guide-label" x={at[0] + 4 / camera.k} y={at[1] + (upright ? 12 / camera.k : 0)} font-size={10 / camera.k}>{g.label}</text>
+          {/if}
+        {/each}
         <IsoShapes shapes={icon.shapes} tagged {marked} {hidden} />
         {#if tools}
           {#if tools.highlight}
@@ -239,6 +257,11 @@
                   ])}
                   vector-effect="non-scaling-stroke"
                 />
+              </g>
+            {:else if h.kind === 'advance'}
+              <g class="handle advance" data-handle={h.id}>
+                <rect x={h.at[0] - r * 0.6} y={h.at[1] - 3 * r} width={r * 1.2} height={6 * r} vector-effect="non-scaling-stroke" />
+                <title>{h.label}</title>
               </g>
             {:else if h.kind === 'radius' || h.kind === 'control'}
               <circle class="handle" class:control={h.kind === 'control'} data-handle={h.id} cx={h.at[0]} cy={h.at[1]} r={h.kind === 'control' ? r * 0.8 : r} vector-effect="non-scaling-stroke"><title>{h.label}</title></circle>
@@ -308,6 +331,20 @@
     stroke: var(--accent);
     stroke-width: 1.5;
     stroke-dasharray: 4 3;
+  }
+  .guide {
+    stroke: var(--accent);
+    stroke-width: 1;
+    stroke-dasharray: 2 3;
+    opacity: 0.7;
+  }
+  .guide-label {
+    fill: var(--accent);
+    font-family: var(--font-mono);
+  }
+  .handle.advance rect {
+    fill: var(--accent);
+    cursor: ew-resize;
   }
   .face {
     fill: var(--accent);

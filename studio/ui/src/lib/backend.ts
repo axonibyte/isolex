@@ -76,7 +76,7 @@ export interface Tree {
 }
 
 export interface TreeRow {
-  kind: 'base' | 'icon' | 'variant' | 'font';
+  kind: 'base' | 'icon' | 'variant' | 'font' | 'style';
   name: string;
   /** What a click opens for editing: its own, or a variant's axis. */
   definition: string;
@@ -126,7 +126,8 @@ export interface Row {
 
 export interface Part {
   name: string;
-  op: 'part' | 'replace' | 'remove';
+  /** A font's glyphs are its parts: "glyph", and "notdef". */
+  op: 'part' | 'replace' | 'remove' | 'glyph' | 'notdef';
   /** The axis variant it is written in. */
   variant: string | null;
   node: NodeAt;
@@ -145,6 +146,11 @@ export interface Outline {
   inherited: { name: string; from: string; shapes: number }[];
   /** Its footprint or canvas, its own or the nearest it extends. */
   frame: { kind: 'footprint' | 'canvas'; args: string[]; from: string | null; node: NodeAt } | null;
+  /** A font's metrics and kerning pairs, as written. */
+  font: {
+    metrics: { name: string; value: string; node: NodeAt }[];
+    kerns: { left: string; right: string; by: string; value: number | null; node: NodeAt }[];
+  } | null;
   /** Its params, own first, then inherited, nearest first. */
   params: { name: string; default: string; value: number | null; from: string | null; node: NodeAt }[];
 }
@@ -171,6 +177,17 @@ export interface Drawing {
   sources: Origin[];
 }
 
+/** A font to import, as the dialog asks for it. */
+export interface FontImport {
+  path: string;
+  name: string | null;
+  /** "ascii", "latin1", "all", or the characters. */
+  chars: string;
+  em: number | null;
+  /** Each further style: "axis.variant", and a font file or "wght:700". */
+  styles: [string, string][];
+}
+
 export interface Source {
   revision: number;
   text: string;
@@ -189,6 +206,20 @@ export interface Backend {
   /** `icon` drawn with `params` set otherwise, the library unchanged;
       none if it does not compile so. */
   preview(icon: string, params: Record<string, number>): Promise<Drawing | null>;
+  /** An icon `studio-sketch` the interface writes, compiled with the
+      library, nothing changed: how fonts are shown. None if it does not
+      compile. */
+  sketch(source: string): Promise<Drawing | null>;
+  /** A font file read into the library, one undo step; refused, saying
+      why, outside the app or when its license forbids it. */
+  importFont(font: FontImport): Promise<Answer>;
+  /** A font written in `styles` as TrueType, or a UFO, at `out`: where,
+      or an error saying why. */
+  exportFont(font: string, styles: string[], out: string, ufo: boolean): Promise<string>;
+  /** Asks the person for a file to read, or a place to write; none if
+      they cancel, or outside the app. */
+  pickFile(title: string, extensions: string[]): Promise<string | null>;
+  pickSave(title: string, name: string, extensions: string[]): Promise<string | null>;
   ask(ask: Ask, label: string): Promise<Answer>;
   choose(id: number, option: number): Promise<Answer>;
   beginGesture(): Promise<void>;
@@ -220,6 +251,14 @@ export async function shell(): Promise<Backend> {
     source: (file) => invoke('source', { file }),
     outline: (definition) => invoke('outline', { definition }),
     preview: (icon, params) => invoke('preview', { icon, params }),
+    sketch: (source) => invoke('sketch', { source }),
+    importFont: (font) => invoke('import_font', { font }),
+    exportFont: (font, styles, out, ufo) => invoke('export_font', { font, styles, out, ufo }),
+    pickFile: async (title, extensions) => {
+      const picked = await dialog.open({ title, multiple: false, filters: [{ name: 'Fonts', extensions }] });
+      return typeof picked === 'string' ? picked : null;
+    },
+    pickSave: async (title, name, extensions) => (await dialog.save({ title, defaultPath: name, filters: extensions.length ? [{ name: 'Font', extensions }] : [] })) ?? null,
     ask: (ask, label) => invoke('ask', { ask, label }),
     choose: (id, option) => invoke('choose', { id, option }),
     beginGesture: () => invoke('begin_gesture'),

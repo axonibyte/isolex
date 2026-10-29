@@ -5,6 +5,7 @@
 import type { IrIcon } from './isolex/ir';
 import type { Backend, Diag, Drawing, Graph, GraphDef, NodeAt, Notice, Origin, Outline, Row, Tree, TreeRow } from './backend';
 import { atPath, find, same } from './select';
+import { advanceOf, glyphView, gridSource, metricsOf, type GlyphView } from './font';
 
 export interface LibraryState {
   root: string;
@@ -150,6 +151,15 @@ export class Studio {
   message = $state<string>('');
   /** A place in the source to show, such as a problem's. */
   place = $state<{ file: string; line: number; col: number; message: string; severity: 'error' | 'warning' } | null>(null);
+  /** The styles a font's glyphs are set out in, on the canvas. */
+  fontStyle = $state<string[]>([]);
+  /** In a font being edited, the glyph open on the canvas, by its name
+      ("notdef" for the notdef); none for the whole font. */
+  glyph = $state<string | null>(null);
+  /** What the canvas draws for a font: its glyphs set out, or the glyph
+      open, as the core compiles it (`sketch`), with how a glyph is laid
+      out for its guides. */
+  sketch = $state<{ drawing: Drawing; glyph: GlyphView | null } | null>(null);
   /** The open icon as previewed with other params, the library as it is;
       gone once the library changes. */
   previewing = $state<{ params: Record<string, number>; drawing: Drawing } | null>(null);
@@ -213,6 +223,60 @@ export class Studio {
     return d ? { file: d.file, start: d.span.start, len: d.span.len } : null;
   }
 
+  /** A font is being edited: the canvas shows it, not an icon. */
+  get font(): boolean {
+    return this.outline?.kind === 'font';
+  }
+
+  /** What the canvas draws, and where each of its shapes is written: the
+      font's sketch while a font is edited, else the icon open. */
+  get drawing(): { ir: IrIcon; sources: Origin[] } | null {
+    if (this.font) return this.sketch?.drawing ?? null;
+    const ir = this.icon ? this.view.icons[this.icon] : undefined;
+    return ir ? { ir, sources: this.view.sources[this.icon!] ?? [] } : null;
+  }
+
+  /** Opens a glyph of the font being edited, or the whole font. */
+  openGlyph(name: string | null) {
+    if (name === this.glyph) return;
+    this.glyph = name;
+    this.selected = null;
+    this.selectedPath = null;
+    this.target = name;
+    void this.redrawSketch();
+  }
+
+  /** A style of the font switched on or off, its glyphs set in it. */
+  toggleStyle(style: string) {
+    const next = new Set(this.fontStyle);
+    if (!next.delete(style)) next.add(style);
+    this.fontStyle = [...next];
+    void this.redrawSketch();
+  }
+
+  /** The font's sketch again: its glyphs, or the one open. */
+  async redrawSketch() {
+    const o = this.outline;
+    if (!o || o.kind !== 'font') {
+      this.sketch = null;
+      return;
+    }
+    const m = metricsOf(o);
+    const part = this.glyph ? o.parts.find((p) => p.name === this.glyph) : null;
+    let source: string;
+    let glyph: GlyphView | null = null;
+    if (part) {
+      const src = await this.backend.source(part.node.file);
+      const text = src ? new TextDecoder().decode(new TextEncoder().encode(src.text).slice(part.node.start, part.node.start + part.node.len)) : '';
+      glyph = glyphView(o.definition, part.name, part.op, advanceOf(text, m), m);
+      source = glyph.source;
+    } else source = gridSource(o.definition, o, this.fontStyle).source;
+    const drawing = await this.backend.sketch(source);
+    if (o !== this.outline) return;
+    if (drawing) this.sketch = { drawing, glyph };
+    else this.message = `${o.definition} cannot be set as text now: see its problems`;
+  }
+
   /** A row of the Tree tab opened: its icon drawn, its definition (a
       variant's axis) edited. */
   openRow(row: TreeRow) {
@@ -233,6 +297,9 @@ export class Studio {
     if (emits.length && (!this.icon || !emits.includes(this.icon))) this.icon = emits[0]!;
     if (name !== this.editing) {
       this.editing = name;
+      this.glyph = null;
+      this.fontStyle = [];
+      this.sketch = null;
       this.previewing = null;
       this.place = null;
       this.outline = null;
@@ -257,6 +324,12 @@ export class Studio {
     if (!again) this.selectedPath = null;
     const own = outline?.parts.filter((p) => p.op !== 'remove') ?? [];
     if (!own.some((p) => p.name === this.target)) this.target = own.at(-1)?.name ?? null;
+    // in a font, what is drawn goes into the glyph open
+    if (outline?.kind === 'font') {
+      if (this.glyph && !own.some((p) => p.name === this.glyph)) this.glyph = null;
+      this.target = this.glyph;
+      await this.redrawSketch();
+    }
   }
 
   /** Selects the node at `node`, a part or a row of the outline, or

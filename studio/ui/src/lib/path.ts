@@ -41,14 +41,25 @@ export function toD(path: Path): string {
   return parts.join(' ');
 }
 
-/** The path data's one path, if it is one the node tool can shape: one
-    subpath of moves, lines and cubic curves. */
+/** The path data's one path, if it is one subpath the node tool shapes. */
 export function parse(d: string): Path | null {
+  const all = parseAll(d);
+  return all?.length === 1 ? all[0]! : null;
+}
+
+/** Data written from paths, a subpath each. */
+export const toDAll = (paths: Path[]): string => paths.map(toD).join(' ');
+
+/** The path data's subpaths, if each is one the node tool can shape:
+    moves, lines and curves, a quadratic one as the cubic it is (a glyph's
+    outline is often written so); none for arcs and shorthand curves. */
+export function parseAll(d: string): Path[] | null {
   const tokens = d.match(/[a-zA-Z]|-?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/g);
   if (!tokens) return null;
-  const knots: Knot[] = [];
-  let closed = false;
+  const paths: Path[] = [];
+  let knots: Knot[] = [];
   let cur: Point = [0, 0];
+  let start: Point = [0, 0];
   let cmd = '';
   let i = 0;
   const num = () => {
@@ -56,56 +67,77 @@ export function parse(d: string): Path | null {
     if (t === undefined || /[a-zA-Z]/.test(t)) throw new Error('number expected');
     return Number(t);
   };
+  const end = (closed: boolean) => {
+    if (knots.length) paths.push(tidy({ knots, closed }));
+    knots = [];
+  };
   try {
     while (i < tokens.length) {
       if (/[a-zA-Z]/.test(tokens[i]!)) cmd = tokens[i++]!;
       const rel = cmd === cmd.toLowerCase();
       const at = (x: number, y: number): Point => (rel ? [cur[0] + x, cur[1] + y] : [x, y]);
+      const to = (p: Point) => {
+        // a side drawn after a close starts again where it closed
+        if (!knots.length) knots.push({ p: cur, in: null, out: null, smooth: false });
+        cur = p;
+        knots.push({ p, in: null, out: null, smooth: false });
+      };
       switch (cmd.toUpperCase()) {
-        case 'M': {
-          // a second subpath is not one path
-          if (knots.length) return null;
+        case 'M':
+          end(false);
           cur = at(num(), num());
+          start = cur;
           knots.push({ p: cur, in: null, out: null, smooth: false });
           cmd = rel ? 'l' : 'L';
           break;
-        }
         case 'L':
-          cur = at(num(), num());
-          knots.push({ p: cur, in: null, out: null, smooth: false });
+          to(at(num(), num()));
           break;
         case 'H':
-          cur = [rel ? cur[0] + num() : num(), cur[1]];
-          knots.push({ p: cur, in: null, out: null, smooth: false });
+          to([rel ? cur[0] + num() : num(), cur[1]]);
           break;
         case 'V':
-          cur = [cur[0], rel ? cur[1] + num() : num()];
-          knots.push({ p: cur, in: null, out: null, smooth: false });
+          to([cur[0], rel ? cur[1] + num() : num()]);
           break;
         case 'C': {
           const c1 = at(num(), num());
           const c2 = at(num(), num());
+          to(at(num(), num()));
+          knots.at(-2)!.out = c1;
+          knots.at(-1)!.in = c2;
+          break;
+        }
+        case 'Q': {
+          // exactly: the cubic's handles two thirds of the way to the control
+          const q = at(num(), num());
+          const from = cur;
           const p = at(num(), num());
-          knots.at(-1)!.out = c1;
-          cur = p;
-          knots.push({ p, in: c2, out: null, smooth: false });
+          to(p);
+          knots.at(-2)!.out = [from[0] + ((q[0] - from[0]) * 2) / 3, from[1] + ((q[1] - from[1]) * 2) / 3];
+          knots.at(-1)!.in = [p[0] + ((q[0] - p[0]) * 2) / 3, p[1] + ((q[1] - p[1]) * 2) / 3];
           break;
         }
-        case 'Z': {
-          closed = true;
-          if (i < tokens.length) return null;
+        case 'Z':
+          end(true);
+          cur = start;
           break;
-        }
         default:
           return null;
       }
-      if (!knots.length) return null;
     }
   } catch {
     return null;
   }
-  // a closing curve back to the first point is the first point's
-  if (closed && knots.length > 1) {
+  end(false);
+  return paths.length ? paths : null;
+}
+
+/** A subpath as the node tool keeps it: a closing curve back to the first
+    point is the first point's, a handle on its point is none, and a point
+    whose handles are in line is smooth. */
+function tidy(path: Path): Path {
+  const knots = path.knots;
+  if (path.closed && knots.length > 1) {
     const last = knots.at(-1)!;
     const first = knots[0]!;
     if (same(last.p, first.p)) {
@@ -114,12 +146,11 @@ export function parse(d: string): Path | null {
     }
   }
   for (const k of knots) {
-    // a handle on its point is a straight side's
     if (k.in && same(k.in, k.p)) k.in = null;
     if (k.out && same(k.out, k.p)) k.out = null;
     k.smooth = turnsTogether(k);
   }
-  return knots.length ? { knots, closed } : null;
+  return path;
 }
 
 const same = (a: Point, b: Point) => Math.abs(a[0] - b[0]) < 1e-6 && Math.abs(a[1] - b[1]) < 1e-6;

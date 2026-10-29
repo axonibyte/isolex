@@ -59,6 +59,14 @@ export async function core(files: [string, string][] = [['sample.ilx', sampleSou
     source: (file) => later<Source | null>({ call: 'source', file }),
     outline: (definition) => later<Outline | null>({ call: 'outline', definition }),
     preview: (icon, params) => later<Drawing | null>({ call: 'preview', icon, params }),
+    sketch: (source) => later<Drawing | null>({ call: 'sketch', source }),
+    // the module has no font converter, and no disk
+    importFont: async () => ({ kind: 'refused', reason: 'Fonts are imported in the studio’s app' }),
+    exportFont: async () => {
+      throw new Error('Fonts are exported in the studio’s app');
+    },
+    pickFile: async () => null,
+    pickSave: async () => null,
     ask: (ask, label) => later<Answer>({ call: 'ask', ask, label }),
     choose: (id, option) => later<Answer>({ call: 'choose', id, option }),
     beginGesture: () => later({ call: 'begin_gesture' }),

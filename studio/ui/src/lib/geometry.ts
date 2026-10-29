@@ -58,6 +58,9 @@ export const SLOTS: Record<string, { names: string[]; first: number }> = {
   arc: { names: ['cx', 'cy', 'r', 'a0', 'a1'], first: 0 },
   poly: { names: [], first: 0 },
   path: { names: [], first: 0 },
+  // where words are set from; what they say, and in what, are the Design
+  // tab's
+  text: { names: ['x', 'y'], first: 0 },
 };
 
 /** The kinds drawn flat, on an anchor. */

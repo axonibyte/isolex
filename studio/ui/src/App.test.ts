@@ -52,19 +52,21 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Dark canvas' }).getAttribute('aria-pressed')).toBe('true');
   });
 
-  it('offers only the tools that are built, and those that draw in what is open', async () => {
+  it('offers the tools that draw in what is open', async () => {
     await opened();
     const rail = screen.getByRole('navigation', { name: 'Tools' });
     const tool = (name: string) => within(rail).getByRole('button', { name });
     expect(tool('Select and move').hasAttribute('disabled')).toBe(false);
     expect(tool('Cylinder').hasAttribute('disabled')).toBe(false);
     expect(tool('Pen').hasAttribute('disabled')).toBe(false);
-    expect(tool('Text').hasAttribute('disabled')).toBe(true);
+    expect(tool('Text').hasAttribute('disabled')).toBe(false);
     await fireEvent.keyDown(window, { key: 'b' });
     expect(tool('Box').getAttribute('aria-pressed')).toBe('true');
-    // a tool still to come keeps the one chosen
     await fireEvent.keyDown(window, { key: 'x' });
-    expect(tool('Box').getAttribute('aria-pressed')).toBe('true');
+    expect(tool('Text').getAttribute('aria-pressed')).toBe('true');
+    // a key no tool has keeps the one chosen
+    await fireEvent.keyDown(window, { key: 'q' });
+    expect(tool('Text').getAttribute('aria-pressed')).toBe('true');
     // Shift picks the tool on the shifted key
     await fireEvent.keyDown(window, { key: 'A', shiftKey: true });
     expect(tool('Arc').getAttribute('aria-pressed')).toBe('true');

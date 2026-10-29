@@ -55,10 +55,28 @@
 
   const view = $derived(studio.view);
   const library = $derived(view.library);
-  const icon = $derived(studio.icon ? (view.icons[studio.icon] ?? null) : null);
+  /** The styles of the font open, to set its glyphs in. */
+  const fontStyles = $derived(studio.font ? (view.tree?.fonts.find((f) => f.name === studio.editing)?.children ?? []).map((r) => r.variant ?? '').filter(Boolean) : []);
+  /** What the canvas draws: the icon open, or a font's sketch. */
+  const icon = $derived(studio.drawing?.ir ?? null);
+  /** What the canvas is called: the icon's name, or the font's and its
+      glyph's. */
+  const canvasName = $derived(studio.font ? `${studio.editing}${studio.glyph ? `, glyph ${studio.glyph}` : ''}` : (icon?.name ?? null));
+  /** A glyph's guides: its baseline, ascent, descent, origin and
+      advance, on the canvas. */
+  const guides = $derived.by(() => {
+    const g = studio.sketch?.glyph;
+    if (!g) return [];
+    const { ascent, descent, em } = g.metrics;
+    const pad = em * 0.25;
+    const at = (x: number, y: number): [number, number] => [g.map[0] * x + g.map[2] * y + g.map[6], g.map[1] * x + g.map[3] * y + g.map[7]];
+    const across = (y: number, label: string) => ({ a: at(-pad, y), b: at(g.advance + pad, y), label });
+    const down = (x: number, label: string) => ({ a: at(x, -descent), b: at(x, ascent), label });
+    return [across(0, 'baseline'), across(ascent, 'ascent'), across(-descent, 'descent'), down(0, ''), down(tools.advanceAt ?? g.advance, 'advance')];
+  });
   const def = $derived(studio.definition);
   const flat = $derived(!!icon?.canvas);
-  const sources = $derived(studio.icon ? (view.sources[studio.icon] ?? []) : []);
+  const sources = $derived(studio.drawing?.sources ?? []);
   /** The selected node's shapes on the canvas. */
   const marked = $derived(marks(sources, studio.editingNode, studio.selected));
   /** The parts hidden in the editor, by node. */
@@ -87,6 +105,12 @@
       definition's and its part is not locked. */
   function onpick(i: number | null) {
     const o = i === null ? null : sources[i];
+    // a font's glyphs set out: a click opens the glyph
+    if (studio.font && !studio.glyph) {
+      const glyph = o && studio.outline?.parts.find((p) => within(o.node, p.node));
+      if (glyph) studio.openGlyph(glyph.name);
+      return;
+    }
     const n = o ? pick(o, studio.editingNode) : null;
     if (o && !n) {
       studio.message = drawnBy(i!);
@@ -217,7 +241,7 @@
       <span class="what">
         <span class="kind">{def ? def.kind.toLowerCase() : 'icon'}</span>
         <span class="name">{studio.editing ?? studio.icon ?? '—'}</span>
-        {#if studio.icon && def && !def.emits.includes(studio.icon)}
+        {#if studio.icon && def && !def.emits.includes(studio.icon) && !studio.font}
           <span class="kind">as drawn in</span>
           <span class="name">{studio.icon}</span>
         {/if}
@@ -250,7 +274,7 @@
               aria-pressed={tools.tool === t.id}
               disabled={!usable(t)}
               aria-label={t.label}
-              title={!t.ready ? `${t.label} (${t.key}): comes with the fonts` : usable(t) ? `${t.label} (${t.key})` : `${t.label} (${t.key}): draws in a 3-D icon`}
+              title={!t.ready ? `${t.label} (${t.key}): not built yet` : usable(t) ? `${t.label} (${t.key})` : `${t.label} (${t.key}): draws in a 3-D icon`}
               onclick={() => choose(t.id)}
               ><svg viewBox="0 0 20 20" aria-hidden="true"><path d={t.d} /></svg><kbd aria-hidden="true"
                 >{#if t.key.startsWith('Shift+')}<svg class="shift" viewBox="0 0 8 8"><path d="M4 1 7.5 4.5H5.5V7h-3V4.5H.5z" /></svg>{/if}{t.key.slice(-1)}</kbd
@@ -270,6 +294,8 @@
         <Canvas
           bind:this={canvasView}
           icon={shown}
+          label={canvasName}
+          {guides}
           {tools}
           marked={studio.previewing ? undefined : marked}
           hidden={studio.previewing ? undefined : hidden}
@@ -277,6 +303,13 @@
           {onpick}
           onhover={(i) => (hover = i === null ? '' : drawnBy(i))}
         />
+        {#if studio.font && !studio.glyph && fontStyles.length}
+          <div class="styles" role="group" aria-label="Styles shown">
+            {#each fontStyles as s (s)}
+              <button aria-pressed={studio.fontStyle.includes(s)} onclick={() => studio.toggleStyle(s)}>{s}</button>
+            {/each}
+          </div>
+        {/if}
         {#if icon}
           <label class="snap">
             Snap
@@ -520,6 +553,30 @@
     top: 40%;
     transform: translateX(-50%);
     color: var(--frame);
+  }
+  .styles {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    display: flex;
+    gap: 2px;
+    padding: 4px;
+    border-radius: 8px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+  }
+  .styles button {
+    padding: 3px 9px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .styles button[aria-pressed='true'] {
+    background: var(--raised);
+    color: var(--fg);
   }
   .snap {
     position: absolute;
