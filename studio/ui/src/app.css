@@ -98,6 +98,15 @@ select {
   color: inherit;
 }
 
+/* a native select is drawn by the platform, its background its own unless
+   it is said: Chromium on Linux draws it light under the theme's light
+   text */
+select,
+option {
+  background-color: var(--panel);
+  color: var(--fg);
+}
+
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
