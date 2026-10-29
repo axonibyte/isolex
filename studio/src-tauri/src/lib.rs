@@ -187,16 +187,54 @@ fn reload(open: State<Open>) -> Result<(), String> {
     with(&open, |s| s.reload().map_err(|e| e.to_string()))?
 }
 
-/// Opens the window and serves the interface's commands until it closes;
-/// the folder is looked at for outside changes every second.
 /// The library folder the app was started with, if any: `isolex-studio
-/// <folder>` opens it.
+/// <folder>` opens it, as does ISOLEX_STUDIO_LIBRARY when no folder is
+/// given (msedgedriver, which starts the app for its end-to-end test on
+/// Windows, gives it no command line of its own).
 struct Startup(Option<String>);
 
-/// The first argument that is not a flag and is a folder.
-fn startup_folder(args: impl IntoIterator<Item = String>) -> Option<String> {
+/// The first argument that is not a flag and is a folder; else `env`, if
+/// it is a folder.
+fn startup_folder(args: impl IntoIterator<Item = String>, env: Option<String>) -> Option<String> {
+    let is_dir = |a: &String| std::path::Path::new(a).is_dir();
     args.into_iter()
-        .find(|a| !a.starts_with('-') && std::path::Path::new(a).is_dir())
+        .find(|a| !a.starts_with('-') && is_dir(a))
+        .or(env.filter(is_dir))
+}
+
+/// What wry gives WebView2 when the app gives it nothing: giving it
+/// anything replaces these.
+const WEBVIEW2_DEFAULT_ARGS: &str =
+    "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection \
+     --autoplay-policy=no-user-gesture-required";
+
+/// WebView2's browser arguments: `base`, and `extra` from
+/// WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS, as msedgedriver sets it to
+/// debug the app. Some WebView2 runtimes take the app's arguments instead
+/// of that variable's, never both, so the app passes both itself; the
+/// lists of disabled features are joined, since only one would count.
+fn browser_args(base: &str, extra: &str) -> String {
+    const DISABLE: &str = "--disable-features=";
+    let mut features: Vec<&str> = Vec::new();
+    let mut rest: Vec<&str> = Vec::new();
+    for arg in base.split_whitespace().chain(extra.split_whitespace()) {
+        match arg.strip_prefix(DISABLE) {
+            Some(list) => {
+                for f in list.split(',').filter(|f| !f.is_empty()) {
+                    if !features.contains(&f) {
+                        features.push(f);
+                    }
+                }
+            }
+            None => rest.push(arg),
+        }
+    }
+    let disable = (!features.is_empty()).then(|| format!("{DISABLE}{}", features.join(",")));
+    disable
+        .into_iter()
+        .chain(rest.into_iter().map(String::from))
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// The folder the app was started with, which the interface opens first.
@@ -205,12 +243,33 @@ fn startup(start: State<Startup>) -> Option<String> {
     start.0.clone()
 }
 
+/// Opens the window and serves the interface's commands until it closes;
+/// the folder is looked at for outside changes every second.
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(Open::default())
-        .manage(Startup(startup_folder(std::env::args().skip(1))))
+        .manage(Startup(startup_folder(
+            std::env::args().skip(1),
+            std::env::var("ISOLEX_STUDIO_LIBRARY").ok(),
+        )))
         .setup(|app| {
+            // the window, from tauri.conf.json, with WebView2 told what a
+            // driver asks of it (only then: otherwise as wry has it)
+            let config = app
+                .config()
+                .app
+                .windows
+                .first()
+                .cloned()
+                .ok_or("tauri.conf.json declares no window")?;
+            let mut window = tauri::WebviewWindowBuilder::from_config(app.handle(), &config)?;
+            if let Ok(extra) = std::env::var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS") {
+                window =
+                    window.additional_browser_args(&browser_args(WEBVIEW2_DEFAULT_ARGS, &extra));
+            }
+            window.build()?;
+
             let handle = app.handle().clone();
             std::thread::spawn(move || loop {
                 std::thread::sleep(Duration::from_secs(1));
@@ -267,10 +326,54 @@ mod tests {
         let here = env!("CARGO_MANIFEST_DIR").to_string();
         let args = |a: &[&str]| a.iter().map(|s| s.to_string()).collect::<Vec<_>>();
         assert_eq!(
-            super::startup_folder(args(&["--flag", &here])),
+            super::startup_folder(args(&["--flag", &here]), None),
             Some(here.clone())
         );
-        assert_eq!(super::startup_folder(args(&["not-a-folder"])), None);
-        assert_eq!(super::startup_folder(args(&[])), None);
+        assert_eq!(super::startup_folder(args(&["not-a-folder"]), None), None);
+        assert_eq!(super::startup_folder(args(&[]), None), None);
+    }
+
+    #[test]
+    fn without_one_isolex_studio_library_is_the_library_to_open() {
+        let here = env!("CARGO_MANIFEST_DIR").to_string();
+        let src = format!("{here}/src");
+        // the variable, when nothing is given
+        assert_eq!(
+            super::startup_folder(Vec::new(), Some(here.clone())),
+            Some(here.clone())
+        );
+        // the command line first
+        assert_eq!(
+            super::startup_folder(vec![src.clone()], Some(here.clone())),
+            Some(src)
+        );
+        // and never a folder that is not there
+        assert_eq!(
+            super::startup_folder(Vec::new(), Some("not-a-folder".into())),
+            None
+        );
+    }
+
+    #[test]
+    fn a_drivers_webview2_arguments_join_the_apps() {
+        let joined = super::browser_args(
+            super::WEBVIEW2_DEFAULT_ARGS,
+            "--enable-automation --disable-features=IgnoreDuplicateNavs,Prewarm --remote-debugging-port=0",
+        );
+        assert_eq!(
+            joined,
+            "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,IgnoreDuplicateNavs,Prewarm \
+             --autoplay-policy=no-user-gesture-required --enable-automation --remote-debugging-port=0"
+        );
+        // nothing extra: the defaults, as wry has them
+        assert_eq!(
+            super::browser_args(super::WEBVIEW2_DEFAULT_ARGS, ""),
+            super::WEBVIEW2_DEFAULT_ARGS
+        );
+        // a feature named twice is disabled once
+        assert_eq!(
+            super::browser_args("--disable-features=A,B", "--disable-features=B,C"),
+            "--disable-features=A,B,C"
+        );
     }
 }

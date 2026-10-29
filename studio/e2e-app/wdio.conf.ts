@@ -17,10 +17,18 @@ const studio = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const exe = process.platform === 'win32' ? '.exe' : '';
 const application = join(studio, 'src-tauri', 'target', 'debug', `isolex-studio${exe}`);
 
-// the library the app opens: a copy, which the test saves into
-const library = mkdtempSync(join(tmpdir(), 'isolex-studio-e2e-'));
-copyFileSync(join(studio, '..', 'tests', 'fixtures', 'sample.ilx'), join(library, 'sample.ilx'));
-process.env.STUDIO_E2E_LIBRARY = library;
+// the library the app opens: a copy, which the test saves into. This file
+// is read by the launcher, which starts the app, and again by the worker,
+// which runs the test and inherits the launcher's environment: one copy,
+// made once, or the test reads a copy the app never opened.
+function copyOfSample(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'isolex-studio-e2e-'));
+  copyFileSync(join(studio, '..', 'tests', 'fixtures', 'sample.ilx'), join(dir, 'sample.ilx'));
+  return dir;
+}
+const library = (process.env.STUDIO_E2E_LIBRARY ??= copyOfSample());
+// on Windows only, so that Linux tests the command line
+if (process.platform === 'win32') process.env.ISOLEX_STUDIO_LIBRARY = library;
 
 /** tauri-driver: on the PATH, or where cargo install puts it. */
 function driver(): string {
@@ -42,7 +50,13 @@ export const config: WebdriverIO.Config = {
       maxInstances: 1,
       // tauri-driver speaks classic WebDriver
       'wdio:enforceWebDriverClassic': true,
-      'tauri:options': { application, args: [library] },
+      // webviewOptions: msedgedriver drives WebView2 in the app, not
+      // the app as the Edge browser (tauri-driver passes it on Windows only)
+      // the library: on Linux on the command line; on Windows, where
+      // msedgedriver gives args to WebView2 and not to the app, through
+      // ISOLEX_STUDIO_LIBRARY, which reaches the app through tauri-driver
+      // and msedgedriver
+      'tauri:options': { application, args: process.platform === 'win32' ? [] : [library], webviewOptions: {} },
     } as WebdriverIO.Capabilities,
   ],
   logLevel: 'warn',
@@ -50,9 +64,13 @@ export const config: WebdriverIO.Config = {
   framework: 'mocha',
   mochaOpts: { ui: 'bdd', timeout: 180_000 },
 
-  // the app, built against the interface as the shell serves it
+  // the app, built against the interface as the shell serves it: as a
+  // production build, whatever NODE_ENV WebdriverIO sets (it sets "test",
+  // which Vite takes for development, compiling in the browser's stand-in
+  // core, which needs the WebAssembly module)
   onPrepare: () => {
-    const built = spawnSync('npm', ['run', 'tauri', '--', 'build', '--debug', '--no-bundle'], { cwd: studio, stdio: 'inherit', shell: true });
+    const env = { ...process.env, NODE_ENV: 'production' };
+    const built = spawnSync('npm', ['run', 'tauri', '--', 'build', '--debug', '--no-bundle'], { cwd: studio, stdio: 'inherit', shell: true, env });
     if (built.status !== 0) throw new Error('the app did not build');
   },
   beforeSession: () => {

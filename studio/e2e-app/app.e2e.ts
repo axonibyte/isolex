@@ -50,6 +50,9 @@ async function drag([x0, y0]: [number, number], [x1, y1]: [number, number]) {
   await mouse().move({ x: x0, y: y0 }).down().move({ x: x1, y: y1, duration: 250 }).up().perform();
 }
 
+/** A tab, by its name (classic WebDriver takes no CSS-with-text selectors). */
+const tab = (name: string) => $(`//button[@role="tab"][normalize-space()="${name}"]`);
+
 const sourceText = () => browser.execute(() => (document.querySelector('textarea') as HTMLTextAreaElement | null)?.value ?? '');
 
 describe('isolex studio, built', () => {
@@ -60,10 +63,10 @@ describe('isolex studio, built', () => {
     await browser.waitUntil(async () => ((await canvas.getAttribute('aria-label')) ?? '').startsWith('Canvas: '), { timeout: 60_000 });
 
     // switch-l2, from the Tree, its source beside it
-    await $('button[role=tab]=Tree').click();
+    await tab('Tree').click();
     await $('[aria-label="Icons"] [data-name="switch-l2"]').click();
     await browser.waitUntil(async () => (await canvas.getAttribute('aria-label')) === 'Canvas: switch-l2', { timeout: 30_000 });
-    await $('button[role=tab]=Source').click();
+    await tab('Source').click();
     await browser.waitUntil(async () => (await sourceText()).includes('icon "switch-l2"'), { timeout: 30_000 });
 
     // a box: its footprint dragged on the floor, then its height, clicked
@@ -86,7 +89,7 @@ describe('isolex studio, built', () => {
     await browser.waitUntil(async () => (await sourceText()).includes('path d="M-30,40 L-10,40 L-10,52"'), { timeout: 30_000, timeoutMsg: 'the path was not written' });
 
     // another icon, from the Tree
-    await $('button[role=tab]=Tree').click();
+    await tab('Tree').click();
     await $('[aria-label="Icons"] [data-name="switch-poe"]').click();
     await browser.waitUntil(async () => (await canvas.getAttribute('aria-label')) === 'Canvas: switch-poe', { timeout: 30_000 });
 
