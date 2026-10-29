@@ -36,14 +36,14 @@ const solid = (kind: string, values: number[], extra: Partial<Solid> = {}): Soli
 describe('geometry', () => {
   const l3 = solids(studio.sources['switch-l3']!, nodeOf('switch-l3'));
 
-  it('finds the solids drawn: one box of three faces, twelve ports', () => {
-    expect(l3.map((s) => s.kind)).toEqual(['box', ...Array(12).fill('facerect')]);
+  it('finds the solids drawn: one box of three faces, twelve ports, a badge', () => {
+    expect(l3.map((s) => s.kind)).toEqual(['box', ...Array(12).fill('facerect'), 'path']);
     expect(l3[0]!.shapes).toEqual([0, 1, 2]);
     expect(l3[0]!.values).toEqual([0, 0, 0, 2, 1, 0.28]);
     // drawn from elsewhere: nothing to select while switch-l3 is edited
     expect(l3[0]!.select).toBeNull();
     expect(l3[1]!.copy).toBe(true);
-    expect(new Set(l3.slice(1).map((s) => s.values[0])).size).toBe(12);
+    expect(new Set(l3.slice(1, 13).map((s) => s.values[0])).size).toBe(12);
   });
 
   it('maps a node’s point to the viewBox and the floor back', () => {

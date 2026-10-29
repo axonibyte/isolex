@@ -2,10 +2,10 @@
   The canvas (docs/studio-interface.md, The canvas): the open icon as
   isolex draws it, over its grid and frame, zoomed and panned as the spec
   says. The tools (lib/tools.svelte.ts) take presses on it: a click
-  selects (#68); the Select, Box and Tile tools drag, resize and draw
-  (#69), with handles, the shape being drawn, the snap indicator and the
-  size beside the pointer drawn over the icon, and the popover for an
-  edit the core needs a choice for.
+  selects (#68); the tools drag, resize, shape and draw (#69, #83), with
+  handles, the shape being drawn, the snap indicator and the size beside
+  the pointer drawn over the icon, and the popover for an edit the core
+  needs a choice for.
 -->
 <script lang="ts">
   import type { IrIcon } from '../lib/isolex/ir';
@@ -44,6 +44,7 @@
   let hovered: number | null = null;
 
   const tool = $derived(tools?.tool ?? 'select');
+  const drawing = $derived(!['select', 'node', 'hand'].includes(tool));
 
   /** The index of the shape an event is on, and the handle. */
   function shapeOf(e: Event): number | null {
@@ -113,7 +114,7 @@
       return;
     }
     const at = toCanvas(camera, local(e));
-    if (pressed || tool === 'box' || tool === 'tile') tools?.move(press(e, pressed?.shape ?? null, null));
+    tools?.move(press(e, pressed?.shape ?? shapeOf(e), null), !!pressed);
     if (!pressed) {
       const over = shapeOf(e);
       if (over !== hovered) {
@@ -126,6 +127,11 @@
       const [x, y] = onFloor(at);
       onpointer?.(`x ${n(x)} · y ${n(y)} · z 0.00`);
     }
+  }
+
+  function ondblclick(e: MouseEvent) {
+    if (!icon || !tools) return;
+    tools.double({ at: toCanvas(camera, local(e)), shape: shapeOf(e), handle: handleOf(e), alt: e.altKey, shift: e.shiftKey, scale: camera.k });
   }
 
   function onkeydown(e: KeyboardEvent) {
@@ -165,7 +171,7 @@
 <div
   class="canvas"
   class:panning={space || pan || tool === 'hand'}
-  class:drawing={tool === 'box' || tool === 'tile'}
+  class:drawing
   bind:this={host}
   bind:clientWidth={size.w}
   bind:clientHeight={size.h}
@@ -175,6 +181,7 @@
   {onpointerdown}
   {onpointermove}
   {onpointerup}
+  {ondblclick}
   onpointercancel={() => {
     pan = null;
     pressed = null;
@@ -202,8 +209,19 @@
         />
         <IsoShapes shapes={icon.shapes} tagged {marked} {hidden} />
         {#if tools}
+          {#if tools.highlight}
+            <polygon class="face" points={line(tools.highlight)} vector-effect="non-scaling-stroke" />
+          {/if}
           {#each tools.preview as ps, i (i)}
             <polyline class="preview" points={line(ps)} vector-effect="non-scaling-stroke" />
+          {/each}
+          {#each tools.dots as d, i (i)}
+            <circle class="dot" class:first={d.first} cx={d.at[0]} cy={d.at[1]} r={3.5 / camera.k} vector-effect="non-scaling-stroke" />
+          {/each}
+          {#each handles as h (h.id)}
+            {#if h.from}
+              <line class="arm" x1={h.from[0]} y1={h.from[1]} x2={h.at[0]} y2={h.at[1]} vector-effect="non-scaling-stroke" />
+            {/if}
           {/each}
           {#if tools.indicator}
             <circle class="snapped" cx={tools.indicator.at[0]} cy={tools.indicator.at[1]} r={5 / camera.k} vector-effect="non-scaling-stroke" />
@@ -222,8 +240,10 @@
                   vector-effect="non-scaling-stroke"
                 />
               </g>
-            {:else if h.kind === 'radius'}
-              <circle class="handle" data-handle={h.id} cx={h.at[0]} cy={h.at[1]} {r} vector-effect="non-scaling-stroke" />
+            {:else if h.kind === 'radius' || h.kind === 'control'}
+              <circle class="handle" class:control={h.kind === 'control'} data-handle={h.id} cx={h.at[0]} cy={h.at[1]} r={h.kind === 'control' ? r * 0.8 : r} vector-effect="non-scaling-stroke"><title>{h.label}</title></circle>
+            {:else if h.kind === 'point'}
+              <rect class="handle point" class:first={h.first} class:touched={tools.touched === Number(h.id.slice(3))} data-handle={h.id} x={h.at[0] - r} y={h.at[1] - r} width={2 * r} height={2 * r} vector-effect="non-scaling-stroke"><title>{h.label}</title></rect>
             {:else}
               <rect class="handle" data-handle={h.id} x={h.at[0] - r} y={h.at[1] - r} width={2 * r} height={2 * r} vector-effect="non-scaling-stroke" />
             {/if}
@@ -288,6 +308,31 @@
     stroke: var(--accent);
     stroke-width: 1.5;
     stroke-dasharray: 4 3;
+  }
+  .face {
+    fill: var(--accent);
+    fill-opacity: 0.18;
+    stroke: var(--accent);
+    stroke-width: 1.5;
+  }
+  .dot {
+    fill: var(--canvas);
+    stroke: var(--accent);
+    stroke-width: 1.5;
+  }
+  .dot.first,
+  .handle.point.first {
+    fill: var(--accent);
+  }
+  .handle.point.touched {
+    stroke-width: 2.5;
+  }
+  .arm {
+    stroke: var(--accent);
+    stroke-width: 1;
+  }
+  .handle.control {
+    fill: var(--accent);
   }
   .snapped {
     fill: none;

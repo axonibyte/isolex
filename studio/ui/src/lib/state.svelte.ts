@@ -22,6 +22,9 @@ export interface View {
   /** The newest compile: which revision, its problems, its icons. */
   compiled: { generation: number; revision: number; errors: Diag[]; warnings: Diag[]; icons: string[] } | null;
   palette: Record<string, { light: string; dark: string }> | null;
+  /** The tokens and stroke widths the lexicon declares, which paint is
+      chosen from; empty when it declares none. */
+  lexicon: { tokens: string[]; widths: number[] };
   /** Each icon's last good drawing. */
   icons: Record<string, IrIcon>;
   /** Where each shape of that drawing is written. */
@@ -37,6 +40,7 @@ export const empty = (): View => ({
   graph: null,
   compiled: null,
   palette: null,
+  lexicon: { tokens: [], widths: [] },
   icons: {},
   sources: {},
   broken: {},
@@ -69,6 +73,7 @@ export function reduce(v: View, n: Notice): View {
         ...v,
         compiled: { generation: n.generation, revision: n.revision, errors: n.errors, warnings: n.warnings, icons: n.icons },
         palette: n.palette,
+        lexicon: { tokens: n.tokens, widths: n.stroke_widths },
       };
     }
     case 'icon': {

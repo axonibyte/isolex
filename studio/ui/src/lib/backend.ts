@@ -53,6 +53,9 @@ export type Notice =
       errors: Diag[];
       warnings: Diag[];
       palette: Record<string, { light: string; dark: string }> | null;
+      /** What the lexicon block declares; empty when it declares none. */
+      tokens: string[];
+      stroke_widths: number[];
       icons: string[];
     }
   | { kind: 'icon'; name: string; ir: IrIcon; sources: Origin[] }

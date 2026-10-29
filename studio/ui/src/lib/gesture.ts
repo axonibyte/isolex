@@ -3,7 +3,7 @@
 // arguments that changed; the node a drawn box or tile is written as.
 // Pure: the tools turn these into asks.
 
-import type { Point } from './geometry';
+import type { Point, Point3 } from './geometry';
 import { SLOTS, type Solid } from './geometry';
 import { clean, snapValue } from './snap';
 
@@ -21,6 +21,8 @@ export function changes(s: Solid, next: number[]): Change[] {
   if (!slots) return [];
   const out: Change[] = [];
   next.forEach((v, i) => {
+    // only what is written as an argument
+    if (i >= slots.names.length) return;
     const value = clean(v);
     if (value !== clean(s.values[i]!)) out.push({ index: slots.first + i, value, name: slots.names[i]! });
   });
@@ -147,3 +149,23 @@ export function rect(a: Point, b: Point): [number, number, number, number] {
 
 /** Numbers as the feedback beside the pointer writes them. */
 export const size = (...v: number[]): string => v.map(n).join(' × ');
+
+/** A cylinder centered at `c` on height `z`, of radius `r`, `h` tall. */
+export const cylinderText = (c: Point, z: number, r: number, h: number): string => `cylinder ${n(c[0])} ${n(c[1])} ${n(z)} ${n(r)} ${n(h)}`;
+
+/** A shadow centered at `c`. */
+export const shadowText = (c: Point, rx: number, ry: number): string => `shadow ${n(c[0])} ${n(c[1])} ${n(rx)} ${n(ry)}`;
+
+/** A segment between two points, each on its own floor. */
+export const segText = (a: Point3, b: Point3): string => `seg ${a.map(n).join(' ')} ${b.map(n).join(' ')}`;
+
+/** A 3-D polygon, a point a line. */
+export const poly3dText = (pts: Point3[]): string => `poly3d {\n${pts.map((p) => `  pt ${p.map(n).join(' ')}`).join('\n')}\n}`;
+
+/** A face rect on the wall `wall` (y for the front, x for the right)
+    between two points on it, each (along, z). */
+export function faceRectText(face: 'front' | 'right', wall: number, a: Point, b: Point): string {
+  const [along, z, extent, h] = rect(a, b);
+  const [x, y] = face === 'front' ? [along, wall] : [wall, along];
+  return `facerect "${face}" ${n(x)} ${n(y)} ${n(z)} ${n(extent)} ${n(h)}`;
+}

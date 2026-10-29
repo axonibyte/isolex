@@ -115,11 +115,14 @@ fn opening_editing_choosing_undoing_and_saving() {
     };
     window.wait(0, |n| matches!(n, Notice::Graph { .. }));
     let compiled = window.wait(0, |n| matches!(n, Notice::Compiled { revision: 0, .. }));
-    // the sample's grant is a warning, not an error, and it has no palette
+    // the sample's grant is a warning, not an error, and it has no palette;
+    // paint is chosen from the tokens and widths its lexicon declares
     let Notice::Compiled {
         errors,
         warnings,
         palette,
+        tokens,
+        stroke_widths,
         ..
     } = window.seen.lock().unwrap()[compiled].clone()
     else {
@@ -128,6 +131,9 @@ fn opening_editing_choosing_undoing_and_saving() {
     assert!(errors.is_empty());
     assert_eq!(warnings.len(), 1, "{warnings:?}");
     assert!(palette.is_none());
+    assert_eq!(tokens.len(), 8);
+    assert_eq!(tokens[0], "ink");
+    assert_eq!(stroke_widths, [1.2, 1.4, 1.5, 2.2]);
     // and its text, for the Source tab
     let src = s.source("sample.ilx").unwrap();
     assert_eq!(

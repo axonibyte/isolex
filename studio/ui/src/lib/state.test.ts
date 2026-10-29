@@ -22,6 +22,8 @@ const compiled = (generation: number): Notice => ({
   errors: [],
   warnings: [],
   palette: null,
+  tokens: ['ink', 'outline'],
+  stroke_widths: [1.2],
   icons: [`g${generation}`],
 });
 const library = (modified: boolean): Notice => ({
@@ -40,6 +42,8 @@ describe('reduce', () => {
     const v = [compiled(2), compiled(1)].reduce(reduce, empty());
     expect(v.compiled?.generation).toBe(2);
     expect(reduce(v, compiled(3)).compiled?.icons).toEqual(['g3']);
+    // and what paint is chosen from
+    expect(v.lexicon).toEqual({ tokens: ['ink', 'outline'], widths: [1.2] });
   });
 
   it('keeps a broken icon’s last drawing, and mends it', () => {

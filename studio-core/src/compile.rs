@@ -35,12 +35,15 @@ pub type Snapshot = Arc<Vec<(String, String)>>;
 pub type Diag = isolex::parser::Diag;
 
 /// The lexicon's own problems: those that fail it, and those that do not;
-/// and its `palette` block, when it has one.
+/// its `palette` block, when it has one; and the tokens and stroke widths
+/// its `lexicon` block declares, none when it declares none.
 #[derive(Debug, Clone, Default, PartialEq, serde::Serialize)]
 pub struct Problems {
     pub errors: Vec<Diag>,
     pub warnings: Vec<Diag>,
     pub palette: Option<BTreeMap<String, isolex::Colors>>,
+    pub tokens: Vec<String>,
+    pub stroke_widths: Vec<f64>,
 }
 
 /// A node of the source, by file and byte range.
@@ -121,6 +124,14 @@ impl Compiler for Isolex {
             errors: o.errors.clone(),
             warnings: o.warnings.clone(),
             palette: o.palette.clone(),
+            tokens: prepared
+                .config()
+                .map(|c| c.tokens.clone())
+                .unwrap_or_default(),
+            stroke_widths: prepared
+                .config()
+                .map(|c| c.stroke_widths.clone())
+                .unwrap_or_default(),
         };
         let names = isolex::graph(files)
             .definitions

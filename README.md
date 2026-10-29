@@ -69,15 +69,18 @@ under it, in SPEC §1's order, which `isolex::library::order` gives for
 paths it has already. A compilation also says where each shape of
 the IR came from (`Compilation::provenance`): the node that drew it, the
 definition and part it is written in, the inserts, repeats, badges and
-texts it came through, and the map from that node's own coordinates to
-the viewBox, so an editor can find the source of a shape on screen. And
+texts it came through, the map from that node's own coordinates to
+the viewBox, and the numbers the node came to in that copy, so an editor
+can find the source of a shape on screen and move it there. And
 `isolex::graph` gives a library's definitions, with the icons each
 emits, and every reference from one to another (`extends`, `insert`,
 `badge`, `axes` and a text's font), each with where the name is written. An editor
 that compiles as you type keeps an `isolex::Prepared`: the lexicon
 parsed and resolved once, shared between threads, each icon compiled
 from it on its own and cancelled, through a flag, once a newer edit
-makes it moot. `compile_one` and `compile_many` are built on it.
+makes it moot; its `config` is the `lexicon` block's settings, the
+tokens and stroke widths an editor offers. `compile_one` and
+`compile_many` are built on it.
 
 ## Documentation
 

@@ -15,6 +15,8 @@
   import PartsPanel from './components/PartsPanel.svelte';
   import { marks, pick, source, within } from './lib/select';
   import { Tools } from './lib/tools.svelte';
+  import { TOOLS, fits, toolFor, type Tool } from './lib/keymap';
+  import DesignTab from './components/DesignTab.svelte';
   import { STEPS, stepLabel } from './lib/snap';
 
   interface Props {
@@ -103,37 +105,33 @@
     return paletteCss(Object.entries(p).map(([token, c]) => ({ token, light: c.light, dark: c.dark })));
   });
 
-  /** The tools, as the spec lists them; those not built yet are shown
-      disabled, so the rail does not change shape as they arrive. */
-  const TOOLS = [
-    { id: 'select', key: 'V', label: 'Select and move', d: 'M5 3v13l3.5-3.5 2.6 5 2-1-2.6-5H16z', ready: true },
-    { id: 'node', key: 'A', label: 'Node', d: 'M4 15C6 6 14 6 16 15M2.5 13.5h3v3h-3zM14.5 13.5h3v3h-3zM8.5 4.5h3v3h-3z', ready: false },
-    {
-      id: 'hand',
-      key: 'H',
-      label: 'Pan',
-      d: 'M7 10V5.5a1.3 1.3 0 0 1 2.6 0V9m0-4.5V4a1.3 1.3 0 0 1 2.6 0v5m0-3.5a1.3 1.3 0 0 1 2.6 0V11m0-3a1.3 1.3 0 0 1 2.6 0v4a6 6 0 0 1-6 6h-.5a6 6 0 0 1-4.6-2.2L3.5 12a1.3 1.3 0 0 1 2-1.7L7 12',
-      ready: true,
-    },
-    null,
-    { id: 'box', key: 'B', label: 'Box', d: 'M10 2 17 6v8l-7 4-7-4V6zM3 6l7 4 7-4M10 10v8', ready: true },
-    { id: 'tile', key: 'T', label: 'Tile', d: 'M10 5 18 10 10 15 2 10z', ready: true },
-    { id: 'cyl', key: 'C', label: 'Cylinder', d: 'M4 6a6 2.5 0 1 0 12 0a6 2.5 0 1 0-12 0M4 6v8a6 2.5 0 0 0 12 0V6', ready: false },
-    { id: 'face', key: 'F', label: 'Face rect', d: 'M3 6l7 4v8l-7-4zM5 9.5l3 1.7v3.5l-3-1.7z', ready: false },
-    null,
-    { id: 'line', key: 'L', label: 'Line', d: 'M4 16 16 4', ready: false },
-    { id: 'rect', key: 'R', label: 'Rectangle', d: 'M3 5h14v10H3z', ready: false },
-    { id: 'ellipse', key: 'E', label: 'Ellipse', d: 'M3 10a7 5 0 1 0 14 0a7 5 0 1 0-14 0', ready: false },
-    { id: 'poly', key: 'G', label: 'Polygon', d: 'M10 3 17 8 14 17H6L3 8z', ready: false },
-    { id: 'pen', key: 'P', label: 'Pen', d: 'M4 16 12 4l4 4L6 18zM12 4l2-2 4 4-2 2', ready: false },
-  ];
+  /** The rail: those not built yet are shown disabled, so it does not
+      change shape as they arrive, and 3-D tools in a flat icon too. */
+  const usable = (t: Tool) => t.ready && fits(t, flat);
+  // a 3-D tool has nothing to draw in a flat icon
+  $effect(() => {
+    const t = TOOLS.find((t) => t?.id === tools.tool);
+    if (t && !fits(t, flat)) choose('select');
+  });
   const tools = new Tools(studio);
   /** What each tool does, for the hint line. */
   const HINTS: Record<string, string> = {
     select: 'Click to select · drag to move · Alt+drag lifts · arrows nudge, PageUp and PageDown raise and lower',
+    node: 'Drag a point or a handle · Alt keeps a smooth point’s handles apart · Alt+click switches corner and smooth · double-click a side adds a point · Delete removes one',
+    hand: 'Drag to pan',
     box: 'Drag a footprint, move up for the height, and click · started on a top face, it stands on it',
     tile: 'Drag a footprint on the floor',
-    hand: 'Drag to pan',
+    cylinder: 'Drag from the center out to the radius, move up for the height, and click',
+    facerect: 'Drag a rectangle on the front or the right side of a box',
+    shadow: 'Drag from the center out to an ellipse on the floor',
+    seg: 'Click one end on a floor, then the other',
+    poly3d: 'Click each point on a floor; click the first, or press Enter, to close',
+    line: 'Drag · Shift keeps 15° steps',
+    rect: 'Drag · Shift for a square',
+    ellipse: 'Drag · Shift for a circle',
+    arc: 'Drag the radius from the center, then move round for the sweep, and click',
+    poly: 'Click each corner; click the first, or press Enter, to close',
+    pen: 'Click for a corner, drag for a smooth point; click the first point to close, Enter to leave it open',
   };
 
   const TABS = [
@@ -172,8 +170,8 @@
     } else if (!mod && !e.altKey && e.key === '0') {
       canvasView?.fitIcon();
     } else if (!mod && !e.altKey) {
-      const t = TOOLS.find((t) => t?.key.toLowerCase() === key);
-      if (t?.ready) choose(t.id);
+      const t = toolFor(e.key, e.shiftKey);
+      if (t && usable(t)) choose(t.id);
     }
   }
 
@@ -242,11 +240,13 @@
             <button
               class="tool"
               aria-pressed={tools.tool === t.id}
-              disabled={!t.ready}
+              disabled={!usable(t)}
               aria-label={t.label}
-              title={t.ready ? `${t.label} (${t.key})` : `${t.label} (${t.key}): comes with the drawing tools`}
+              title={!t.ready ? `${t.label} (${t.key}): comes with the fonts` : usable(t) ? `${t.label} (${t.key})` : `${t.label} (${t.key}): draws in a 3-D icon`}
               onclick={() => choose(t.id)}
-              ><svg viewBox="0 0 20 20" aria-hidden="true"><path d={t.d} /></svg><kbd aria-hidden="true">{t.key}</kbd></button
+              ><svg viewBox="0 0 20 20" aria-hidden="true"><path d={t.d} /></svg><kbd aria-hidden="true"
+                >{#if t.key.startsWith('Shift+')}<svg class="shift" viewBox="0 0 8 8"><path d="M4 1 7.5 4.5H5.5V7h-3V4.5H.5z" /></svg>{/if}{t.key.slice(-1)}</kbd
+              ></button
             >
           {:else}
             <span class="sep"></span>
@@ -269,7 +269,7 @@
           {onpick}
           onhover={(i) => (hover = i === null ? '' : drawnBy(i))}
         />
-        {#if icon && !flat}
+        {#if icon}
           <label class="snap">
             Snap
             <select bind:value={tools.step}>
@@ -292,6 +292,8 @@
         <div class="pane" id="pane" role="tabpanel" aria-labelledby="tab-{tab}">
           {#if tab === 'source'}
             <SourceTab {studio} />
+          {:else if tab === 'design'}
+            <DesignTab {studio} {tools} look={canvas === 'dark' ? 'iso-dark' : 'iso-light'} />
           {:else if tab === 'tree'}
             <ul class="icons {canvas === 'dark' ? 'iso-dark' : 'iso-light'}" aria-label="Icons">
               {#each view.compiled?.icons ?? [] as name (name)}
@@ -305,7 +307,7 @@
               {/each}
             </ul>
           {:else}
-            <p class="empty">{tab === 'design' ? 'The selection’s numbers and paint appear here with selection.' : 'The open icon at real sizes appears here.'}</p>
+            <p class="empty">The open icon at real sizes appears here.</p>
           {/if}
         </div>
       </aside>
@@ -510,8 +512,17 @@
     position: absolute;
     right: 3px;
     bottom: 1px;
+    display: flex;
+    align-items: center;
+    gap: 1px;
     font: 9px var(--font-mono);
     opacity: 0.75;
+  }
+  .tool kbd .shift {
+    width: 7px;
+    height: 7px;
+    fill: currentColor;
+    stroke: none;
   }
   .side {
     background: var(--panel);

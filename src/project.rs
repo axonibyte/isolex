@@ -138,10 +138,13 @@ fn tile_map(turn: &Turn) -> Map3 {
 /// definition and part it is written in, the sites it was drawn through
 /// (outermost first), and the map from that node's own coordinates to the
 /// icon's viewBox, so a point on screen maps back to the numbers written.
-/// A 3-D shape's node also gives the numbers it came to (this copy's, in a
+/// A shape's node also gives the numbers it came to (this copy's, in a
 /// repeat), in its own coordinates and the order they are written: `box`
 /// x y z w d h, `tile` x y z w d, `cylinder` cx cy z r h, `facerect` a b z
-/// extent h, `shadow` cx cy rx ry, `seg` its two points; none for others.
+/// extent h, `shadow` cx cy rx ry, `seg` its two points; and, in output
+/// units, `line` x1 y1 x2 y2, `circle` cx cy r, `ellipse` cx cy rx ry,
+/// `rect` x y w h and its corner radius, `arc` cx cy r a0 a1, and `poly`
+/// its points, x then y; none for others, a `path`'s being in its data.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct ShapeSource {
     pub span: Span,
@@ -1383,8 +1386,8 @@ fn project_3d(ctx: &mut Ctx, shape: &Shape, out: &mut Vec<IrShape>, sources: &mu
                     _ => {}
                 }
                 let before = out.len();
-                project_2d(ctx, child, &env, out);
-                let src = Src::of(shape2_span(child), origin, PLANE);
+                let values = project_2d(ctx, child, &env, out);
+                let src = Src::of(shape2_span(child), origin, PLANE).with_values(values);
                 sources.resize(sources.len() + out.len() - before, src);
                 if let Some(paint) = text_paint(ctx) {
                     for shape in &mut out[before..] {
@@ -1431,7 +1434,14 @@ fn ev(ctx: &mut Ctx, num: &EvNum, env: &BTreeMap<String, f64>) -> f64 {
     }
 }
 
-fn project_2d(ctx: &mut Ctx, shape: &Shape2, env: &BTreeMap<String, f64>, out: &mut Vec<IrShape>) {
+/// A 2-D shape's IR into `out`; returns the numbers its node came to, as
+/// [`ShapeSource`] gives them.
+fn project_2d(
+    ctx: &mut Ctx,
+    shape: &Shape2,
+    env: &BTreeMap<String, f64>,
+    out: &mut Vec<IrShape>,
+) -> Vec<f64> {
     match shape {
         Shape2::Line { args, style, .. } => {
             let (x1, y1, x2, y2) = (
@@ -1449,50 +1459,72 @@ fn project_2d(ctx: &mut Ctx, shape: &Shape2, env: &BTreeMap<String, f64>, out: &
                 stroke_width: width,
                 dash,
             });
+            vec![x1, y1, x2, y2]
         }
         Shape2::Circle { args, style, .. } => {
             let (fill, op, stroke, width, dash) = style_or(style, "none", "outline", OUTLINE_W);
+            let (cx, cy, r) = (
+                ev(ctx, &args[0], env),
+                ev(ctx, &args[1], env),
+                ev(ctx, &args[2], env),
+            );
             out.push(IrShape::Circle {
-                cx: ev(ctx, &args[0], env),
-                cy: ev(ctx, &args[1], env),
-                r: ev(ctx, &args[2], env),
+                cx,
+                cy,
+                r,
                 fill,
                 fill_opacity: op,
                 stroke,
                 stroke_width: width,
                 dash,
             });
+            vec![cx, cy, r]
         }
         Shape2::Ellipse { args, style, .. } => {
             let (fill, op, stroke, width, dash) = style_or(style, "none", "outline", OUTLINE_W);
+            let (cx, cy, rx, ry) = (
+                ev(ctx, &args[0], env),
+                ev(ctx, &args[1], env),
+                ev(ctx, &args[2], env),
+                ev(ctx, &args[3], env),
+            );
             out.push(IrShape::Ellipse {
-                cx: ev(ctx, &args[0], env),
-                cy: ev(ctx, &args[1], env),
-                rx: ev(ctx, &args[2], env),
-                ry: ev(ctx, &args[3], env),
+                cx,
+                cy,
+                rx,
+                ry,
                 fill,
                 fill_opacity: op,
                 stroke,
                 stroke_width: width,
                 dash,
             });
+            vec![cx, cy, rx, ry]
         }
         Shape2::Rect {
             args, rx, style, ..
         } => {
             let (fill, op, stroke, width, dash) = style_or(style, "none", "none", 1.4);
+            let (x, y, w, h) = (
+                ev(ctx, &args[0], env),
+                ev(ctx, &args[1], env),
+                ev(ctx, &args[2], env),
+                ev(ctx, &args[3], env),
+            );
+            let rx = rx.as_ref().map(|r| ev(ctx, r, env)).unwrap_or(0.0);
             out.push(IrShape::Rect {
-                x: ev(ctx, &args[0], env),
-                y: ev(ctx, &args[1], env),
-                w: ev(ctx, &args[2], env),
-                h: ev(ctx, &args[3], env),
-                rx: rx.as_ref().map(|r| ev(ctx, r, env)).unwrap_or(0.0),
+                x,
+                y,
+                w,
+                h,
+                rx,
                 fill,
                 fill_opacity: op,
                 stroke,
                 stroke_width: width,
                 dash,
             });
+            vec![x, y, w, h, rx]
         }
         Shape2::Arc { args, style, .. } => {
             let cx = ev(ctx, &args[0], env);
@@ -1527,6 +1559,7 @@ fn project_2d(ctx: &mut Ctx, shape: &Shape2, env: &BTreeMap<String, f64>, out: &
                 stroke_width: width,
                 dash,
             });
+            vec![cx, cy, r, a0, a1]
         }
         Shape2::Path {
             template, style, ..
@@ -1564,14 +1597,18 @@ fn project_2d(ctx: &mut Ctx, shape: &Shape2, env: &BTreeMap<String, f64>, out: &
                 stroke_width: width,
                 dash,
             });
+            // its numbers are in its path data, as drawn
+            Vec::new()
         }
         Shape2::Poly { pts, style, .. } => {
             let (fill, op, stroke, width, dash) = style_or(style, "ink", "none", 0.0);
-            let points = pts
+            let points: Vec<[f64; 2]> = pts
                 .iter()
                 .map(|[a, b]| [ev(ctx, a, env), ev(ctx, b, env)])
                 .collect();
+            let values = points.iter().flatten().copied().collect();
             out.push(polygon(points, &fill, op, &stroke, width, dash));
+            values
         }
         Shape2::TransformStart { .. } | Shape2::TransformEnd => {
             unreachable!("an anchor's transforms are opened as its children are projected")

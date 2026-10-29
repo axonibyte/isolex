@@ -1,9 +1,10 @@
-// The shapes on the canvas as solids the tools work on (#69): each 3-D
-// node drawn, with the numbers it came to, the map from its own
-// coordinates to the viewBox, and which argument each number is written
-// as. Pure.
+// The shapes on the canvas as solids the tools work on (#69, #83): each
+// node drawn, 3-D or flat, with the numbers it came to, the map from its
+// own coordinates to the viewBox, and which argument each number is
+// written as. Pure.
 
 import type { Map3, NodeAt, Origin } from './backend';
+import type { IrShape } from './isolex/ir';
 import { pick } from './select';
 
 export type Point = [number, number];
@@ -48,7 +49,32 @@ export const SLOTS: Record<string, { names: string[]; first: number }> = {
   // after the face's name
   facerect: { names: ['a', 'b', 'z', 'extent', 'h'], first: 1 },
   shadow: { names: ['cx', 'cy', 'rx', 'ry'], first: 0 },
+  // flat, in output units; a rectangle's corner radius is a property, a
+  // polygon's points are its own nodes, and a path's are in its data
+  line: { names: ['x1', 'y1', 'x2', 'y2'], first: 0 },
+  circle: { names: ['cx', 'cy', 'r'], first: 0 },
+  ellipse: { names: ['cx', 'cy', 'rx', 'ry'], first: 0 },
+  rect: { names: ['x', 'y', 'w', 'h'], first: 0 },
+  arc: { names: ['cx', 'cy', 'r', 'a0', 'a1'], first: 0 },
+  poly: { names: [], first: 0 },
+  path: { names: [], first: 0 },
 };
+
+/** The kinds drawn flat, on an anchor. */
+export const FLAT = new Set(['line', 'circle', 'ellipse', 'rect', 'arc', 'poly', 'path']);
+
+/** The IR's shapes in the order they are counted: a group, then its own. */
+export function counted(shapes: IrShape[]): IrShape[] {
+  const out: IrShape[] = [];
+  const walk = (ss: IrShape[]) => {
+    for (const s of ss) {
+      out.push(s);
+      if (s.kind === 'group') walk(s.shapes ?? []);
+    }
+  };
+  walk(shapes);
+  return out;
+}
 
 /** One 3-D node as drawn: one copy, in a repeat. */
 export interface Solid {
@@ -65,17 +91,20 @@ export interface Solid {
   copy: boolean;
   /** A face rect's wall, as its source names it, when known. */
   face?: 'front' | 'right';
+  /** A path's data, as drawn. */
+  d?: string;
   origin: Origin;
 }
 
 /** The solids drawn, in the order drawn: consecutive shapes from one node
-    and one copy are one solid. */
-export function solids(sources: Origin[], editing: NodeAt | null): Solid[] {
+    and one copy are one solid. `shapes`, counted, give a path its data. */
+export function solids(sources: Origin[], editing: NodeAt | null, shapes: IrShape[] = []): Solid[] {
   const out: Solid[] = [];
   sources.forEach((o, i) => {
     if (!(o.kind in SLOTS)) return;
     const last = out.at(-1);
-    if (last && last.origin.node.start === o.node.start && last.origin.node.file === o.node.file && same(last.values, o.values) && last.shapes.at(-1) === i - 1) {
+    // a path is one shape a copy, whose numbers are in its data
+    if (last && o.kind !== 'path' && last.origin.node.start === o.node.start && last.origin.node.file === o.node.file && same(last.values, o.values) && last.shapes.at(-1) === i - 1) {
       last.shapes.push(i);
       return;
     }
@@ -87,6 +116,7 @@ export function solids(sources: Origin[], editing: NodeAt | null): Solid[] {
       shapes: [i],
       select: pick(o, editing),
       copy: o.sites.length > 0,
+      ...(o.kind === 'path' && shapes[i]?.kind === 'path' ? { d: shapes[i]!.d } : {}),
       origin: o,
     });
   });
@@ -130,6 +160,24 @@ export function topFace(s: Solid): number | null {
 export interface Targets {
   points: { at: Point; what: string }[];
   edges: { a: Point; b: Point; what: string }[];
+}
+
+/** Corners of flat rectangles, ends of lines and points of polygons, on
+    the viewBox. */
+export function flatTargets(all: Solid[], except: NodeAt | null): Targets {
+  const t: Targets = { points: [], edges: [] };
+  for (const s of all) {
+    if (except && s.node.start === except.start && s.node.file === except.file) continue;
+    const v = s.values;
+    const pts: Point[] = [];
+    if (s.kind === 'rect') pts.push([v[0]!, v[1]!], [v[0]! + v[2]!, v[1]!], [v[0]! + v[2]!, v[1]! + v[3]!], [v[0]!, v[1]! + v[3]!]);
+    else if (s.kind === 'line') pts.push([v[0]!, v[1]!], [v[2]!, v[3]!]);
+    else if (s.kind === 'poly') for (let i = 0; i + 1 < v.length; i += 2) pts.push([v[i]!, v[i + 1]!]);
+    else continue;
+    const at = pts.map((p) => apply(s.map, [p[0], p[1], 0]));
+    at.forEach((p) => t.points.push({ at: p, what: s.kind === 'line' ? 'end of line' : s.kind === 'rect' ? 'corner of rect' : 'point of poly' }));
+  }
+  return t;
 }
 
 /** Those on the plane at height `at`, when given: a point is snapped on

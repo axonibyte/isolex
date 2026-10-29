@@ -322,7 +322,7 @@ fn compile_one_and_compile_many_carry_it_for_their_icon_alone() {
 }
 
 #[test]
-fn a_3d_shape_gives_the_numbers_its_node_came_to() {
+fn a_shape_gives_the_numbers_its_node_came_to() {
     let (_, sample) = FIXTURES[0];
     let c = compiled("sample.ilx", sample);
     let values = |icon: &str, prefix: &str| -> Vec<Vec<f64>> {
@@ -361,6 +361,34 @@ fn a_3d_shape_gives_the_numbers_its_node_came_to() {
         values("switch-poe", "seg"),
         [vec![0.0, 0.0, 0.0, 2.0, 0.0, 0.0]]
     );
-    // a flat shape gives none
+    // a path's are in its data
     assert_eq!(values("switch-l3", "path"), [Vec::<f64>::new()]);
+    // a flat shape's, in output units
+    assert_eq!(values("switch-poe", "line"), [vec![-3.0, 0.0, 3.0, 0.0]]);
+    // and the fragment's circle inserted after them, at its size
+    assert_eq!(
+        values("switch-poe", "circle"),
+        [vec![0.0, 0.0, 8.0], vec![0.0, 0.0, 4.0]]
+    );
+    assert_eq!(values("switch-poe", "ellipse"), [vec![0.0, 0.0, 4.5, 8.0]]);
+    assert_eq!(
+        values("switch-poe", "rect"),
+        [vec![-9.0, -8.0, 18.0, 12.0, 1.5]]
+    );
+    assert_eq!(
+        values("switch-poe", "arc"),
+        [vec![0.0, 0.0, 11.0, 300.0, 60.0]]
+    );
+    let octagon = values("state-down", "poly");
+    assert_eq!(
+        octagon,
+        [vec![
+            7.0, 2.0, 17.0, 2.0, 22.0, 7.0, 22.0, 17.0, 17.0, 22.0, 7.0, 22.0, 2.0, 17.0, 2.0, 7.0
+        ]]
+    );
+    // a repeat's points, evaluated
+    let star = values("switch-poe", "poly fill=\"ink\"");
+    assert_eq!(star.len(), 1);
+    assert_eq!(star[0].len(), 20);
+    assert!((star[0][1] + 10.0).abs() < 1e-9, "{:?}", star[0]);
 }

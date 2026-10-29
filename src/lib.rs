@@ -243,6 +243,12 @@ impl Prepared {
         }
     }
 
+    /// The `lexicon` block's settings, when it has one: the tokens and
+    /// stroke widths it declares (SPEC §2).
+    pub fn config(&self) -> Option<&ast::LexiconConfig> {
+        self.lexicon.config.as_ref()
+    }
+
     /// The lexicon's own outcome: its definitions, its parse and resolve
     /// errors, its warnings and its palette, and no icons.
     pub fn outcome(&self) -> &Compilation {

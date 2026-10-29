@@ -50,6 +50,10 @@ pub enum Notice {
         warnings: Vec<Diag>,
         /// The lexicon's `palette` block, by token, if it has one.
         palette: Option<BTreeMap<String, isolex::Colors>>,
+        /// The tokens and stroke widths its `lexicon` block declares, the
+        /// only ones paint is chosen from; none if it declares none.
+        tokens: Vec<String>,
+        stroke_widths: Vec<f64>,
         icons: Vec<String>,
     },
     /// An icon drawn differently than before, with where each of its
@@ -493,6 +497,8 @@ fn notice(e: Event) -> Notice {
             errors: problems.errors,
             warnings: problems.warnings,
             palette: problems.palette,
+            tokens: problems.tokens,
+            stroke_widths: problems.stroke_widths,
             icons,
         },
         Event::Changed { name, drawing, .. } => {

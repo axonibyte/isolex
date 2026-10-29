@@ -52,19 +52,38 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Dark canvas' }).getAttribute('aria-pressed')).toBe('true');
   });
 
-  it('offers only the tools that are built', async () => {
+  it('offers only the tools that are built, and those that draw in what is open', async () => {
     await opened();
     const rail = screen.getByRole('navigation', { name: 'Tools' });
-    expect(within(rail).getByRole('button', { name: 'Select and move' }).hasAttribute('disabled')).toBe(false);
-    expect(within(rail).getByRole('button', { name: 'Box' }).hasAttribute('disabled')).toBe(false);
-    expect(within(rail).getByRole('button', { name: 'Cylinder' }).hasAttribute('disabled')).toBe(true);
+    const tool = (name: string) => within(rail).getByRole('button', { name });
+    expect(tool('Select and move').hasAttribute('disabled')).toBe(false);
+    expect(tool('Cylinder').hasAttribute('disabled')).toBe(false);
+    expect(tool('Pen').hasAttribute('disabled')).toBe(false);
+    expect(tool('Text').hasAttribute('disabled')).toBe(true);
     await fireEvent.keyDown(window, { key: 'b' });
-    expect(within(rail).getByRole('button', { name: 'Box' }).getAttribute('aria-pressed')).toBe('true');
+    expect(tool('Box').getAttribute('aria-pressed')).toBe('true');
     // a tool still to come keeps the one chosen
-    await fireEvent.keyDown(window, { key: 'c' });
-    expect(within(rail).getByRole('button', { name: 'Box' }).getAttribute('aria-pressed')).toBe('true');
+    await fireEvent.keyDown(window, { key: 'x' });
+    expect(tool('Box').getAttribute('aria-pressed')).toBe('true');
+    // Shift picks the tool on the shifted key
+    await fireEvent.keyDown(window, { key: 'A', shiftKey: true });
+    expect(tool('Arc').getAttribute('aria-pressed')).toBe('true');
+    await fireEvent.keyDown(window, { key: 'a' });
+    expect(tool('Node').getAttribute('aria-pressed')).toBe('true');
     await fireEvent.keyDown(window, { key: 'h' });
-    expect(within(rail).getByRole('button', { name: 'Pan' }).getAttribute('aria-pressed')).toBe('true');
+    expect(tool('Pan').getAttribute('aria-pressed')).toBe('true');
+
+    // a flat icon: the 3-D tools draw nothing there, and one chosen goes
+    await fireEvent.keyDown(window, { key: 'c' });
+    expect(tool('Cylinder').getAttribute('aria-pressed')).toBe('true');
+    await fireEvent.click(screen.getByRole('tab', { name: 'Tree' }));
+    await fireEvent.click(within(screen.getByRole('list', { name: 'Icons' })).getByRole('button', { name: /^state-down/ }));
+    await screen.findByRole('application', { name: 'Canvas: state-down' });
+    await waitFor(() => expect(tool('Select and move').getAttribute('aria-pressed')).toBe('true'));
+    expect(tool('Box').hasAttribute('disabled')).toBe(true);
+    expect(tool('Line').hasAttribute('disabled')).toBe(false);
+    await fireEvent.keyDown(window, { key: 'b' });
+    expect(tool('Select and move').getAttribute('aria-pressed')).toBe('true');
   });
 
   it('opens an icon from the Tree tab', async () => {
