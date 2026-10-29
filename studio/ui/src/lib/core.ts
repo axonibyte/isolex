@@ -1,13 +1,14 @@
 // The studio's core outside the app (in a plain browser, in vitest, in
 // Playwright): studio-core built as a WebAssembly module
 // (studio-core/wasm), over the compiler's sample library kept in memory.
-// It edits, undoes and compiles as the app does; it has no disk, so
-// saving keeps the library as it is, and nothing changes outside it.
+// It edits, undoes and compiles as the app does; its disk is kept in
+// memory, which saving writes, reloading reads, and `outside` changes as
+// another program would.
 // `npm run core` builds the module into this folder.
 
 import moduleUrl from './studio-core.wasm?url';
 import sampleSource from '../../../../tests/fixtures/sample.ilx?raw';
-import type { Answer, Backend, Drawing, Notice, Outline, Source } from './backend';
+import type { Answer, Backend, Drawing, LexiconRows, Notice, Outline, Source } from './backend';
 
 interface Exports {
   memory: WebAssembly.Memory;
@@ -65,6 +66,12 @@ export async function core(files: [string, string][] = [['sample.ilx', sampleSou
     exportFont: async () => {
       throw new Error('Fonts are exported in the studio’s app');
     },
+    libraryOp: (op) => later<Answer>({ call: 'library_op', op }),
+    lexicon: () => later<LexiconRows>({ call: 'lexicon' }),
+    newLibrary: async () => {
+      throw new Error('Libraries are made in the studio’s app');
+    },
+    outside: (changes) => later({ call: 'outside', changes }),
     pickFile: async () => null,
     pickSave: async () => null,
     ask: (ask, label) => later<Answer>({ call: 'ask', ask, label }),
@@ -74,8 +81,8 @@ export async function core(files: [string, string][] = [['sample.ilx', sampleSou
     undo: () => later<string | null>({ call: 'undo' }),
     redo: () => later<string | null>({ call: 'redo' }),
     save: () => later({ call: 'save' }),
-    // there is no disk to reload from
-    reload: async () => {},
+    // from the disk the core keeps in memory
+    reload: () => later({ call: 'reload' }),
     listen: async (hear) => {
       ears.add(hear);
       return () => ears.delete(hear);

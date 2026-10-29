@@ -46,10 +46,18 @@
       onclose();
     }
   }
+
+  /** The dialog, focused when it opens. */
+  let box: HTMLDivElement | undefined = $state();
+  $effect(() => {
+    box?.focus();
+  });
 </script>
 
+<svelte:window onkeydown={(e) => e.key === 'Escape' && onclose()} />
+
 <div class="scrim" role="presentation" onpointerdown={(e) => e.target === e.currentTarget && onclose()}>
-  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="import-title" tabindex="-1" onkeydown={(e) => e.key === 'Escape' && onclose()}>
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="import-title" tabindex="-1" bind:this={box}>
     <h2 id="import-title">Import a font</h2>
     <label class="row">
       <span>Font file</span>

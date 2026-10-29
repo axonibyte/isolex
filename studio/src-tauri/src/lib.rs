@@ -8,8 +8,12 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use isolex_studio_core::compile::Drawing;
+use isolex_studio_core::lexicon::LexiconRows;
+use isolex_studio_core::library::Start;
 use isolex_studio_core::outline::Outline;
-use isolex_studio_core::session::{Answer, Ask, FontImport, Notice, Session, Sink, Source};
+use isolex_studio_core::session::{
+    Answer, Ask, FontImport, LibraryOp, Notice, Session, Sink, Source,
+};
 use isolex_studio_core::About;
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -57,6 +61,31 @@ fn open(app: AppHandle, open: State<Open>, path: String) -> Result<(), String> {
         .lock()
         .map_err(|_| "the library is unavailable".to_string())? = Some(session);
     Ok(())
+}
+
+/// A new library at `path`, empty or a copy of another, opened.
+#[tauri::command]
+fn new_library(
+    app: AppHandle,
+    open: State<Open>,
+    path: String,
+    start: Start,
+) -> Result<(), String> {
+    isolex_studio_core::library::create(std::path::Path::new(&path), &start)
+        .map_err(|e| e.to_string())?;
+    self::open(app, open, path)
+}
+
+/// A file or definition made, renamed or moved: one undo step.
+#[tauri::command]
+fn library_op(open: State<Open>, op: LibraryOp) -> Result<Answer, String> {
+    with(&open, |s| s.library_op(&op))
+}
+
+/// The `lexicon` and `palette` blocks, for Lexicon Properties.
+#[tauri::command]
+fn lexicon(open: State<Open>) -> Result<LexiconRows, String> {
+    with(&open, |s| s.lexicon())
 }
 
 /// What the interface shows: the definition and icon open, and the
@@ -182,6 +211,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             about,
             open,
+            new_library,
+            library_op,
+            lexicon,
             view,
             source,
             outline,

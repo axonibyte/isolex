@@ -18,6 +18,11 @@
   import DesignTab from './components/DesignTab.svelte';
   import PreviewTab from './components/PreviewTab.svelte';
   import TreeTab from './components/TreeTab.svelte';
+  import LibraryDialog from './components/LibraryDialog.svelte';
+  import LexiconDialog from './components/LexiconDialog.svelte';
+  import NewLibrary from './components/NewLibrary.svelte';
+  import { forget, folderName, recent, remember, setShowAtStartup, showAtStartup, when, type Recent } from './lib/recent';
+  import { inShell } from './lib/backend';
   import HistoryMenu from './components/HistoryMenu.svelte';
   import ProblemsMenu from './components/ProblemsMenu.svelte';
   import { STEPS, stepLabel } from './lib/snap';
@@ -45,7 +50,12 @@
     setCanvasTheme(canvas);
     let stop: (() => void) | undefined;
     let gone = false;
-    void studio.start().then((s) => (gone ? s() : (stop = s)));
+    void studio.start().then((s) => {
+      if (gone) return s();
+      stop = s;
+      // with the welcome panel off, the library opened last opens
+      if (inShell() && !startup && recents[0]) void openLibrary(recents[0].path);
+    });
     void backend.about().then((v) => (versions = v));
     return () => {
       gone = true;
@@ -174,8 +184,36 @@
 
   async function openFolder() {
     const path = await backend.pickFolder();
-    if (path) await studio.open(path);
+    if (path) await openLibrary(path);
   }
+
+  /** A library opened, or why not: a recent one that has gone is
+      forgotten. */
+  async function openLibrary(path: string) {
+    try {
+      await studio.open(path);
+    } catch (e) {
+      recents = forget(path);
+      opening = `${path} could not be opened: ${e instanceof Error ? e.message : String(e)}`;
+    }
+  }
+
+  let recents = $state<Recent[]>(recent());
+  let startup = $state(showAtStartup());
+  let opening = $state('');
+  let dialog = $state<'library' | 'lexicon' | 'new' | null>(null);
+  /** Reloading would discard unsaved changes: asked first. */
+  let confirming = $state(false);
+
+  // a library open in the app is remembered, with its definitions counted
+  let remembered: string | null = null;
+  $effect(() => {
+    const root = library?.root;
+    const count = view.graph?.definitions.length;
+    if (!root || count === undefined || !inShell() || remembered === root) return;
+    remembered = root;
+    recents = remember({ path: root, name: folderName(root), definitions: count, opened: Date.now() });
+  });
 
   function onkeydown(e: KeyboardEvent) {
     const typing = e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement;
@@ -184,6 +222,16 @@
     if (mod && key === 's') {
       e.preventDefault();
       if (library) void studio.save();
+      return;
+    }
+    if (mod && !e.shiftKey && key === 'o') {
+      e.preventDefault();
+      void openFolder();
+      return;
+    }
+    if (mod && !e.shiftKey && key === 'n' && inShell()) {
+      e.preventDefault();
+      dialog = 'new';
       return;
     }
     // in a text field, its own undo and keys apply
@@ -230,9 +278,29 @@
     <div class="card">
       <h1>isolex studio</h1>
       <p>Draw and manage a library of isolex icons: a folder of <code>.ilx</code> files, edited as one thing.</p>
-      <button class="primary" onclick={openFolder}>Open library folder…</button>
+      <div class="actions">
+        <button class="primary" onclick={openFolder} title="Ctrl+O">Open library folder…</button>
+        <button onclick={() => (dialog = 'new')} disabled={!inShell()} title={inShell() ? 'Ctrl+N' : 'In the studio’s app'}>New library…</button>
+      </div>
       {#if sample}<button onclick={() => studio.open('sample')}>Open the sample library</button>{/if}
+      {#if opening}<p class="failed" role="alert">{opening}</p>{/if}
+      {#if recents.length}
+        <h2>Recent</h2>
+        <ul class="recent" aria-label="Recent libraries">
+          {#each recents as r (r.path)}
+            <li>
+              <button ondblclick={() => openLibrary(r.path)} onkeydown={(e) => e.key === 'Enter' && openLibrary(r.path)} title="Double-click to open">
+                <span class="rname">{r.name}</span>
+                <span class="rpath">{r.path}</span>
+                <span class="rmeta">{r.definitions} definitions · {when(r.opened)}</span>
+              </button>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+      <label class="startup"><input type="checkbox" checked={startup} onchange={(e) => setShowAtStartup((startup = e.currentTarget.checked))} /> Show this at startup</label>
     </div>
+    {#if dialog === 'new'}<NewLibrary {studio} onclose={() => (dialog = null)} />{/if}
   </main>
 {:else}
   <div class="app">
@@ -253,6 +321,8 @@
         ><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m13 5 4 4-4 4" /><path d="M17 9H8a5 5 0 0 0 0 10h2" /></svg></button
       >
       <HistoryMenu {studio} />
+      <button class="text-btn" onclick={() => (dialog = 'library')}>Library</button>
+      <button class="text-btn" onclick={() => (dialog = 'lexicon')}>Lexicon</button>
       <span class="spacer"></span>
       <div class="seg" role="group" aria-label="Canvas">
         <button aria-pressed={canvas === 'light'} onclick={() => chooseCanvas('light')}>Light canvas</button>
@@ -347,10 +417,23 @@
     {#if view.outOfSync.length}
       <div class="sync" role="alert">
         <span>The library changed on disk ({view.outOfSync.join(', ')}), and you have unsaved changes.</span>
-        <button onclick={() => backend.reload()}>Reload from disk</button>
-        <button onclick={() => studio.save()}>Save over it</button>
+        {#if confirming}
+          <span class="confirm">Your unsaved changes are discarded for what is on disk.</span>
+          <button
+            onclick={() => {
+              confirming = false;
+              void backend.reload();
+            }}>Discard and reload</button
+          >
+          <button onclick={() => (confirming = false)}>Keep mine</button>
+        {:else}
+          <button onclick={() => (confirming = true)}>Reload from disk</button>
+          <button onclick={() => studio.save()}>Save over it</button>
+        {/if}
       </div>
     {/if}
+    {#if dialog === 'library'}<LibraryDialog {studio} onclose={() => (dialog = null)} />{/if}
+    {#if dialog === 'lexicon'}<LexiconDialog {studio} onclose={() => (dialog = null)} />{/if}
 
     <footer class="status">
       <ProblemsMenu {studio} />
@@ -394,6 +477,86 @@
     border: 1px solid var(--line);
     background: var(--raised);
     cursor: pointer;
+  }
+  .card .actions {
+    display: flex;
+    gap: 8px;
+  }
+  .card .actions button {
+    flex: 1;
+  }
+  .card button:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+  .card h2 {
+    margin: 8px 0 0;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+  }
+  .recent {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .recent button {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 2px 12px;
+    text-align: left;
+  }
+  .rname {
+    font-weight: 600;
+  }
+  .rpath {
+    grid-column: 1 / -1;
+    color: var(--muted);
+    font: 11px var(--font-mono);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .rmeta {
+    grid-row: 1;
+    grid-column: 2;
+    color: var(--muted);
+    font-size: 11px;
+  }
+  .startup {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .failed {
+    margin: 0;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--danger) 16%, transparent);
+    font-size: 12px;
+  }
+  .text-btn {
+    padding: 4px 10px;
+    border-radius: 7px;
+    border: 1px solid var(--line);
+    background: transparent;
+    color: var(--muted);
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .text-btn:hover {
+    color: var(--fg);
+    background: var(--raised);
+  }
+  .confirm {
+    font-weight: 600;
   }
   .card button.primary {
     background: var(--accent);

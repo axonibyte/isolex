@@ -318,8 +318,9 @@ Fonts are part of the library and are edited in the same editor (#84):
   the recent libraries (name, path, definition count, when opened;
   double-click opens). *Show this at startup* is a checkbox.
 - **New library:** a name and a folder, and what to start from (empty:
-  a lexicon with the standard tokens, a palette and one box; a copy of
-  a library; an exported zip). It writes `lexicon.ilx` and `icons.ilx`.
+  a lexicon with the standard tokens, a palette and one box; or a copy
+  of a library). It writes `lexicon.ilx` and `icons.ilx`. Starting from
+  an exported zip waits for export.
 - **Opening** reads the folder as the CLI does (`isolex::library`).
 - **Saving** (Ctrl+S) writes every changed file at once, each to a
   temporary file and renamed into place, so the folder is never
@@ -334,6 +335,26 @@ Fonts are part of the library and are edited in the same editor (#84):
     discarded) and *Save over it*. Until one is chosen, the studio
     keeps working on its own copy;
   - the studio's own saves never raise it.
+
+## Library and Lexicon Properties
+
+Two dialogs from the top bar manage what is not drawn:
+
+- **Library** lists the folder's files, each with the definitions
+  written in it, as VS Code's Explorer does. A click opens a
+  definition; F2, a double-click or *Rename* renames one, rewriting
+  every reference to it, or moves a file; a definition dragged onto a
+  file, or sent there with *Move to…*, moves there with its comments.
+  New files and definitions (of any kind, in any file) are made here.
+  Each is one undo step; a name or path already taken is refused,
+  offering one that is free.
+- **Lexicon Properties** edits the `lexicon` and `palette` blocks
+  (SPEC §2, §9), as Inkscape's Document Properties does, in tabs:
+  *Tokens*, *Swatches* (each token's color on a light ground and a dark
+  one), *Stroke widths*, *Reserved* (tokens painted only under a
+  `grant`) and *Limits* (each a number, the default, or no limit). Each
+  change edits its own node where it is written; a block not yet
+  written is added, a palette after the lexicon block.
 
 ## Accessibility
 

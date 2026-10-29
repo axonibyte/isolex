@@ -149,6 +149,9 @@ describe('App', () => {
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toContain('sample.ilx');
     await fireEvent.click(within(alert).getByRole('button', { name: 'Reload from disk' }));
+    // unsaved changes would go: asked first
+    expect(reload).not.toHaveBeenCalled();
+    await fireEvent.click(within(alert).getByRole('button', { name: 'Discard and reload' }));
     expect(reload).toHaveBeenCalled();
     tell!({ kind: 'reloaded', files: ['sample.ilx'] });
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());

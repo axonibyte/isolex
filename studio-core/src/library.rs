@@ -423,3 +423,71 @@ pub(crate) fn read_folder(root: &Path) -> std::io::Result<BTreeMap<FilePath, Str
     }
     Ok(files)
 }
+
+/// What a new library starts from.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(tag = "from", rename_all = "kebab-case")]
+pub enum Start {
+    /// A lexicon with the standard tokens, a palette and one box.
+    Empty,
+    /// The `.ilx` files of another library, as they are on disk.
+    Copy { of: PathBuf },
+}
+
+/// A new library in `root`, made if it is not there, from `start`; refused
+/// if `root` holds a library already.
+pub fn create(root: &Path, start: &Start) -> std::io::Result<()> {
+    if root.exists() && !read_folder(root)?.is_empty() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::AlreadyExists,
+            format!("{} holds a library already", root.display()),
+        ));
+    }
+    let files: BTreeMap<FilePath, String> = match start {
+        Start::Empty => [
+            ("lexicon.ilx".to_string(), STARTER_LEXICON.to_string()),
+            ("icons.ilx".to_string(), STARTER_ICONS.to_string()),
+        ]
+        .into_iter()
+        .collect(),
+        Start::Copy { of } => read_folder(of)?,
+    };
+    for (path, text) in &files {
+        let at = root.join(path);
+        if let Some(dir) = at.parent() {
+            std::fs::create_dir_all(dir)?;
+        }
+        std::fs::write(at, text)?;
+    }
+    Ok(())
+}
+
+/// A new library's vocabulary and colors: isolex's standard tokens.
+const STARTER_LEXICON: &str = r##"// What this library's icons paint with (SPEC §2), and its colors.
+lexicon {
+  tokens "ink" "ink-muted" "outline" "body-top" "body-left" "body-right" "shadow" "virt" "accent"
+  stroke-widths 1.2 1.4
+}
+
+palette {
+  ink light="#1f2933" dark="#e4e7eb"
+  ink-muted light="#7b8794" dark="#9aa5b1"
+  outline light="#1f2933" dark="#0b0d10"
+  body-top light="#e4e7eb" dark="#52606d"
+  body-left light="#cbd2d9" dark="#3e4c59"
+  body-right light="#9aa5b1" dark="#323f4b"
+  shadow light="#000000" dark="#000000"
+  virt light="#d9e2ec" dark="#3e4c59"
+  accent light="#d64545" dark="#ef8a8a"
+}
+"##;
+
+/// A new library's first icon: one box to draw from.
+const STARTER_ICONS: &str = r#"icon "box" {
+  category "basic"
+  footprint 1 1 1
+  part "body" {
+    box 0 0 0 1 1 1
+  }
+}
+"#;

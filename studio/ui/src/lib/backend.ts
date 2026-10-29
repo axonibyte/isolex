@@ -177,6 +177,30 @@ export interface Drawing {
   sources: Origin[];
 }
 
+/** What the Library dialog asks of the library. */
+export type LibraryOp =
+  | { op: 'rename-definition'; from: string; to: string }
+  | { op: 'new-file'; path: string }
+  | { op: 'move-file'; from: string; to: string }
+  | { op: 'new-definition'; file: string; kind: string; name: string }
+  | { op: 'move-definition'; name: string; to: string };
+
+/** One node of the lexicon or palette block, its values unquoted. */
+export interface Setting {
+  name: string;
+  args: string[];
+  props: Record<string, string>;
+  node: NodeAt;
+}
+
+/** The lexicon and palette blocks, each where it is written, and the file
+    one not yet written goes in. */
+export interface LexiconRows {
+  lexicon: { node: NodeAt; rows: Setting[] } | null;
+  palette: { node: NodeAt; rows: Setting[] } | null;
+  file: string;
+}
+
 /** A font to import, as the dialog asks for it. */
 export interface FontImport {
   path: string;
@@ -216,6 +240,15 @@ export interface Backend {
   /** A font written in `styles` as TrueType, or a UFO, at `out`: where,
       or an error saying why. */
   exportFont(font: string, styles: string[], out: string, ufo: boolean): Promise<string>;
+  /** A file or definition made, renamed or moved: one undo step. */
+  libraryOp(op: LibraryOp): Promise<Answer>;
+  /** The `lexicon` and `palette` blocks as written. */
+  lexicon(): Promise<LexiconRows>;
+  /** A new library at `path`, empty or a copy of another, opened. */
+  newLibrary(path: string, start: { from: 'empty' } | { from: 'copy'; of: string }): Promise<void>;
+  /** Files changed "on disk" (a text, or none for removed): only the core
+      outside the app, which keeps its disk in memory, does this. */
+  outside?(changes: [string, string | null][]): Promise<void>;
   /** Asks the person for a file to read, or a place to write; none if
       they cancel, or outside the app. */
   pickFile(title: string, extensions: string[]): Promise<string | null>;
@@ -253,6 +286,9 @@ export async function shell(): Promise<Backend> {
     preview: (icon, params) => invoke('preview', { icon, params }),
     sketch: (source) => invoke('sketch', { source }),
     importFont: (font) => invoke('import_font', { font }),
+    libraryOp: (op) => invoke('library_op', { op }),
+    lexicon: () => invoke('lexicon'),
+    newLibrary: (path, start) => invoke('new_library', { path, start }),
     exportFont: (font, styles, out, ufo) => invoke('export_font', { font, styles, out, ufo }),
     pickFile: async (title, extensions) => {
       const picked = await dialog.open({ title, multiple: false, filters: [{ name: 'Fonts', extensions }] });

@@ -261,6 +261,36 @@ pub struct Session {
     pending: BTreeMap<u64, Vec<Choice>>,
     next_choice: u64,
     editing: Option<String>,
+    /// For a library kept in memory, the files as its "disk" holds them:
+    /// what saving writes, reloading reads, and `outside` changes.
+    memory: Option<BTreeMap<String, String>>,
+}
+
+/// What the Library dialog asks of the library: each one undo step, a
+/// name or path already taken refused with one that is free.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(tag = "op", rename_all = "kebab-case")]
+pub enum LibraryOp {
+    RenameDefinition {
+        from: String,
+        to: String,
+    },
+    NewFile {
+        path: String,
+    },
+    MoveFile {
+        from: String,
+        to: String,
+    },
+    NewDefinition {
+        file: String,
+        kind: String,
+        name: String,
+    },
+    MoveDefinition {
+        name: String,
+        to: String,
+    },
 }
 
 impl Session {
@@ -284,12 +314,15 @@ impl Session {
     /// call returns, for a host with no threads, clock or disk: the
     /// studio's core in a browser. Saving there marks it saved.
     pub fn in_memory(lib: Library, sink: Arc<dyn Sink>) -> Session {
-        Session::start(
+        let disk = lib.files().clone();
+        let mut s = Session::start(
             lib,
             None,
             sink,
             Compiling::Inline(Box::new(Inline::new(Isolex))),
-        )
+        );
+        s.memory = Some(disk);
+        s
     }
 
     fn start(
@@ -306,6 +339,7 @@ impl Session {
             pending: BTreeMap::new(),
             next_choice: 0,
             editing: None,
+            memory: None,
         };
         s.changed();
         s
@@ -519,15 +553,93 @@ impl Session {
             Compiling::Background(_) => {
                 self.lib.save()?;
             }
-            Compiling::Inline(_) => self.lib.mark_saved(),
+            Compiling::Inline(_) => {
+                self.lib.mark_saved();
+                self.memory = Some(self.lib.files().clone());
+            }
         }
         self.state();
         Ok(())
     }
 
+    /// Files changed outside the studio, as a watcher sees them: loaded
+    /// when nothing is unsaved, else the out-of-sync notice. For a
+    /// library in memory, the changes are made to what it keeps as its
+    /// disk first: how its interface's tests change a file "on disk".
+    pub fn outside(&mut self, changes: Vec<crate::watch::DiskChange>) {
+        if let Some(disk) = &mut self.memory {
+            for c in &changes {
+                match c {
+                    crate::watch::DiskChange::Written(p, t) => {
+                        disk.insert(p.clone(), t.clone());
+                    }
+                    crate::watch::DiskChange::Removed(p) => {
+                        disk.remove(p);
+                    }
+                }
+            }
+        }
+        let outcome = self.lib.on_disk(changes);
+        self.heard(outcome);
+    }
+
+    /// What a change on disk came to, told.
+    fn heard(&mut self, outcome: DiskOutcome) {
+        match outcome {
+            DiskOutcome::Nothing => {}
+            DiskOutcome::Reloaded(files) => {
+                self.changed();
+                self.sink.notify(Notice::Reloaded { files });
+            }
+            DiskOutcome::OutOfSync(files) => {
+                self.state();
+                self.sink.notify(Notice::OutOfSync { files });
+            }
+        }
+    }
+
+    /// A change to the library's files and definitions (`refactor`), one
+    /// undo step.
+    pub fn library_op(&mut self, op: &LibraryOp) -> Answer {
+        use crate::refactor;
+        let tx = match op {
+            LibraryOp::RenameDefinition { from, to } => {
+                refactor::rename_definition(&self.lib, from, to)
+            }
+            LibraryOp::NewFile { path } => refactor::create_file(&self.lib, path, ""),
+            LibraryOp::MoveFile { from, to } => refactor::move_file(&self.lib, from, to),
+            LibraryOp::NewDefinition { file, kind, name } => {
+                refactor::new_definition(&self.lib, file, kind, name)
+            }
+            LibraryOp::MoveDefinition { name, to } => {
+                refactor::move_definition(&self.lib, name, to)
+            }
+        };
+        match tx
+            .map_err(|e| e.to_string())
+            .and_then(|tx| self.lib.apply(tx).map_err(|e| e.to_string()))
+        {
+            Ok(()) => {
+                self.changed();
+                Answer::Applied {
+                    revision: self.lib.revision(),
+                }
+            }
+            Err(reason) => Answer::Refused { reason },
+        }
+    }
+
+    /// The `lexicon` and `palette` blocks, for Lexicon Properties.
+    pub fn lexicon(&self) -> crate::lexicon::LexiconRows {
+        crate::lexicon::lexicon(&self.lib.sources())
+    }
+
     /// Discards unsaved edits for what is on disk, undoably.
     pub fn reload(&mut self) -> std::io::Result<()> {
-        let files = self.lib.reload_from_disk()?;
+        let files = match &self.memory {
+            Some(disk) => self.lib.reload_from(disk.clone()),
+            None => self.lib.reload_from_disk()?,
+        };
         self.changed();
         self.sink.notify(Notice::Reloaded { files });
         Ok(())
@@ -539,17 +651,8 @@ impl Session {
             return Ok(());
         };
         let changes = w.poll()?;
-        match self.lib.on_disk(changes) {
-            DiskOutcome::Nothing => {}
-            DiskOutcome::Reloaded(files) => {
-                self.changed();
-                self.sink.notify(Notice::Reloaded { files });
-            }
-            DiskOutcome::OutOfSync(files) => {
-                self.state();
-                self.sink.notify(Notice::OutOfSync { files });
-            }
-        }
+        let outcome = self.lib.on_disk(changes);
+        self.heard(outcome);
         Ok(())
     }
 

@@ -346,6 +346,17 @@ export class Studio {
     this.selectedPath = path;
   }
 
+  /** A new library at `path`, made and opened. */
+  async create(path: string, start: { from: 'empty' } | { from: 'copy'; of: string }) {
+    this.view = empty();
+    this.icon = null;
+    this.editing = null;
+    this.outline = null;
+    this.selected = null;
+    this.selectedPath = null;
+    await this.backend.newLibrary(path, start);
+  }
+
   async open(path: string) {
     this.view = empty();
     this.icon = null;

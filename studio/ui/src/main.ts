@@ -18,7 +18,10 @@ if (inShell()) {
   const { core } = await import('./lib/core');
   const text = new URLSearchParams(location.search).get('library') === 'text';
   const files: [string, string][] | undefined = text ? [['text.ilx', (await import('../../../tests/fixtures/text.ilx?raw')).default]] : undefined;
-  mount(App, { target, props: { backend: await core(files), sample: true } });
+  const backend = await core(files);
+  // for the browser tests: a file changed "on disk", which the core keeps
+  (window as unknown as { studioDisk: unknown }).studioDisk = (file: string, text: string | null) => backend.outside?.([[file, text]]);
+  mount(App, { target, props: { backend, sample: true } });
 } else {
   target.textContent = 'This is isolex studio’s interface: open it in the app.';
 }

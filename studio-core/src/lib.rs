@@ -13,6 +13,7 @@ use serde::Serialize;
 
 pub mod compile;
 pub mod edit;
+pub mod lexicon;
 pub mod library;
 pub mod outline;
 pub mod refactor;

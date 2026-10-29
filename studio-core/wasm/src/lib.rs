@@ -21,6 +21,7 @@ use std::cell::RefCell;
 use std::sync::{Arc, Mutex};
 
 use isolex_studio_core::session::{Ask, Notice, Session, Sink};
+use isolex_studio_core::watch::DiskChange;
 use isolex_studio_core::Library;
 use serde_json::{json, Value};
 
@@ -121,8 +122,34 @@ fn answer(v: &Value) -> Result<Value, String> {
             "sketch" => to(serde_json::to_value(
                 session.sketch(&s("source").unwrap_or_default()).ok(),
             )),
+            "library_op" => {
+                let op = serde_json::from_value(v["op"].clone())
+                    .map_err(|e| format!("library_op: {e}"))?;
+                to(serde_json::to_value(session.library_op(&op)))
+            }
+            "lexicon" => to(serde_json::to_value(session.lexicon())),
+            // a file changed "on disk": the library's in memory
+            "outside" => {
+                let changes: Vec<(String, Option<String>)> =
+                    serde_json::from_value(v["changes"].clone())
+                        .map_err(|e| format!("outside: {e}"))?;
+                session.outside(
+                    changes
+                        .into_iter()
+                        .map(|(p, t)| match t {
+                            Some(t) => DiskChange::Written(p, t),
+                            None => DiskChange::Removed(p),
+                        })
+                        .collect(),
+                );
+                Ok(Value::Null)
+            }
             "undo" => Ok(json!(session.undo())),
             "redo" => Ok(json!(session.redo())),
+            "reload" => session
+                .reload()
+                .map(|()| Value::Null)
+                .map_err(|e| e.to_string()),
             "save" => session
                 .save()
                 .map(|()| Value::Null)

@@ -72,6 +72,25 @@ fn a_library_opened_edited_undone_and_saved() {
         .find(|n| n["kind"] == "library")
         .unwrap();
     assert_eq!(library["modified"], true, "undone past the save");
+
+    // the lexicon's blocks; a library op; a change "on disk", loaded
+    let lex = send(json!({ "call": "lexicon" }));
+    assert_eq!(lex["result"]["lexicon"]["rows"][0]["name"], "tokens");
+    let op = send(json!({ "call": "library_op", "op": { "op": "new-file", "path": "more.ilx" } }));
+    assert_eq!(op["result"]["kind"], "applied");
+    let undone = send(json!({ "call": "undo" }));
+    assert_eq!(undone["result"], "New file more.ilx");
+    // nothing unsaved, so it loads
+    send(json!({ "call": "save" }));
+    let disk = send(
+        json!({ "call": "outside", "changes": [["sample.ilx", SAMPLE.replace("param ports 12", "param ports 16")]] }),
+    );
+    assert!(
+        kinds(&disk).contains(&"reloaded".to_string()),
+        "{:?}",
+        kinds(&disk)
+    );
+    send(json!({ "call": "undo" }));
 }
 
 #[test]

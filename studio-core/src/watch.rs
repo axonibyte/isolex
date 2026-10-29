@@ -173,6 +173,13 @@ impl Library {
     /// Discards unsaved edits for what is on disk, as one undoable step.
     pub fn reload_from_disk(&mut self) -> io::Result<Vec<FilePath>> {
         let disk = crate::library::read_folder(self.root())?;
+        Ok(self.reload_from(disk))
+    }
+
+    /// Discards unsaved edits for `disk`, the files as they are on disk
+    /// (or, for a library in memory, as it keeps them), as one undoable
+    /// step; the files that differed.
+    pub fn reload_from(&mut self, disk: BTreeMap<FilePath, String>) -> Vec<FilePath> {
         let mut changes = Vec::new();
         for (p, t) in &disk {
             if self.files().get(p) != Some(t) {
@@ -192,7 +199,7 @@ impl Library {
                 .expect("patches made from the library's own files apply");
         }
         self.set_saved(disk.iter().map(|(p, t)| (p.clone(), hash(t))).collect());
-        Ok(paths)
+        paths
     }
 
     /// The patch that makes the library's file what `change` says.
