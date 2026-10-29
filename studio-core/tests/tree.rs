@@ -48,6 +48,7 @@ fn the_graph_fixture_as_the_tree_lists_it() {
             "icon down",
             "--",
             "font mono · no thumbnail",
+            "  style mono bold (variant bold of axis weight) · no thumbnail",
         ]
     );
     // a variant opens its axis, drawing the variant

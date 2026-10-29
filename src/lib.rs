@@ -5,6 +5,8 @@ pub mod affine;
 pub mod ast;
 pub mod expand;
 pub mod expr;
+#[cfg(feature = "font-tools")]
+pub mod fonttools;
 pub mod graph;
 pub mod ir;
 pub mod json;

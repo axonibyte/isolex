@@ -12,10 +12,16 @@ publish = false
 [dependencies]
 # pure Rust only: this crate is built and tested in the FreeBSD jail,
 # where the studio's desktop shell (studio/) is not
-isolex = { path = ".." }
+isolex = { path = "..", default-features = false }
 serde = { version = "1", features = ["derive"] }
 # the save journal
 serde_json = "1"
 
 [dev-dependencies]
 serde_json = "1"
+
+[features]
+default = ["font-tools"]
+# importing and exporting fonts (isolex's converter): the desktop shell
+# has it, the WebAssembly module does not
+font-tools = ["isolex/font-tools"]

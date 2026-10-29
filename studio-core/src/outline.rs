@@ -3,12 +3,13 @@
 //! its shapes; and those it draws but does not own, from the definitions
 //! it extends, each naming where it comes from. With them, what the
 //! Design tab shows with nothing selected (#70): its frame, and its
-//! params, own and inherited.
+//! params, own and inherited. A font's parts are its glyphs, each with its
+//! shapes, and it has its metrics and kerning beside them (#84).
 //!
 //! Read from the source as written, so it is there while the library does
 //! not compile, as far as the parser got.
 
-use isolex::ast::{DefKind, Definition, Lexicon, Num, Param, PartDecl, PartOp, Span};
+use isolex::ast::{DefKind, Definition, Glyph, Lexicon, Num, Param, PartDecl, PartOp, Span};
 use serde::Serialize;
 
 use crate::compile::Place;
@@ -32,6 +33,36 @@ pub struct Outline {
     /// Its params: its own in the order written, then those it extends
     /// and does not declare again, nearest first.
     pub params: Vec<ParamRow>,
+    /// A font's metrics and kerning; none for anything else.
+    pub font: Option<FontRows>,
+}
+
+/// A font as the Design tab shows it beside its glyphs.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct FontRows {
+    /// `em`, `ascent`, `descent`, `kind` and `slant`, those written, in the
+    /// order written.
+    pub metrics: Vec<Metric>,
+    pub kerns: Vec<KernRow>,
+}
+
+/// One metric of a font, as written.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Metric {
+    pub name: String,
+    pub value: String,
+    pub node: Place,
+}
+
+/// One kerning pair, as written.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct KernRow {
+    pub left: String,
+    pub right: String,
+    pub by: String,
+    /// The space, when it is written as a number.
+    pub value: Option<f64>,
+    pub node: Place,
 }
 
 /// A definition's frame, as written.
@@ -105,6 +136,11 @@ pub fn outline(files: &[(String, String)], definition: &str) -> Option<Outline> 
         lexicon: &lexicon,
     };
     let mut parts: Vec<Part> = def.body.parts.iter().map(|p| read.part(p, None)).collect();
+    // a font's glyphs, then its notdef, as parts are listed
+    let glyphs = def.body.font.glyphs.iter().map(|g| (g, "glyph"));
+    for (g, op) in glyphs.chain(def.body.font.notdef.iter().map(|g| (g, "notdef"))) {
+        parts.push(read.glyph(g, op));
+    }
     for v in &def.variants {
         parts.extend(v.body.parts.iter().map(|p| read.part(p, Some(&v.name))));
     }
@@ -171,6 +207,7 @@ pub fn outline(files: &[(String, String)], definition: &str) -> Option<Outline> 
         inherited,
         frame,
         params,
+        font: (def.kind == DefKind::Font).then(|| read.font(def)),
     })
 }
 
@@ -257,6 +294,71 @@ impl Reader<'_> {
             node: self.place(p.span),
             shapes,
         }
+    }
+
+    /// A glyph as a part: its name ("notdef" for the notdef), its shapes.
+    fn glyph(&self, g: &Glyph, op: &str) -> Part {
+        let shapes = match self.lexicon.sources.get(g.span) {
+            Some(src) => src.children.iter().filter_map(|c| self.row(*c)).collect(),
+            None => Vec::new(),
+        };
+        Part {
+            name: if op == "notdef" {
+                "notdef".into()
+            } else {
+                g.name.clone()
+            },
+            op: op.into(),
+            variant: None,
+            node: self.place(g.span),
+            shapes,
+        }
+    }
+
+    /// A font's metrics and kerning, from its nodes as written.
+    fn font(&self, def: &Definition) -> FontRows {
+        let mut metrics = Vec::new();
+        if let Some(src) = self.lexicon.sources.get(def.span) {
+            for c in &src.children {
+                let Some(node) = self.lexicon.sources.get(*c) else {
+                    continue;
+                };
+                if ["em", "ascent", "descent", "kind", "slant"].contains(&node.name.as_str()) {
+                    metrics.push(Metric {
+                        name: node.name.clone(),
+                        value: node
+                            .args
+                            .first()
+                            .map(|a| self.value(*a))
+                            .unwrap_or_default(),
+                        node: self.place(*c),
+                    });
+                }
+            }
+        }
+        let kerns = def
+            .body
+            .font
+            .kerns
+            .iter()
+            .map(|k| KernRow {
+                left: k.left.clone(),
+                right: k.right.clone(),
+                by: self
+                    .lexicon
+                    .sources
+                    .get(k.span)
+                    .and_then(|s| s.args.get(2))
+                    .map(|a| self.value(*a))
+                    .unwrap_or_default(),
+                value: match k.by {
+                    Num::Lit(v) => Some(v),
+                    _ => None,
+                },
+                node: self.place(k.span),
+            })
+            .collect();
+        FontRows { metrics, kerns }
     }
 
     fn row(&self, span: Span) -> Option<Row> {

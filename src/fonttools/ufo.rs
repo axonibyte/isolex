@@ -8,7 +8,7 @@ use std::path::Path;
 
 use super::export::Prepared;
 use super::outline::Seg;
-use isolex::text::format_value as num;
+use crate::text::format_value as num;
 
 /// The glyph name a font editor knows a glyph by: `uni0041` for a
 /// character (`u1F600` beyond the basic plane), components joined by `_`

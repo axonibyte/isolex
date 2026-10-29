@@ -80,7 +80,9 @@ parsed and resolved once, shared between threads, each icon compiled
 from it on its own and cancelled, through a flag, once a newer edit
 makes it moot; its `config` is the `lexicon` block's settings, the
 tokens and stroke widths an editor offers. `compile_one` and
-`compile_many` are built on it.
+`compile_many` are built on it. With the `font-tools` feature (the
+default; the WebAssembly module is built without it), `isolex::fonttools`
+converts fonts as `isolex font import` and `isolex font export` do.
 
 ## Documentation
 

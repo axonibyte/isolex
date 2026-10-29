@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use isolex_studio_core::compile::Drawing;
 use isolex_studio_core::outline::Outline;
-use isolex_studio_core::session::{Answer, Ask, Notice, Session, Sink, Source};
+use isolex_studio_core::session::{Answer, Ask, FontImport, Notice, Session, Sink, Source};
 use isolex_studio_core::About;
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -93,6 +93,31 @@ fn preview(
     with(&open, |s| s.preview(&icon, &params).ok())
 }
 
+/// An icon the interface writes, compiled with the library: how a font is
+/// shown. None if it does not compile.
+#[tauri::command]
+fn sketch(open: State<Open>, source: String) -> Result<Option<Drawing>, String> {
+    with(&open, |s| s.sketch(&source).ok())
+}
+
+/// A font file read into the library, one undo step.
+#[tauri::command]
+fn import_font(open: State<Open>, font: FontImport) -> Result<Answer, String> {
+    with(&open, |s| s.import_font(&font))
+}
+
+/// A font written as TrueType, or a UFO, at `out`.
+#[tauri::command]
+fn export_font(
+    open: State<Open>,
+    font: String,
+    styles: Vec<String>,
+    out: String,
+    ufo: bool,
+) -> Result<String, String> {
+    with(&open, |s| s.export_font(&font, &styles, &out, ufo))?
+}
+
 #[tauri::command]
 fn ask(open: State<Open>, ask: Ask, label: String) -> Result<Answer, String> {
     with(&open, |s| s.ask(&ask, &label))
@@ -161,6 +186,9 @@ pub fn run() {
             source,
             outline,
             preview,
+            sketch,
+            import_font,
+            export_font,
             ask,
             choose,
             begin_gesture,

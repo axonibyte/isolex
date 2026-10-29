@@ -167,6 +167,39 @@ pub fn create_file(lib: &Library, path: &str, text: &str) -> Result<Transaction,
     ))
 }
 
+/// A font's source added to the library, as a file of its own under
+/// `fonts/` named for it (the first free one); refused if its name is
+/// taken, by a definition or an icon one emits.
+pub fn add_font(lib: &Library, text: &str) -> Result<Transaction, RefactorError> {
+    let name = text
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("font \""))
+        .and_then(|rest| rest.split('"').next())
+        .ok_or_else(|| RefactorError::Unreadable("the font".into(), "it names no font".into()))?
+        .to_string();
+    let taken = names_in_use(&isolex::graph(&lib.sources()));
+    if taken.contains(&name) {
+        return Err(RefactorError::NameTaken {
+            free: free_name(&name, &taken),
+            name,
+        });
+    }
+    let wanted = format!("fonts/{name}.ilx");
+    let path = if lib.files().contains_key(&wanted) {
+        free_path(&wanted, lib.files())
+    } else {
+        wanted
+    };
+    check_new_path(lib, &path)?;
+    Ok(Transaction::new(
+        format!("Import font {name}"),
+        vec![Patch::Create {
+            file: path,
+            text: text.to_string(),
+        }],
+    ))
+}
+
 /// A file moved or renamed: its definitions keep their names, so nothing
 /// that refers to them changes.
 pub fn move_file(lib: &Library, from: &str, to: &str) -> Result<Transaction, RefactorError> {

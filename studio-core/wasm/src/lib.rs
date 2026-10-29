@@ -118,6 +118,9 @@ fn answer(v: &Value) -> Result<Value, String> {
                         .ok(),
                 ))
             }
+            "sketch" => to(serde_json::to_value(
+                session.sketch(&s("source").unwrap_or_default()).ok(),
+            )),
             "undo" => Ok(json!(session.undo())),
             "redo" => Ok(json!(session.redo())),
             "save" => session

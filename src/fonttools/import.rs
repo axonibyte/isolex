@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
-use isolex::text::format_value as num;
+use crate::text::format_value as num;
 use ttf_parser::gpos::{PairAdjustment, PositioningSubtable};
 use ttf_parser::gsub::SubstitutionSubtable;
 use ttf_parser::{Face, GlyphId, Tag};
@@ -363,7 +363,7 @@ fn mapped(face: &Face, chars: &Charset) -> Vec<(char, GlyphId)> {
     wanted
         .into_iter()
         // what text could never set is not worth a glyph
-        .filter(|c| isolex::text::refusal(*c).is_none())
+        .filter(|c| crate::text::refusal(*c).is_none())
         .filter_map(|c| face.glyph_index(c).filter(|g| g.0 != 0).map(|g| (c, g)))
         .collect()
 }

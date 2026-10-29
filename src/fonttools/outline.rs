@@ -4,8 +4,8 @@
 //! attributes: butt caps, and miter joins up to a limit of 4, bevelled
 //! past it.
 
-use isolex::affine::{self, Mat, Seg as PathSeg};
-use isolex::ir::IrShape;
+use crate::affine::{self, Mat, Seg as PathSeg};
+use crate::ir::IrShape;
 
 pub type P = [f64; 2];
 

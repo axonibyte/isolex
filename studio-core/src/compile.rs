@@ -179,6 +179,32 @@ pub fn preview(
     }
 }
 
+/// The file a sketch is compiled in, and the icon it draws.
+pub const SKETCH_FILE: &str = "studio-sketch.ilx";
+pub const SKETCH: &str = "studio-sketch";
+
+/// An icon the interface writes, `icon "studio-sketch" { … }` in `source`,
+/// compiled with the library as it is, which nothing changes: how a font
+/// is shown, its glyphs set as text draws them, each shape still saying
+/// where in the font it is written.
+pub fn sketch(files: &[(String, String)], source: &str) -> Result<Drawing, Vec<Diag>> {
+    let mut all = files.to_vec();
+    all.push((SKETCH_FILE.to_string(), source.to_string()));
+    let (ready, problems, _) = Isolex.prepare(&all);
+    if !problems.errors.is_empty() {
+        return Err(problems.errors);
+    }
+    let request = isolex::Only {
+        icon: SKETCH.to_string(),
+        params: BTreeMap::new(),
+    };
+    match draw(&ready, &request, &AtomicBool::new(false)) {
+        Some(Outcome::Drawn { drawing, .. }) => Ok((*drawing).clone()),
+        Some(Outcome::Broken(diags)) => Err(diags),
+        None => Err(Vec::new()),
+    }
+}
+
 /// One icon drawn, with where each of its shapes came from.
 fn draw(ready: &Ready, request: &isolex::Only, cancel: &AtomicBool) -> Option<Outcome> {
     let place = |span: isolex::ast::Span| Place {

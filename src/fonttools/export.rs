@@ -1,12 +1,12 @@
 //! `isolex font export`: a font of a lexicon, in some of its styles, as a
 //! standard font. Its glyphs are drawn by the compiler as text draws them
-//! ([`isolex::font_outline`]); outline glyphs keep their contours and
+//! ([`crate::font_outline`]); outline glyphs keep their contours and
 //! stroke-built ones are expanded to outlines; a slant is sheared in; and
 //! the notices its `describe` lines carry go into the font's names.
 
 use std::path::Path;
 
-use isolex::{FontOutline, GlyphOutline};
+use crate::{FontOutline, GlyphOutline};
 
 use super::outline::{self, cubic_to_quads, Contour, Seg};
 use super::sfnt;
@@ -287,7 +287,7 @@ pub fn export(
     upm: Option<u16>,
     tolerance: Option<f64>,
 ) -> Result<String, Vec<String>> {
-    let outline = isolex::font_outline(files, font, styles).map_err(|ds| {
+    let outline = crate::font_outline(files, font, styles).map_err(|ds| {
         ds.iter()
             .map(|d| {
                 if d.file.is_empty() {

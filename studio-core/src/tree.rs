@@ -22,7 +22,7 @@ pub struct Tree {
 /// One row: a definition, or a variant one emits.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct TreeRow {
-    /// "base", "icon", "variant" or "font".
+    /// "base", "icon", "variant", "font", or a font's "style".
     pub kind: String,
     /// What it is called: the definition's name, or the icon a variant
     /// emits ("server-down").
@@ -34,7 +34,7 @@ pub struct TreeRow {
     /// a click draws. None for a base, a font, or an icon whose axis
     /// does not emit it bare.
     pub icon: Option<String>,
-    /// For a variant: the axis and the variant's name.
+    /// For a variant or a style: the axis and the variant's name.
     pub axis: Option<String>,
     pub variant: Option<String>,
     /// Its variants first, then what extends it.
@@ -84,7 +84,7 @@ pub fn tree(files: &[(String, String)]) -> Tree {
             icon: None,
             axis: None,
             variant: None,
-            children: Vec::new(),
+            children: styles(&lexicon, d),
         })
         .collect();
     Tree { icons, fonts }
@@ -153,6 +153,32 @@ fn row(
         variant: None,
         children,
     }
+}
+
+/// A font's styles: the variants of the axes it opts into, each opening
+/// its axis.
+fn styles(lexicon: &Lexicon, font: &Definition) -> Vec<TreeRow> {
+    font.body
+        .axes
+        .iter()
+        .filter_map(|a| {
+            lexicon
+                .defs
+                .iter()
+                .find(|d| d.kind == DefKind::Axis && d.name == *a)
+        })
+        .flat_map(|axis| {
+            axis.variants.iter().map(|v| TreeRow {
+                kind: "style".into(),
+                name: format!("{} {}", font.name, v.name),
+                definition: axis.name.clone(),
+                icon: None,
+                axis: Some(axis.name.clone()),
+                variant: Some(v.name.clone()),
+                children: Vec::new(),
+            })
+        })
+        .collect()
 }
 
 /// The axes a definition opts into, its own and those of what it

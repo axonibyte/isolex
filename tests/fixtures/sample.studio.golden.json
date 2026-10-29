@@ -411,7 +411,8 @@
             "len": 9
           }
         }
-      ]
+      ],
+      "font": null
     },
     "mini-glyph": {
       "definition": "mini-glyph",
@@ -460,7 +461,8 @@
             "len": 12
           }
         }
-      ]
+      ],
+      "font": null
     },
     "rack-unit": {
       "definition": "rack-unit",
@@ -522,7 +524,8 @@
             "len": 9
           }
         }
-      ]
+      ],
+      "font": null
     },
     "state": {
       "definition": "state",
@@ -581,7 +584,8 @@
       ],
       "inherited": [],
       "frame": null,
-      "params": []
+      "params": [],
+      "font": null
     },
     "state-down": {
       "definition": "state-down",
@@ -651,7 +655,8 @@
           "len": 12
         }
       },
-      "params": []
+      "params": [],
+      "font": null
     },
     "state-planned": {
       "definition": "state-planned",
@@ -711,7 +716,8 @@
           "len": 12
         }
       },
-      "params": []
+      "params": [],
+      "font": null
     },
     "switch": {
       "definition": "switch",
@@ -801,7 +807,8 @@
             "len": 9
           }
         }
-      ]
+      ],
+      "font": null
     },
     "switch-l2": {
       "definition": "switch-l2",
@@ -862,7 +869,8 @@
             "len": 9
           }
         }
-      ]
+      ],
+      "font": null
     },
     "switch-l3": {
       "definition": "switch-l3",
@@ -957,7 +965,8 @@
             "len": 9
           }
         }
-      ]
+      ],
+      "font": null
     },
     "switch-poe": {
       "definition": "switch-poe",
@@ -1215,7 +1224,8 @@
             "len": 9
           }
         }
-      ]
+      ],
+      "font": null
     }
   },
   "sources": {

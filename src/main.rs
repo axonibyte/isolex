@@ -5,7 +5,7 @@ use std::path::Path;
 use std::process::ExitCode;
 
 #[cfg(feature = "font-tools")]
-mod fonttools;
+mod font_cli;
 
 use isolex::ir::IrDocument;
 use isolex::render::{missing_colors, render_icon, safe_file_name, Palette};
@@ -28,7 +28,7 @@ fn main() -> ExitCode {
         },
         Some("docs") if args.len() == 2 => run(&args[1], Mode::Docs, None),
         #[cfg(feature = "font-tools")]
-        Some("font") => fonttools::run(&args[1..]),
+        Some("font") => font_cli::run(&args[1..]),
         #[cfg(not(feature = "font-tools"))]
         Some("font") => {
             eprintln!(
@@ -70,7 +70,7 @@ fn usage() -> ExitCode {
         "       isolex render <lexicon-dir> --svg <out-dir> [--palette <palette.json>] [<one icon>]"
     );
     #[cfg(feature = "font-tools")]
-    fonttools::usage();
+    font_cli::usage();
     eprintln!("one icon: --icon <name> [--param <name>=<number>]… [--text <name>=<text>]…");
     ExitCode::from(2)
 }

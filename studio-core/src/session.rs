@@ -25,6 +25,22 @@ pub trait Sink: Send + Sync + 'static {
     fn notify(&self, notice: Notice);
 }
 
+/// A font to import, as the interface's dialog asks for it.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct FontImport {
+    /// The font file: TrueType, OpenType or WOFF.
+    pub path: String,
+    /// Its name in the library, if not the font's own.
+    pub name: Option<String>,
+    /// "ascii", "latin1" (the default), "all", or the characters.
+    pub chars: String,
+    /// Its em, if not the font's own units.
+    pub em: Option<f64>,
+    /// Each further style, "axis.variant" with its source: another font
+    /// file, or the same variable font at other values ("wght:700").
+    pub styles: Vec<(String, String)>,
+}
+
 /// What the interface is told, as it arrives.
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
@@ -321,6 +337,88 @@ impl Session {
         params: &BTreeMap<String, f64>,
     ) -> Result<Drawing, Vec<Diag>> {
         crate::compile::preview(&self.lib.sources(), icon, params)
+    }
+
+    /// An icon the interface writes compiled with the library, which
+    /// nothing changes: a font's glyphs set out, one glyph on its grid, a
+    /// sample line, a kerning pair (`compile::sketch`).
+    pub fn sketch(&self, source: &str) -> Result<Drawing, Vec<Diag>> {
+        crate::compile::sketch(&self.lib.sources(), source)
+    }
+
+    /// A font file read into the library as an isolex font, in a file of
+    /// its own (`refactor::add_font`), one undo step; refused, saying why,
+    /// if its license forbids it or it cannot be read.
+    #[cfg(feature = "font-tools")]
+    pub fn import_font(&mut self, f: &FontImport) -> Answer {
+        use isolex::fonttools::import::{self, Charset, Options, StyleSource};
+        let refused = |reason: String| Answer::Refused { reason };
+        let chars = match f.chars.trim() {
+            "" | "latin1" => Charset::Latin1,
+            "ascii" => Charset::Ascii,
+            "all" => Charset::All,
+            given => Charset::Given(given.chars().collect()),
+        };
+        let mut styles = Vec::new();
+        for (style, source) in &f.styles {
+            let Some((axis, variant)) = style.split_once('.') else {
+                return refused(format!(
+                    "a style is axis.variant, as weight.bold: not '{style}'"
+                ));
+            };
+            styles.push(StyleSource {
+                axis: axis.to_string(),
+                variant: variant.to_string(),
+                source: import::parse_source(source),
+            });
+        }
+        let opts = Options {
+            input: PathBuf::from(&f.path),
+            name: f.name.clone().filter(|n| !n.trim().is_empty()),
+            chars,
+            em: f.em,
+            tolerance: 0.0,
+            index: 0,
+            styles,
+        };
+        let text = match import::import(&opts) {
+            Ok(text) => text,
+            Err(why) => return refused(why),
+        };
+        match crate::refactor::add_font(&self.lib, &text) {
+            Ok(tx) => match self.lib.apply(tx) {
+                Ok(()) => {
+                    self.changed();
+                    Answer::Applied {
+                        revision: self.lib.revision(),
+                    }
+                }
+                Err(e) => refused(e.to_string()),
+            },
+            Err(e) => refused(e.to_string()),
+        }
+    }
+
+    /// A font of the library written in `styles` as TrueType at `out`, or
+    /// as a UFO there; the path written, or why not.
+    #[cfg(feature = "font-tools")]
+    pub fn export_font(
+        &self,
+        font: &str,
+        styles: &[String],
+        out: &str,
+        ufo: bool,
+    ) -> Result<String, String> {
+        isolex::fonttools::export::export(
+            &self.lib.sources(),
+            font,
+            styles,
+            std::path::Path::new(out),
+            ufo,
+            None,
+            None,
+        )
+        .map_err(|ds| ds.join("\n"))
     }
 
     /// What the interface shows: the definition and icon open, and the
