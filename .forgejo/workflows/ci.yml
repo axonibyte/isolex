@@ -187,6 +187,34 @@ jobs:
           grep -q '^test result: ok. 1 passed' ../module.log || { echo "the module check did not run"; tail -5 ../module.log; exit 1; }
           echo "imports: none; exports: isolex_alloc isolex_compile isolex_free isolex_version memory"
 
+      # THE STUDIO IS CHECKED ON GITHUB, where Tauri builds (studio.yml), but
+      # reviewed here, so this reports what GitHub says of the same commit.
+      # It never fails the job: GitHub may not have the commit yet (the
+      # mirror pushes it), or may still be running, and its outcome is
+      # GitHub's to show. It asks once, with a timeout, since this jail is
+      # the forge's one runner and waiting would hold it.
+      - name: the studio's checks on GitHub, for this commit (reported, never failing)
+        run: |
+          sha=$(git -C src rev-parse HEAD 2>/dev/null) || { echo "no commit to ask about"; exit 0; }
+          url="https://api.github.com/repos/axonibyte/isolex/commits/$sha/check-runs"
+          code=$(timeout 30 curl -s -o gh.json -w '%{http_code}' -H 'Accept: application/vnd.github+json' "$url") || code=timeout
+          if [ "$code" != 200 ]; then
+            echo "GitHub did not answer for $sha ($code): not reported"
+            exit 0
+          fi
+          if ! command -v jq > /dev/null 2>&1; then
+            echo "jq is ABSENT: GitHub's answer is not read"
+            exit 0
+          fi
+          n=$(jq '.total_count' < gh.json)
+          if [ "$n" = 0 ]; then
+            echo "GitHub has no checks for $sha yet: the mirror may not have pushed it"
+          else
+            echo "GitHub's checks for $sha:"
+            jq -r '.check_runs[] | "  \(.name): \(.status)\(if .conclusion then " (" + .conclusion + ")" else "" end)"' < gh.json
+          fi
+          exit 0
+
       - name: on a tag, the tag and Cargo.toml must agree
         if: startsWith(github.ref, 'refs/tags/')
         run: |

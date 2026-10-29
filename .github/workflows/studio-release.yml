@@ -1,0 +1,174 @@
+# isolex studio's installers, on a release tag (#74): built here, where
+# the desktop targets are, and attached to the forge's release of the same
+# tag, which the forge's FreeBSD CI creates with the compiler's binaries.
+# Releases live on the forge; this only builds.
+#
+# The installers are unsigned: AppImage and deb for Linux, msi and NSIS
+# setup for Windows, and a universal dmg for macOS. Each is named for the
+# studio's version and its platform, and SHA256SUMS-studio goes with them.
+#
+# Publishing needs FORGEJO_RELEASE_TOKEN, a token of a bot user who can
+# write only to isolex: it never reaches a command line, only curl's
+# config file, as the forge's CI keeps its own.
+name: studio-release
+
+on:
+  push:
+    # bare versions, as the forge tags them: 0.6.0, never v0.6.0
+    tags: ['[0-9]*']
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            platform: linux-x86_64
+            bundles: appimage,deb
+            target: ''
+          - os: windows-2025
+            platform: windows-x86_64
+            bundles: msi,nsis
+            target: ''
+          - os: macos-15
+            platform: macos-universal
+            bundles: dmg
+            target: universal-apple-darwin
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: studio
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: the webview's libraries, as Tauri 2 needs them on Linux
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev patchelf
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: studio/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # stable
+        with:
+          toolchain: stable
+          # both of a universal binary's halves, on macOS
+          targets: ${{ runner.os == 'macOS' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: the interface's dependencies, from the lockfile
+        run: npm ci
+
+      - name: the installers
+        env:
+          # the AppImage tools run without FUSE on the runner
+          APPIMAGE_EXTRACT_AND_RUN: '1'
+        run: |
+          set -o pipefail
+          args=(--bundles "${{ matrix.bundles }}")
+          [ -n "${{ matrix.target }}" ] && args+=(--target "${{ matrix.target }}")
+          npm run tauri -- build "${args[@]}"
+
+      - name: named for the version and the platform
+        run: |
+          set -o pipefail
+          ver=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          [ -n "$ver" ] || { echo "tauri.conf.json declares no version"; exit 1; }
+          out="$RUNNER_TEMP/installers"
+          mkdir -p "$out"
+          n=0
+          while IFS= read -r f; do
+            case "$f" in
+              *.AppImage) ext=AppImage ;;
+              *.deb) ext=deb ;;
+              *.msi) ext=msi ;;
+              *-setup.exe) ext=setup.exe ;;
+              *.dmg) ext=dmg ;;
+              *) continue ;;
+            esac
+            cp "$f" "$out/isolex-studio-$ver-${{ matrix.platform }}.$ext"
+            n=$((n + 1))
+          done < <(find src-tauri/target -path '*/release/bundle/*' -type f)
+          [ "$n" -ge 1 ] || { echo "the build made no installer"; exit 1; }
+          ls -l "$out"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: installers-${{ matrix.platform }}
+          path: ${{ runner.temp }}/installers/*
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: installers-*
+          path: dist
+          merge-multiple: true
+
+      - name: checksummed
+        working-directory: dist
+        run: |
+          set -o pipefail
+          sha256sum -- * > ../SHA256SUMS-studio
+          mv ../SHA256SUMS-studio .
+          cat SHA256SUMS-studio
+
+      - name: attached to the forge's release of the tag, once it is there
+        working-directory: dist
+        env:
+          RELEASE_TOKEN: ${{ secrets.FORGEJO_RELEASE_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -o pipefail
+          [ -n "$RELEASE_TOKEN" ] || { echo "FORGEJO_RELEASE_TOKEN is not set: nothing can be attached"; exit 1; }
+          api="https://forge.axonibyte.com/api/v1/repos/axonibyte/isolex"
+          # the token reaches curl through a 0600 config file, never argv
+          cfg=$(mktemp); chmod 600 "$cfg"
+          printf 'header = "Authorization: token %s"\n' "$RELEASE_TOKEN" > "$cfg"
+          trap 'rm -f "$cfg"' EXIT
+
+          # The forge's CI creates the release when the same tag is built
+          # there; it takes minutes. Poll, a minute apart, for up to 90.
+          id=""
+          for i in $(seq 1 90); do
+            code=$(timeout 60 curl --config "$cfg" -s -o rel.json -w '%{http_code}' "$api/releases/tags/$TAG") || code=timeout
+            if [ "$code" = 200 ]; then
+              id=$(jq -r '.id' < rel.json)
+              break
+            fi
+            echo "release $TAG not there yet ($code), try $i of 90"
+            sleep 60
+          done
+          [ -n "$id" ] && [ "$id" != null ] || { echo "the forge made no release of $TAG in 90 minutes"; exit 1; }
+          echo "release $TAG -> id $id"
+
+          # A re-run attaches what is missing and never replaces a file
+          # already published.
+          have=$(jq -r '.assets[].name' < rel.json)
+          rm -f rel.json
+          for f in *; do
+            if printf '%s\n' "$have" | grep -qxF "$f"; then
+              echo "already attached: $f"
+              continue
+            fi
+            code=$(timeout 600 curl --config "$cfg" -s -o /dev/null -w '%{http_code}' \
+                   -F "attachment=@$f" "$api/releases/$id/assets?name=$f") || code=timeout
+            case "$code" in
+              200 | 201) echo "attached $f" ;;
+              *) echo "attaching $f failed: $code"; exit 1 ;;
+            esac
+          done
