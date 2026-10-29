@@ -376,8 +376,7 @@ jobs:
             # A RE-RUN OF THE SAME TAG REACHES 409 LEGITIMATELY -- a cancelled
             # run, a retried job -- so the existing release is read back and
             # attached to rather than called a failure. It is still not an
-            # overwrite: an asset that is already there makes the attach below
-            # refuse, so a published file cannot be quietly replaced.
+            # overwrite: the attach below skips a file already there.
             409)
               code=$(timeout 60 curl --config "$cfg" -s -o ../rel.json -w '%{http_code}' "$api/releases/tags/$tag")
               [ "$code" = 200 ] || { echo "release $tag exists and cannot be read back: $code"; head -c 300 ../rel.json; exit 1; }
@@ -390,8 +389,23 @@ jobs:
             echo "the forge answered without a release id"; head -c 300 ../rel.json; exit 1
           fi
 
+          # A FILE ALREADY ATTACHED IS SKIPPED, IF IT IS THE SAME FILE. The
+          # forge does NOT refuse a second asset of the same name: it keeps
+          # both. MEASURED 2026-10-29, when re-pushed tags re-ran this step and
+          # 0.5.0 carried every file twice. The published copy is compared
+          # with this build, so a re-run that built different bytes fails by
+          # name instead of shipping either one beside the other.
+          jq -r '.assets[] | "\(.name)\t\(.browser_download_url)"' < ../rel.json > ../have.tsv
           for f in ../dist/*; do
             b=$(basename "$f")
+            have=$(awk -F '\t' -v n="$b" '$1 == n { print $2; exit }' ../have.tsv)
+            if [ -n "$have" ]; then
+              code=$(timeout 300 curl -sS -L -o ../published -w '%{http_code}' "$have")
+              [ "$code" = 200 ] || { echo "$b is attached and downloading it answered $code"; exit 1; }
+              cmp -s "$f" ../published || { echo "REFUSED: $b is attached already, and is not the file this run built"; exit 1; }
+              echo "already attached, identical: $b"
+              continue
+            fi
             code=$(timeout 300 curl --config "$cfg" -s -o ../asset.log -w '%{http_code}' \
                    -X POST -F "attachment=@$f" "$api/releases/$id/assets?name=$b")
             echo "attach $b -> $code"
