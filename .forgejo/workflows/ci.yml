@@ -147,7 +147,10 @@ jobs:
           timeout 1800 cargo test --workspace --release --locked > ../test.log 2>&1 || rc=$?
           if [ "$rc" = 124 ]; then echo "cargo test did not answer in 1800s"; exit 1; fi
           [ "$rc" = 0 ] || { echo "cargo test rc=$rc"; grep -E '^(test result|failures:|error)' ../test.log | head -20; exit 1; }
-          grep -E '^test result' ../test.log | head -10
+          # awk, not grep | head: under pipefail, head closing the pipe after
+          # ten lines can kill grep with SIGPIPE, and the job failed with 141
+          # when every test had passed
+          awk '/^test result/ && n++ < 10' ../test.log
           p=$(grep -E '^test result' ../test.log | sed -n 's/.*ok\. \([0-9]*\) passed.*/\1/p' | awk '{s+=$1} END {print s+0}')
           echo "tests passed: $p"
           [ "$p" -gt 0 ] || { echo "zero tests ran, which is not a pass"; exit 1; }
@@ -572,7 +575,7 @@ jobs:
             jq -e --arg f "$f" 'any(.assets[]; .name == $f)' < "$work/rel2.json" > /dev/null \
               || { echo "REFUSED: release $tag does not carry $f"; exit 1; }
           done
-          first=$(ls | grep -vxF SHA256SUMS-studio | head -1)
+          first=$(ls | awk '$0 != "SHA256SUMS-studio" && !n++')
           dl=$(jq -r --arg f "$first" '.assets[] | select(.name == $f) | .browser_download_url' < "$work/rel2.json")
           code=$(timeout 900 curl -sS -L -o "$work/fetched" -w '%{http_code}' "$dl")
           [ "$code" = 200 ] || { echo "downloading $first anonymously answered $code"; exit 1; }
