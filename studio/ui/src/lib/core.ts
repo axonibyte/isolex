@@ -26,8 +26,9 @@ async function bytes(): Promise<BufferSource> {
   return (await fetch(moduleUrl)).arrayBuffer();
 }
 
-/** The core, with the sample library to open. */
-export async function core(): Promise<Backend> {
+/** The core, with a library to open: the sample, unless given another
+    as files. */
+export async function core(files: [string, string][] = [['sample.ilx', sampleSource]]): Promise<Backend> {
   const { instance } = await WebAssembly.instantiate(await bytes(), {});
   const x = instance.exports as unknown as Exports;
   const encoder = new TextEncoder();
@@ -53,7 +54,7 @@ export async function core(): Promise<Backend> {
   return {
     about: async () => null,
     pickFolder: async () => 'sample',
-    open: async () => call({ call: 'open', files: [['sample.ilx', sampleSource]] }),
+    open: async () => call({ call: 'open', files }),
     view: (editing, icon, visible) => later({ call: 'view', editing, icon, visible }),
     source: (file) => later<Source | null>({ call: 'source', file }),
     outline: (definition) => later<Outline | null>({ call: 'outline', definition }),

@@ -1,0 +1,62 @@
+{
+  "icons": [
+    {
+      "kind": "base",
+      "name": "chassis",
+      "definition": "chassis",
+      "icon": null,
+      "axis": null,
+      "variant": null,
+      "children": [
+        {
+          "kind": "icon",
+          "name": "server",
+          "definition": "server",
+          "icon": "server",
+          "axis": null,
+          "variant": null,
+          "children": [
+            {
+              "kind": "variant",
+              "name": "server-down",
+              "definition": "state",
+              "icon": "server-down",
+              "axis": "state",
+              "variant": "down",
+              "children": []
+            }
+          ]
+        },
+        {
+          "kind": "icon",
+          "name": "switch",
+          "definition": "switch",
+          "icon": "switch",
+          "axis": null,
+          "variant": null,
+          "children": []
+        }
+      ]
+    },
+    {
+      "kind": "icon",
+      "name": "down",
+      "definition": "down",
+      "icon": "down",
+      "axis": null,
+      "variant": null,
+      "children": []
+    }
+  ],
+  "fonts": [
+    {
+      "kind": "font",
+      "name": "mono",
+      "definition": "mono",
+      "icon": null,
+      "axis": null,
+      "variant": null,
+      "children": []
+    }
+  ]
+}

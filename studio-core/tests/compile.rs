@@ -486,3 +486,25 @@ fn the_same_icon_written_elsewhere_is_drawn_again() {
         "and the same source hashes the same"
     );
 }
+
+#[test]
+fn an_icon_only_moved_in_its_file_is_told_but_not_redrawn() {
+    let mut t = isolex_studio_core::compile::Tracker::default();
+    t.accept(lexicon(1, &["a"]));
+    let redrawn = |events: Vec<Event>| match events.as_slice() {
+        [Event::Changed { redrawn, .. }] => *redrawn,
+        other => panic!("{:?}", kinds(other)),
+    };
+    assert!(redrawn(t.accept(drawn(1, "a", 10))), "first drawn");
+    // the same drawing written elsewhere: a new hash, the same IR
+    assert!(!redrawn(t.accept(drawn(2, "a", 11))), "moved, not redrawn");
+    // a different drawing
+    assert!(redrawn(t.accept(Report::Icon {
+        generation: 3,
+        name: "a".into(),
+        outcome: Outcome::Drawn {
+            drawing: drawing("other"),
+            hash: 12,
+        },
+    })));
+}

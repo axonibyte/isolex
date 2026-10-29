@@ -90,7 +90,8 @@ describe('App', () => {
     await opened();
     await fireEvent.click(screen.getByRole('tab', { name: 'Tree' }));
     const list = screen.getByRole('list', { name: 'Icons' });
-    expect(within(list).getAllByRole('button')).toHaveLength(names.length);
+    // every icon, and the two bases they extend
+    expect(within(list).getAllByRole('button')).toHaveLength(names.length + 2);
     const last = names[names.length - 1]!;
     await fireEvent.click(within(list).getByRole('button', { name: new RegExp(last) }));
     await screen.findByRole('application', { name: `Canvas: ${last}` });

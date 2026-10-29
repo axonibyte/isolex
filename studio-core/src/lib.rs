@@ -18,6 +18,7 @@ pub mod outline;
 pub mod refactor;
 pub mod save;
 pub mod session;
+pub mod tree;
 pub mod watch;
 
 pub use library::{Change, EditError, Library, Patch, Transaction};

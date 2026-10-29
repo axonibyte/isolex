@@ -48,7 +48,7 @@ export type Notice =
       can_undo: boolean;
       can_redo: boolean;
     }
-  | { kind: 'graph'; graph: Graph }
+  | { kind: 'graph'; graph: Graph; tree: Tree }
   | {
       kind: 'compiled';
       generation: number;
@@ -61,13 +61,32 @@ export type Notice =
       stroke_widths: number[];
       icons: string[];
     }
-  | { kind: 'icon'; name: string; ir: IrIcon; sources: Origin[] }
+  /** `redrawn` unless only where its shapes are written moved. */
+  | { kind: 'icon'; name: string; ir: IrIcon; sources: Origin[]; redrawn: boolean }
   | { kind: 'broken'; name: string; diagnostics: Diag[]; last: { ir: IrIcon; sources: Origin[] } | null }
   | { kind: 'gone'; name: string }
   | { kind: 'reloaded'; files: string[] }
   | { kind: 'out-of-sync'; files: string[] };
 
 /** A node of the source, by file and bytes. */
+/** The Tree tab's rows (studio-core's `tree`). */
+export interface Tree {
+  icons: TreeRow[];
+  fonts: TreeRow[];
+}
+
+export interface TreeRow {
+  kind: 'base' | 'icon' | 'variant' | 'font';
+  name: string;
+  /** What a click opens for editing: its own, or a variant's axis. */
+  definition: string;
+  /** The icon drawn for it: its thumbnail, and what a click draws. */
+  icon: string | null;
+  axis: string | null;
+  variant: string | null;
+  children: TreeRow[];
+}
+
 export interface NodeAt {
   file: string;
   start: number;

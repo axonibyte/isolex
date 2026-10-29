@@ -1,5 +1,5 @@
 //! What the studio's core says of the compiler's sample library (its
-//! graph, each definition's outline, each icon's sources), kept as a
+//! graph and tree, each definition's outline, each icon's sources), kept as a
 //! golden (`tests/fixtures/sample.studio.golden.json`): the data the
 //! interface's tests select and list parts by (`studio/ui/src/lib/
 //! select.test.ts`, `App.parts.test.ts`), checked here against the core.
@@ -10,11 +10,13 @@ use std::sync::atomic::AtomicBool;
 
 use isolex_studio_core::compile::{Compiler, Isolex, Origin, Outcome};
 use isolex_studio_core::outline::{outline, Outline};
+use isolex_studio_core::tree::{tree, Tree};
 use serde::Serialize;
 
 #[derive(Serialize)]
 struct Sample {
     graph: isolex::graph::Graph,
+    tree: Tree,
     outlines: BTreeMap<String, Outline>,
     sources: BTreeMap<String, Vec<Origin>>,
 }
@@ -42,6 +44,7 @@ fn the_sample_as_the_interface_is_told_it() {
         .filter_map(|d| outline(&files, &d.name).map(|o| (d.name.clone(), o)))
         .collect();
     let json = serde_json::to_string_pretty(&Sample {
+        tree: tree(&files),
         graph,
         outlines,
         sources,

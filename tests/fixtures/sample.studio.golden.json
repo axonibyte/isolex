@@ -229,6 +229,96 @@
       }
     ]
   },
+  "tree": {
+    "icons": [
+      {
+        "kind": "base",
+        "name": "rack-unit",
+        "definition": "rack-unit",
+        "icon": null,
+        "axis": null,
+        "variant": null,
+        "children": [
+          {
+            "kind": "base",
+            "name": "switch",
+            "definition": "switch",
+            "icon": null,
+            "axis": null,
+            "variant": null,
+            "children": [
+              {
+                "kind": "icon",
+                "name": "switch-l2",
+                "definition": "switch-l2",
+                "icon": "switch-l2",
+                "axis": null,
+                "variant": null,
+                "children": [
+                  {
+                    "kind": "icon",
+                    "name": "switch-l3",
+                    "definition": "switch-l3",
+                    "icon": "switch-l3",
+                    "axis": null,
+                    "variant": null,
+                    "children": []
+                  },
+                  {
+                    "kind": "icon",
+                    "name": "switch-poe",
+                    "definition": "switch-poe",
+                    "icon": "switch-poe",
+                    "axis": null,
+                    "variant": null,
+                    "children": [
+                      {
+                        "kind": "variant",
+                        "name": "switch-poe-down",
+                        "definition": "state",
+                        "icon": "switch-poe-down",
+                        "axis": "state",
+                        "variant": "down",
+                        "children": []
+                      },
+                      {
+                        "kind": "variant",
+                        "name": "switch-poe-planned",
+                        "definition": "state",
+                        "icon": "switch-poe-planned",
+                        "axis": "state",
+                        "variant": "planned",
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "icon",
+        "name": "state-down",
+        "definition": "state-down",
+        "icon": "state-down",
+        "axis": null,
+        "variant": null,
+        "children": []
+      },
+      {
+        "kind": "icon",
+        "name": "state-planned",
+        "definition": "state-planned",
+        "icon": "state-planned",
+        "axis": null,
+        "variant": null,
+        "children": []
+      }
+    ],
+    "fonts": []
+  },
   "outlines": {
     "disk-stack": {
       "definition": "disk-stack",

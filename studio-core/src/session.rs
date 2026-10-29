@@ -42,8 +42,12 @@ pub enum Notice {
         can_undo: bool,
         can_redo: bool,
     },
-    /// How its definitions refer to each other.
-    Graph { graph: isolex::graph::Graph },
+    /// How its definitions refer to each other, with the Tree tab's rows
+    /// drawn from it.
+    Graph {
+        graph: isolex::graph::Graph,
+        tree: crate::tree::Tree,
+    },
     /// A generation compiled the lexicon: its errors and warnings, and the
     /// icons it emits.
     Compiled {
@@ -60,11 +64,13 @@ pub enum Notice {
         icons: Vec<String>,
     },
     /// An icon drawn differently than before, with where each of its
-    /// shapes is written.
+    /// shapes is written; `redrawn` unless only where they are written
+    /// moved, its drawing the same.
     Icon {
         name: String,
         ir: IrIcon,
         sources: Vec<Origin>,
+        redrawn: bool,
     },
     /// An icon that does not compile now, with its last good drawing.
     Broken {
@@ -455,6 +461,7 @@ impl Session {
         let sources = self.lib.sources();
         self.sink.notify(Notice::Graph {
             graph: isolex::graph(&sources),
+            tree: crate::tree::tree(&sources),
         });
         self.state();
         let (revision, files) = (self.lib.revision(), Arc::new(sources));
@@ -517,9 +524,19 @@ fn notice(e: Event) -> Notice {
             stroke_widths: problems.stroke_widths,
             icons,
         },
-        Event::Changed { name, drawing, .. } => {
+        Event::Changed {
+            name,
+            drawing,
+            redrawn,
+            ..
+        } => {
             let Drawing { ir, sources } = (*drawing).clone();
-            Notice::Icon { name, ir, sources }
+            Notice::Icon {
+                name,
+                ir,
+                sources,
+                redrawn,
+            }
         }
         Event::Broken { name, diags, last } => Notice::Broken {
             name,

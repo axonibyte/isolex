@@ -11,13 +11,13 @@
   import { DEFAULT_PALETTE, canvasTheme, setCanvasTheme, setTheme, theme, type CanvasTheme, type Theme } from './lib/theme';
   import Canvas from './components/Canvas.svelte';
   import SourceTab from './components/SourceTab.svelte';
-  import IsoIcon from './components/IsoIcon.svelte';
   import PartsPanel from './components/PartsPanel.svelte';
   import { marks, pick, source, within } from './lib/select';
   import { Tools } from './lib/tools.svelte';
   import { TOOLS, fits, toolFor, type Tool } from './lib/keymap';
   import DesignTab from './components/DesignTab.svelte';
   import PreviewTab from './components/PreviewTab.svelte';
+  import TreeTab from './components/TreeTab.svelte';
   import HistoryMenu from './components/HistoryMenu.svelte';
   import ProblemsMenu from './components/ProblemsMenu.svelte';
   import { STEPS, stepLabel } from './lib/snap';
@@ -305,17 +305,7 @@
           {:else if tab === 'preview'}
             <PreviewTab icon={shown} />
           {:else if tab === 'tree'}
-            <ul class="icons {canvas === 'dark' ? 'iso-dark' : 'iso-light'}" aria-label="Icons">
-              {#each view.compiled?.icons ?? [] as name (name)}
-                <li>
-                  <button aria-current={name === studio.icon} onclick={() => studio.openIcon(name)}>
-                    <span class="thumb">{#if view.icons[name]}<IsoIcon icon={view.icons[name]} height={36} />{/if}</span>
-                    <span class="iname">{name}</span>
-                    {#if view.broken[name]}<span class="broken" title={view.broken[name].map((d) => d.message).join('\n')}>does not compile</span>{/if}
-                  </button>
-                </li>
-              {/each}
-            </ul>
+            <TreeTab {studio} look={canvas === 'dark' ? 'iso-dark' : 'iso-light'} />
           {/if}
         </div>
       </aside>
@@ -589,47 +579,6 @@
     flex: 1;
     min-height: 0;
     overflow: auto;
-  }
-  .icons {
-    list-style: none;
-    margin: 0;
-    padding: 8px;
-  }
-  .icons button {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    width: 100%;
-    padding: 4px 8px;
-    border: 0;
-    border-radius: 8px;
-    background: transparent;
-    text-align: left;
-    cursor: pointer;
-  }
-  .icons button:hover {
-    background: var(--raised);
-  }
-  .icons button[aria-current='true'] {
-    background: color-mix(in srgb, var(--accent) 18%, transparent);
-  }
-  .thumb {
-    width: 52px;
-    height: 42px;
-    display: grid;
-    place-items: center;
-    background: var(--canvas);
-    border: 1px solid var(--line);
-    border-radius: 8px;
-  }
-  .iname {
-    font-family: var(--font-mono);
-    font-size: 12px;
-  }
-  .broken {
-    margin-left: auto;
-    color: var(--danger);
-    font-size: 11px;
   }
   .sync {
     display: flex;

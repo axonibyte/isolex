@@ -14,7 +14,7 @@ const origin = (start: number): Origin => ({
   map: [1, 0, 0, 1, 0, 0, 0, 0],
   values: [],
 });
-const drawn = (name: string, start = 0): Notice => ({ kind: 'icon', name, ir: icon(name), sources: [origin(start)] });
+const drawn = (name: string, start = 0, redrawn = true): Notice => ({ kind: 'icon', name, ir: icon(name), sources: [origin(start)], redrawn });
 const compiled = (generation: number): Notice => ({
   kind: 'compiled',
   generation,
@@ -54,6 +54,20 @@ describe('reduce', () => {
     expect(v.broken.a).toEqual([diag]);
     v = reduce(v, drawn('a'));
     expect(v.broken.a).toBeUndefined();
+  });
+
+  it('keeps the drawing an icon had when only where it is written moved', () => {
+    const v = reduce(empty(), drawn('a', 5));
+    const ir = v.icons.a;
+    expect(v.redrawn.a).toBeUndefined();
+    const moved = reduce(v, drawn('a', 9, false));
+    // the same object: a thumbnail of it is not drawn again
+    expect(moved.icons.a).toBe(ir);
+    expect(moved.sources.a).toEqual([origin(9)]);
+    expect(moved.redrawn.a).toBeUndefined();
+    const again = reduce(moved, drawn('a', 9, true));
+    expect(again.icons.a).not.toBe(ir);
+    expect(again.redrawn.a).toBe(1);
   });
 
   it('keeps each drawing’s sources with it', () => {

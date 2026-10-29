@@ -398,11 +398,15 @@ pub enum Event {
         problems: Problems,
         icons: Vec<String>,
     },
-    /// An icon drawn differently from before (or for the first time).
+    /// An icon drawn differently from before (or for the first time):
+    /// `redrawn` when its IR changed, not when only where its shapes are
+    /// written moved (an edit above it in its file), which the interface
+    /// selects by but need not draw again.
     Changed {
         name: String,
         drawing: Arc<Drawing>,
         hash: u64,
+        redrawn: bool,
     },
     /// An icon that does not compile now; `last` is its last good drawing,
     /// which the interface keeps showing.
@@ -481,6 +485,9 @@ impl Tracker {
                     Outcome::Drawn { drawing, hash } => {
                         let same = entry.last.as_ref().is_some_and(|(_, h)| *h == hash);
                         let was_broken = entry.broken;
+                        let redrawn = entry.last.as_ref().is_none_or(|(d, _)| {
+                            same_ir(&d.ir, &drawing.ir).is_none_or(|same| !same)
+                        });
                         entry.last = Some((drawing.clone(), hash));
                         entry.broken = false;
                         if same && !was_broken {
@@ -490,6 +497,7 @@ impl Tracker {
                             name,
                             drawing,
                             hash,
+                            redrawn,
                         }]
                     }
                     Outcome::Broken(diags) => {
@@ -504,6 +512,12 @@ impl Tracker {
             }
         }
     }
+}
+
+/// Two IRs are the same drawing: compared as the JSON they are told as,
+/// none if either does not serialize.
+fn same_ir(a: &IrIcon, b: &IrIcon) -> Option<bool> {
+    Some(serde_json::to_string(a).ok()? == serde_json::to_string(b).ok()?)
 }
 
 // --- SVG, kept --------------------------------------------------------------------

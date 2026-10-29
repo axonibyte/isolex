@@ -3,7 +3,7 @@
 // reactive and talks to the backend.
 
 import type { IrIcon } from './isolex/ir';
-import type { Backend, Diag, Drawing, Graph, GraphDef, NodeAt, Notice, Origin, Outline, Row } from './backend';
+import type { Backend, Diag, Drawing, Graph, GraphDef, NodeAt, Notice, Origin, Outline, Row, Tree, TreeRow } from './backend';
 import { atPath, find, same } from './select';
 
 export interface LibraryState {
@@ -22,6 +22,8 @@ export interface LibraryState {
 export interface View {
   library: LibraryState | null;
   graph: Graph | null;
+  /** The Tree tab's rows. */
+  tree: Tree | null;
   /** The newest compile: which revision, its problems, its icons. */
   compiled: { generation: number; revision: number; errors: Diag[]; warnings: Diag[]; icons: string[] } | null;
   palette: Record<string, { light: string; dark: string }> | null;
@@ -34,6 +36,10 @@ export interface View {
   sources: Record<string, Origin[]>;
   /** Icons that do not compile now, with why. */
   broken: Record<string, Diag[]>;
+  /** How many times each icon has been drawn differently since the
+      library opened: its first drawing is 0, so one an edit redrew is
+      above it. */
+  redrawn: Record<string, number>;
   /** Files changed on disk while there are unsaved edits. */
   outOfSync: string[];
 }
@@ -41,12 +47,14 @@ export interface View {
 export const empty = (): View => ({
   library: null,
   graph: null,
+  tree: null,
   compiled: null,
   palette: null,
   lexicon: { tokens: [], widths: [] },
   icons: {},
   sources: {},
   broken: {},
+  redrawn: {},
   outOfSync: [],
 });
 
@@ -70,7 +78,7 @@ export function reduce(v: View, n: Notice): View {
         outOfSync: n.modified ? v.outOfSync : [],
       };
     case 'graph':
-      return { ...v, graph: n.graph };
+      return { ...v, graph: n.graph, tree: n.tree };
     case 'compiled': {
       if (v.compiled && n.generation < v.compiled.generation) return v;
       return {
@@ -83,7 +91,11 @@ export function reduce(v: View, n: Notice): View {
     case 'icon': {
       const broken = { ...v.broken };
       delete broken[n.name];
-      return { ...v, icons: { ...v.icons, [n.name]: n.ir }, sources: { ...v.sources, [n.name]: n.sources }, broken };
+      const had = v.icons[n.name];
+      // only moved in its file: the drawing it had stands, not drawn again
+      const ir = had && !n.redrawn ? had : n.ir;
+      const redrawn = had && n.redrawn ? { ...v.redrawn, [n.name]: (v.redrawn[n.name] ?? 0) + 1 } : v.redrawn;
+      return { ...v, icons: { ...v.icons, [n.name]: ir }, sources: { ...v.sources, [n.name]: n.sources }, broken, redrawn };
     }
     case 'broken':
       return {
@@ -199,6 +211,13 @@ export class Studio {
   get editingNode(): NodeAt | null {
     const d = this.definition;
     return d ? { file: d.file, start: d.span.start, len: d.span.len } : null;
+  }
+
+  /** A row of the Tree tab opened: its icon drawn, its definition (a
+      variant's axis) edited. */
+  openRow(row: TreeRow) {
+    if (row.icon) this.icon = row.icon;
+    this.edit(row.definition);
   }
 
   /** Draws `name` and edits its own definition. */

@@ -1,0 +1,5281 @@
+// 500 icons for timing the studio (#71): written by
+// studio-core/tests/scale.rs; UPDATE_GOLDENS=1 writes it again.
+
+lexicon {
+  tokens "ink" "ink-muted" "outline" "body-top" "body-left" "body-right" "accent"
+  stroke-widths 1.2 1.4
+}
+
+fragment "led-row" {
+  param n 4
+  param z 0.1
+  part "leds" {
+    repeat "n" "i" {
+      facerect "front" "0.1 + i * (1.8 / n)" 1 "z" 0.08 0.08 fill="ink" opacity=0.6
+    }
+  }
+}
+
+axis "state" {
+  variant "down" {
+    part "state-badge" {
+      badge "state-down" corner="ne"
+    }
+  }
+  variant "planned" {
+    part "state-badge" {
+      badge "state-planned" corner="ne"
+    }
+  }
+}
+
+icon "state-down" {
+  category "state"
+  canvas 24 24
+  part "x" {
+    at 0 0 0 {
+      circle 12 12 8 fill="accent"
+      path d="M8,8 L16,16 M16,8 L8,16" stroke="ink" width=1.4
+    }
+  }
+}
+
+icon "state-planned" {
+  category "state"
+  canvas 24 24
+  part "x" {
+    at 0 0 0 {
+      rect 3 3 18 18 rx=3 stroke="ink-muted" width=1.4
+    }
+  }
+}
+
+base "rack-0" {
+  category "rack"
+  param u 1
+  footprint 2 1 "u * 0.28"
+  part "chassis" {
+    box 0 0 0 2 1 "u * 0.28"
+  }
+}
+
+base "rack-1" {
+  category "rack"
+  param u 2
+  footprint 2 1 "u * 0.28"
+  part "chassis" {
+    box 0 0 0 2 1 "u * 0.28"
+  }
+}
+
+base "rack-2" {
+  category "rack"
+  param u 3
+  footprint 2 1 "u * 0.28"
+  part "chassis" {
+    box 0 0 0 2 1 "u * 0.28"
+  }
+}
+
+base "rack-3" {
+  category "rack"
+  param u 1
+  footprint 2 1 "u * 0.28"
+  part "chassis" {
+    box 0 0 0 2 1 "u * 0.28"
+  }
+}
+
+base "rack-4" extends="rack-3" {
+  category "rack"
+  param u 2
+  footprint 2 1 "u * 0.28"
+  part "rail" {
+    tile 0 0.9 "u * 0.28" 2 0.1 fill="ink-muted"
+  }
+}
+
+base "rack-5" {
+  category "rack"
+  param u 3
+  footprint 2 1 "u * 0.28"
+  part "chassis" {
+    box 0 0 0 2 1 "u * 0.28"
+  }
+}
+
+base "rack-6" {
+  category "rack"
+  param u 1
+  footprint 2 1 "u * 0.28"
+  part "chassis" {
+    box 0 0 0 2 1 "u * 0.28"
+  }
+}
+
+base "rack-7" {
+  category "rack"
+  param u 2
+  footprint 2 1 "u * 0.28"
+  part "chassis" {
+    box 0 0 0 2 1 "u * 0.28"
+  }
+}
+
+base "rack-8" {
+  category "rack"
+  param u 3
+  footprint 2 1 "u * 0.28"
+  part "chassis" {
+    box 0 0 0 2 1 "u * 0.28"
+  }
+}
+
+base "rack-9" extends="rack-8" {
+  category "rack"
+  param u 1
+  footprint 2 1 "u * 0.28"
+  part "rail" {
+    tile 0 0.9 "u * 0.28" 2 0.1 fill="ink-muted"
+  }
+}
+
+base "rack-10" {
+  category "rack"
+  param u 2
+  footprint 2 1 "u * 0.28"
+  part "chassis" {
+    box 0 0 0 2 1 "u * 0.28"
+  }
+}
+
+base "rack-11" {
+  category "rack"
+  param u 3
+  footprint 2 1 "u * 0.28"
+  part "chassis" {
+    box 0 0 0 2 1 "u * 0.28"
+  }
+}
+
+base "rack-12" {
+  category "rack"
+  param u 1
+  footprint 2 1 "u * 0.28"
+  part "chassis" {
+    box 0 0 0 2 1 "u * 0.28"
+  }
+}
+
+base "rack-13" {
+  category "rack"
+  param u 2
+  footprint 2 1 "u * 0.28"
+  part "chassis" {
+    box 0 0 0 2 1 "u * 0.28"
+  }
+}
+
+base "rack-14" extends="rack-13" {
+  category "rack"
+  param u 3
+  footprint 2 1 "u * 0.28"
+  part "rail" {
+    tile 0 0.9 "u * 0.28" 2 0.1 fill="ink-muted"
+  }
+}
+
+base "rack-15" {
+  category "rack"
+  param u 1
+  footprint 2 1 "u * 0.28"
+  part "chassis" {
+    box 0 0 0 2 1 "u * 0.28"
+  }
+}
+
+base "rack-16" {
+  category "rack"
+  param u 2
+  footprint 2 1 "u * 0.28"
+  part "chassis" {
+    box 0 0 0 2 1 "u * 0.28"
+  }
+}
+
+base "rack-17" {
+  category "rack"
+  param u 3
+  footprint 2 1 "u * 0.28"
+  part "chassis" {
+    box 0 0 0 2 1 "u * 0.28"
+  }
+}
+
+base "rack-18" {
+  category "rack"
+  param u 1
+  footprint 2 1 "u * 0.28"
+  part "chassis" {
+    box 0 0 0 2 1 "u * 0.28"
+  }
+}
+
+base "rack-19" extends="rack-18" {
+  category "rack"
+  param u 2
+  footprint 2 1 "u * 0.28"
+  part "rail" {
+    tile 0 0.9 "u * 0.28" 2 0.1 fill="ink-muted"
+  }
+}
+
+icon "dev-0" {
+  extends "rack-0"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-1" {
+  extends "rack-1"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-2" {
+  extends "rack-2"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-3" {
+  extends "rack-3"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-4" {
+  extends "rack-4"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-5" {
+  extends "rack-5"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-6" {
+  extends "rack-6"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-7" {
+  extends "rack-7"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-8" {
+  extends "rack-8"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-9" {
+  extends "rack-9"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-10" {
+  extends "rack-10"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-11" {
+  extends "rack-11"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-12" {
+  extends "rack-12"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-13" {
+  extends "rack-13"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-14" {
+  extends "rack-14"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-15" {
+  extends "rack-15"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-16" {
+  extends "rack-16"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-17" {
+  extends "rack-17"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-18" {
+  extends "rack-18"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-19" {
+  extends "rack-19"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-20" {
+  extends "rack-0"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-21" {
+  extends "rack-1"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-22" {
+  extends "rack-2"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-23" {
+  extends "rack-3"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-24" {
+  extends "rack-4"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-25" {
+  extends "rack-5"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-26" {
+  extends "rack-6"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-27" {
+  extends "rack-7"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-28" {
+  extends "rack-8"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-29" {
+  extends "rack-9"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-30" {
+  extends "rack-10"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-31" {
+  extends "rack-11"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-32" {
+  extends "rack-12"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-33" {
+  extends "rack-13"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-34" {
+  extends "rack-14"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-35" {
+  extends "rack-15"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-36" {
+  extends "rack-16"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-37" {
+  extends "rack-17"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-38" {
+  extends "rack-18"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-39" {
+  extends "rack-19"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-40" {
+  extends "rack-0"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-41" {
+  extends "rack-1"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-42" {
+  extends "rack-2"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-43" {
+  extends "rack-3"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-44" {
+  extends "rack-4"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-45" {
+  extends "rack-5"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-46" {
+  extends "rack-6"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-47" {
+  extends "rack-7"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-48" {
+  extends "rack-8"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-49" {
+  extends "rack-9"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-50" {
+  extends "rack-10"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-51" {
+  extends "rack-11"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-52" {
+  extends "rack-12"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-53" {
+  extends "rack-13"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-54" {
+  extends "rack-14"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-55" {
+  extends "rack-15"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-56" {
+  extends "rack-16"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-57" {
+  extends "rack-17"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-58" {
+  extends "rack-18"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-59" {
+  extends "rack-19"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-60" {
+  extends "rack-0"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-61" {
+  extends "rack-1"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-62" {
+  extends "rack-2"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-63" {
+  extends "rack-3"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-64" {
+  extends "rack-4"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-65" {
+  extends "rack-5"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-66" {
+  extends "rack-6"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-67" {
+  extends "rack-7"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-68" {
+  extends "rack-8"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-69" {
+  extends "rack-9"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-70" {
+  extends "rack-10"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-71" {
+  extends "rack-11"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-72" {
+  extends "rack-12"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-73" {
+  extends "rack-13"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-74" {
+  extends "rack-14"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-75" {
+  extends "rack-15"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-76" {
+  extends "rack-16"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-77" {
+  extends "rack-17"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-78" {
+  extends "rack-18"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-79" {
+  extends "rack-19"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-80" {
+  extends "rack-0"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-81" {
+  extends "rack-1"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-82" {
+  extends "rack-2"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-83" {
+  extends "rack-3"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-84" {
+  extends "rack-4"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-85" {
+  extends "rack-5"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-86" {
+  extends "rack-6"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-87" {
+  extends "rack-7"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-88" {
+  extends "rack-8"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-89" {
+  extends "rack-9"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-90" {
+  extends "rack-10"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-91" {
+  extends "rack-11"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-92" {
+  extends "rack-12"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-93" {
+  extends "rack-13"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-94" {
+  extends "rack-14"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-95" {
+  extends "rack-15"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-96" {
+  extends "rack-16"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-97" {
+  extends "rack-17"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-98" {
+  extends "rack-18"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-99" {
+  extends "rack-19"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-100" {
+  extends "rack-0"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-101" {
+  extends "rack-1"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-102" {
+  extends "rack-2"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-103" {
+  extends "rack-3"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-104" {
+  extends "rack-4"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-105" {
+  extends "rack-5"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-106" {
+  extends "rack-6"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-107" {
+  extends "rack-7"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-108" {
+  extends "rack-8"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-109" {
+  extends "rack-9"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-110" {
+  extends "rack-10"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-111" {
+  extends "rack-11"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-112" {
+  extends "rack-12"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-113" {
+  extends "rack-13"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-114" {
+  extends "rack-14"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-115" {
+  extends "rack-15"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-116" {
+  extends "rack-16"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-117" {
+  extends "rack-17"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-118" {
+  extends "rack-18"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-119" {
+  extends "rack-19"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-120" {
+  extends "rack-0"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-121" {
+  extends "rack-1"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-122" {
+  extends "rack-2"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-123" {
+  extends "rack-3"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-124" {
+  extends "rack-4"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-125" {
+  extends "rack-5"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-126" {
+  extends "rack-6"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-127" {
+  extends "rack-7"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-128" {
+  extends "rack-8"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-129" {
+  extends "rack-9"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-130" {
+  extends "rack-10"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-131" {
+  extends "rack-11"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-132" {
+  extends "rack-12"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-133" {
+  extends "rack-13"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-134" {
+  extends "rack-14"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-135" {
+  extends "rack-15"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-136" {
+  extends "rack-16"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-137" {
+  extends "rack-17"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-138" {
+  extends "rack-18"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-139" {
+  extends "rack-19"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-140" {
+  extends "rack-0"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-141" {
+  extends "rack-1"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-142" {
+  extends "rack-2"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-143" {
+  extends "rack-3"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-144" {
+  extends "rack-4"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-145" {
+  extends "rack-5"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-146" {
+  extends "rack-6"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-147" {
+  extends "rack-7"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-148" {
+  extends "rack-8"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-149" {
+  extends "rack-9"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-150" {
+  extends "rack-10"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-151" {
+  extends "rack-11"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-152" {
+  extends "rack-12"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-153" {
+  extends "rack-13"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-154" {
+  extends "rack-14"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-155" {
+  extends "rack-15"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-156" {
+  extends "rack-16"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-157" {
+  extends "rack-17"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-158" {
+  extends "rack-18"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-159" {
+  extends "rack-19"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-160" {
+  extends "rack-0"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-161" {
+  extends "rack-1"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-162" {
+  extends "rack-2"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-163" {
+  extends "rack-3"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-164" {
+  extends "rack-4"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-165" {
+  extends "rack-5"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-166" {
+  extends "rack-6"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-167" {
+  extends "rack-7"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-168" {
+  extends "rack-8"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-169" {
+  extends "rack-9"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-170" {
+  extends "rack-10"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-171" {
+  extends "rack-11"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-172" {
+  extends "rack-12"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-173" {
+  extends "rack-13"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-174" {
+  extends "rack-14"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-175" {
+  extends "rack-15"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-176" {
+  extends "rack-16"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-177" {
+  extends "rack-17"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-178" {
+  extends "rack-18"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-179" {
+  extends "rack-19"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-180" {
+  extends "rack-0"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-181" {
+  extends "rack-1"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-182" {
+  extends "rack-2"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-183" {
+  extends "rack-3"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-184" {
+  extends "rack-4"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-185" {
+  extends "rack-5"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-186" {
+  extends "rack-6"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-187" {
+  extends "rack-7"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-188" {
+  extends "rack-8"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-189" {
+  extends "rack-9"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-190" {
+  extends "rack-10"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-191" {
+  extends "rack-11"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-192" {
+  extends "rack-12"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-193" {
+  extends "rack-13"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-194" {
+  extends "rack-14"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-195" {
+  extends "rack-15"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-196" {
+  extends "rack-16"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-197" {
+  extends "rack-17"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-198" {
+  extends "rack-18"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-199" {
+  extends "rack-19"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-200" {
+  extends "rack-0"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-201" {
+  extends "rack-1"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-202" {
+  extends "rack-2"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-203" {
+  extends "rack-3"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-204" {
+  extends "rack-4"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-205" {
+  extends "rack-5"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-206" {
+  extends "rack-6"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-207" {
+  extends "rack-7"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-208" {
+  extends "rack-8"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-209" {
+  extends "rack-9"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-210" {
+  extends "rack-10"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-211" {
+  extends "rack-11"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-212" {
+  extends "rack-12"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-213" {
+  extends "rack-13"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-214" {
+  extends "rack-14"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-215" {
+  extends "rack-15"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-216" {
+  extends "rack-16"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-217" {
+  extends "rack-17"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-218" {
+  extends "rack-18"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-219" {
+  extends "rack-19"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-220" {
+  extends "rack-0"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-221" {
+  extends "rack-1"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-222" {
+  extends "rack-2"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-223" {
+  extends "rack-3"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-224" {
+  extends "rack-4"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-225" {
+  extends "rack-5"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-226" {
+  extends "rack-6"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-227" {
+  extends "rack-7"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-228" {
+  extends "rack-8"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-229" {
+  extends "rack-9"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-230" {
+  extends "rack-10"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-231" {
+  extends "rack-11"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-232" {
+  extends "rack-12"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-233" {
+  extends "rack-13"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-234" {
+  extends "rack-14"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-235" {
+  extends "rack-15"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-236" {
+  extends "rack-16"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-237" {
+  extends "rack-17"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-238" {
+  extends "rack-18"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-239" {
+  extends "rack-19"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-240" {
+  extends "rack-0"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-241" {
+  extends "rack-1"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-242" {
+  extends "rack-2"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-243" {
+  extends "rack-3"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-244" {
+  extends "rack-4"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-245" {
+  extends "rack-5"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-246" {
+  extends "rack-6"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-247" {
+  extends "rack-7"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-248" {
+  extends "rack-8"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-249" {
+  extends "rack-9"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-250" {
+  extends "rack-10"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-251" {
+  extends "rack-11"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-252" {
+  extends "rack-12"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-253" {
+  extends "rack-13"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-254" {
+  extends "rack-14"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-255" {
+  extends "rack-15"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-256" {
+  extends "rack-16"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-257" {
+  extends "rack-17"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-258" {
+  extends "rack-18"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-259" {
+  extends "rack-19"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-260" {
+  extends "rack-0"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-261" {
+  extends "rack-1"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-262" {
+  extends "rack-2"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-263" {
+  extends "rack-3"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-264" {
+  extends "rack-4"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-265" {
+  extends "rack-5"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-266" {
+  extends "rack-6"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-267" {
+  extends "rack-7"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-268" {
+  extends "rack-8"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-269" {
+  extends "rack-9"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-270" {
+  extends "rack-10"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-271" {
+  extends "rack-11"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-272" {
+  extends "rack-12"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-273" {
+  extends "rack-13"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-274" {
+  extends "rack-14"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-275" {
+  extends "rack-15"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-276" {
+  extends "rack-16"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-277" {
+  extends "rack-17"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-278" {
+  extends "rack-18"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-279" {
+  extends "rack-19"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-280" {
+  extends "rack-0"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-281" {
+  extends "rack-1"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-282" {
+  extends "rack-2"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-283" {
+  extends "rack-3"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-284" {
+  extends "rack-4"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-285" {
+  extends "rack-5"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-286" {
+  extends "rack-6"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-287" {
+  extends "rack-7"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-288" {
+  extends "rack-8"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-289" {
+  extends "rack-9"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-290" {
+  extends "rack-10"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-291" {
+  extends "rack-11"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-292" {
+  extends "rack-12"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-293" {
+  extends "rack-13"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-294" {
+  extends "rack-14"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-295" {
+  extends "rack-15"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-296" {
+  extends "rack-16"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-297" {
+  extends "rack-17"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-298" {
+  extends "rack-18"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-299" {
+  extends "rack-19"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-300" {
+  extends "rack-0"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-301" {
+  extends "rack-1"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-302" {
+  extends "rack-2"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-303" {
+  extends "rack-3"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-304" {
+  extends "rack-4"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-305" {
+  extends "rack-5"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-306" {
+  extends "rack-6"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-307" {
+  extends "rack-7"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-308" {
+  extends "rack-8"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-309" {
+  extends "rack-9"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-310" {
+  extends "rack-10"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-311" {
+  extends "rack-11"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-312" {
+  extends "rack-12"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-313" {
+  extends "rack-13"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-314" {
+  extends "rack-14"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-315" {
+  extends "rack-15"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-316" {
+  extends "rack-16"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-317" {
+  extends "rack-17"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-318" {
+  extends "rack-18"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-319" {
+  extends "rack-19"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-320" {
+  extends "rack-0"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-321" {
+  extends "rack-1"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-322" {
+  extends "rack-2"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-323" {
+  extends "rack-3"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-324" {
+  extends "rack-4"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-325" {
+  extends "rack-5"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-326" {
+  extends "rack-6"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-327" {
+  extends "rack-7"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-328" {
+  extends "rack-8"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-329" {
+  extends "rack-9"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-330" {
+  extends "rack-10"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-331" {
+  extends "rack-11"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-332" {
+  extends "rack-12"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-333" {
+  extends "rack-13"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-334" {
+  extends "rack-14"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-335" {
+  extends "rack-15"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-336" {
+  extends "rack-16"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-337" {
+  extends "rack-17"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-338" {
+  extends "rack-18"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-339" {
+  extends "rack-19"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-340" {
+  extends "rack-0"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-341" {
+  extends "rack-1"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-342" {
+  extends "rack-2"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-343" {
+  extends "rack-3"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-344" {
+  extends "rack-4"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-345" {
+  extends "rack-5"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-346" {
+  extends "rack-6"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-347" {
+  extends "rack-7"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-348" {
+  extends "rack-8"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-349" {
+  extends "rack-9"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-350" {
+  extends "rack-10"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-351" {
+  extends "rack-11"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-352" {
+  extends "rack-12"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-353" {
+  extends "rack-13"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-354" {
+  extends "rack-14"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-355" {
+  extends "rack-15"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-356" {
+  extends "rack-16"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-357" {
+  extends "rack-17"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-358" {
+  extends "rack-18"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-359" {
+  extends "rack-19"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-360" {
+  extends "rack-0"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-361" {
+  extends "rack-1"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-362" {
+  extends "rack-2"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-363" {
+  extends "rack-3"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-364" {
+  extends "rack-4"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-365" {
+  extends "rack-5"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-366" {
+  extends "rack-6"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-367" {
+  extends "rack-7"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-368" {
+  extends "rack-8"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-369" {
+  extends "rack-9"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-370" {
+  extends "rack-10"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-371" {
+  extends "rack-11"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-372" {
+  extends "rack-12"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-373" {
+  extends "rack-13"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-374" {
+  extends "rack-14"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-375" {
+  extends "rack-15"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-376" {
+  extends "rack-16"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-377" {
+  extends "rack-17"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-378" {
+  extends "rack-18"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-379" {
+  extends "rack-19"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-380" {
+  extends "rack-0"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-381" {
+  extends "rack-1"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-382" {
+  extends "rack-2"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-383" {
+  extends "rack-3"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-384" {
+  extends "rack-4"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-385" {
+  extends "rack-5"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-386" {
+  extends "rack-6"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-387" {
+  extends "rack-7"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-388" {
+  extends "rack-8"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-389" {
+  extends "rack-9"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-390" {
+  extends "rack-10"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-391" {
+  extends "rack-11"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-392" {
+  extends "rack-12"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-393" {
+  extends "rack-13"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-394" {
+  extends "rack-14"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-395" {
+  extends "rack-15"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-396" {
+  extends "rack-16"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-397" {
+  extends "rack-17"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-398" {
+  extends "rack-18"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-399" {
+  extends "rack-19"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-400" {
+  extends "rack-0"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-401" {
+  extends "rack-1"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-402" {
+  extends "rack-2"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-403" {
+  extends "rack-3"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-404" {
+  extends "rack-4"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-405" {
+  extends "rack-5"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-406" {
+  extends "rack-6"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-407" {
+  extends "rack-7"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-408" {
+  extends "rack-8"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-409" {
+  extends "rack-9"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-410" {
+  extends "rack-10"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-411" {
+  extends "rack-11"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-412" {
+  extends "rack-12"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-413" {
+  extends "rack-13"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-414" {
+  extends "rack-14"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-415" {
+  extends "rack-15"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-416" {
+  extends "rack-16"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-417" {
+  extends "rack-17"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-418" {
+  extends "rack-18"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-419" {
+  extends "rack-19"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-420" {
+  extends "rack-0"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-421" {
+  extends "rack-1"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-422" {
+  extends "rack-2"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-423" {
+  extends "rack-3"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-424" {
+  extends "rack-4"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-425" {
+  extends "rack-5"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-426" {
+  extends "rack-6"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-427" {
+  extends "rack-7"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-428" {
+  extends "rack-8"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-429" {
+  extends "rack-9"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-430" {
+  extends "rack-10"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-431" {
+  extends "rack-11"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-432" {
+  extends "rack-12"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-433" {
+  extends "rack-13"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-434" {
+  extends "rack-14"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-435" {
+  extends "rack-15"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-436" {
+  extends "rack-16"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-437" {
+  extends "rack-17"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-438" {
+  extends "rack-18"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-439" {
+  extends "rack-19"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-440" {
+  extends "rack-0"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-441" {
+  extends "rack-1"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-442" {
+  extends "rack-2"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-443" {
+  extends "rack-3"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-444" {
+  extends "rack-4"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-445" {
+  extends "rack-5"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-446" {
+  extends "rack-6"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-447" {
+  extends "rack-7"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-448" {
+  extends "rack-8"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-449" {
+  extends "rack-9"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-450" {
+  extends "rack-10"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-451" {
+  extends "rack-11"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-452" {
+  extends "rack-12"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-453" {
+  extends "rack-13"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-454" {
+  extends "rack-14"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-455" {
+  extends "rack-15"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-456" {
+  extends "rack-16"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-457" {
+  extends "rack-17"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-458" {
+  extends "rack-18"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-459" {
+  extends "rack-19"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-460" {
+  extends "rack-0"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-461" {
+  extends "rack-1"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-462" {
+  extends "rack-2"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-463" {
+  extends "rack-3"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-464" {
+  extends "rack-4"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-465" {
+  extends "rack-5"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-466" {
+  extends "rack-6"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-467" {
+  extends "rack-7"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-468" {
+  extends "rack-8"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-469" {
+  extends "rack-9"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-470" {
+  extends "rack-10"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-471" {
+  extends "rack-11"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-472" {
+  extends "rack-12"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-473" {
+  extends "rack-13"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-474" {
+  extends "rack-14"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-475" {
+  extends "rack-15"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-476" {
+  extends "rack-16"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-477" {
+  extends "rack-17"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-478" {
+  extends "rack-18"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-479" {
+  extends "rack-19"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-480" {
+  extends "rack-0"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-481" {
+  extends "rack-1"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-482" {
+  extends "rack-2"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-483" {
+  extends "rack-3"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-484" {
+  extends "rack-4"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-485" {
+  extends "rack-5"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-486" {
+  extends "rack-6"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-487" {
+  extends "rack-7"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-488" {
+  extends "rack-8"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-489" {
+  extends "rack-9"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-490" {
+  extends "rack-10"
+  axes "state"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-491" {
+  extends "rack-11"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-492" {
+  extends "rack-12"
+  part "ports" {
+    insert "led-row" n=5 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-493" {
+  extends "rack-13"
+  part "ports" {
+    insert "led-row" n=6 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-494" {
+  extends "rack-14"
+  part "ports" {
+    insert "led-row" n=7 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-495" {
+  extends "rack-15"
+  part "ports" {
+    insert "led-row" n=8 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-496" {
+  extends "rack-16"
+  part "ports" {
+    insert "led-row" n=1 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-497" {
+  extends "rack-17"
+  part "ports" {
+    insert "led-row" n=2 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-498" {
+  extends "rack-18"
+  part "ports" {
+    insert "led-row" n=3 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
+
+icon "dev-499" {
+  extends "rack-19"
+  part "ports" {
+    insert "led-row" n=4 z=0.1
+  }
+  part "label" {
+    tile 0.2 0.2 "u * 0.28" 0.6 0.3 fill="accent"
+  }
+}
