@@ -9,9 +9,11 @@ fn bin() -> Command {
     Command::new(env!("CARGO_BIN_EXE_isolex"))
 }
 
-fn lexicon_dir() -> PathBuf {
-    // a directory containing only the sample fixture
-    let dir = std::env::temp_dir().join(format!("isolex-e2e-{}", std::process::id()));
+fn lexicon_dir(tag: &str) -> PathBuf {
+    // a directory containing only the sample fixture, one per test: tests
+    // run in parallel, and rewriting a shared copy while another test's
+    // isolex reads it fails that test
+    let dir = std::env::temp_dir().join(format!("isolex-e2e-sample-{tag}-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("sample.ilx"), include_str!("fixtures/sample.ilx")).unwrap();
     dir
@@ -19,7 +21,7 @@ fn lexicon_dir() -> PathBuf {
 
 #[test]
 fn check_reports_counts_and_exits_zero() {
-    let dir = lexicon_dir();
+    let dir = lexicon_dir("check");
     let out = bin().arg("check").arg(&dir).output().unwrap();
     assert!(
         out.status.success(),
@@ -35,7 +37,7 @@ fn check_reports_counts_and_exits_zero() {
 
 #[test]
 fn compile_matches_the_ir_golden_and_is_deterministic() {
-    let dir = lexicon_dir();
+    let dir = lexicon_dir("golden");
     let run = || {
         let out = bin()
             .arg("compile")
@@ -69,7 +71,7 @@ fn compile_matches_the_ir_golden_and_is_deterministic() {
 
 #[test]
 fn ir_carries_axis_expansion_and_badge_groups() {
-    let dir = lexicon_dir();
+    let dir = lexicon_dir("axes");
     let out = bin()
         .arg("compile")
         .arg(&dir)
@@ -112,7 +114,7 @@ fn ir_carries_axis_expansion_and_badge_groups() {
 
 #[test]
 fn docs_emits_reference_tables() {
-    let dir = lexicon_dir();
+    let dir = lexicon_dir("docs");
     let out = bin().arg("docs").arg(&dir).output().unwrap();
     assert!(out.status.success());
     let stdout = String::from_utf8(out.stdout).unwrap();
