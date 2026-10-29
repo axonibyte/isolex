@@ -56,10 +56,14 @@ describe('App', () => {
     await opened();
     const rail = screen.getByRole('navigation', { name: 'Tools' });
     expect(within(rail).getByRole('button', { name: 'Select and move' }).hasAttribute('disabled')).toBe(false);
-    expect(within(rail).getByRole('button', { name: 'Box' }).hasAttribute('disabled')).toBe(true);
-    await fireEvent.keyDown(window, { key: 'h' });
-    expect(within(rail).getByRole('button', { name: 'Pan' }).getAttribute('aria-pressed')).toBe('true');
+    expect(within(rail).getByRole('button', { name: 'Box' }).hasAttribute('disabled')).toBe(false);
+    expect(within(rail).getByRole('button', { name: 'Cylinder' }).hasAttribute('disabled')).toBe(true);
     await fireEvent.keyDown(window, { key: 'b' });
+    expect(within(rail).getByRole('button', { name: 'Box' }).getAttribute('aria-pressed')).toBe('true');
+    // a tool still to come keeps the one chosen
+    await fireEvent.keyDown(window, { key: 'c' });
+    expect(within(rail).getByRole('button', { name: 'Box' }).getAttribute('aria-pressed')).toBe('true');
+    await fireEvent.keyDown(window, { key: 'h' });
     expect(within(rail).getByRole('button', { name: 'Pan' }).getAttribute('aria-pressed')).toBe('true');
   });
 

@@ -5,7 +5,15 @@ import type { IrIcon } from './isolex/ir';
 
 const icon = (name: string): IrIcon => ({ name, viewbox: [0, 0, 1, 1], shapes: [] }) as unknown as IrIcon;
 const diag: Diag = { file: 'a.ilx', line: 1, col: 1, message: 'bad' };
-const origin = (start: number): Origin => ({ node: { file: 'a.ilx', start, len: 3 }, definition: 'a', part: null, sites: [] });
+const origin = (start: number): Origin => ({
+  node: { file: 'a.ilx', start, len: 3 },
+  kind: 'box',
+  definition: 'a',
+  part: null,
+  sites: [],
+  map: [1, 0, 0, 1, 0, 0, 0, 0],
+  values: [],
+});
 const drawn = (name: string, start = 0): Notice => ({ kind: 'icon', name, ir: icon(name), sources: [origin(start)] });
 const compiled = (generation: number): Notice => ({
   kind: 'compiled',

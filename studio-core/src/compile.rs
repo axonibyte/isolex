@@ -55,12 +55,20 @@ pub struct Place {
 /// files named: the node that draws it, the definition and part it is
 /// written in, and the insert, badge, repeat and text nodes it was drawn
 /// through, outermost first. The editor selects by it.
+///
+/// It also says what the node is ("box"), the map from its own
+/// coordinates to the viewBox (`isolex::Map3`), and the numbers a 3-D
+/// node came to in this copy, so the editor draws handles on a shape and
+/// turns a drag back into the numbers written.
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct Origin {
     pub node: Place,
+    pub kind: String,
     pub definition: String,
     pub part: Option<String>,
     pub sites: Vec<Place>,
+    pub map: isolex::Map3,
+    pub values: Vec<f64>,
 }
 
 /// An icon as drawn: its IR, and where each of its shapes came from, one
@@ -86,7 +94,7 @@ pub enum Outcome {
 /// provenance's spans are numbered.
 pub struct Ready {
     prepared: isolex::Prepared,
-    files: Vec<String>,
+    files: Vec<(String, String)>,
 }
 
 /// What the compiler has to do, so tests can stand in for it.
@@ -121,7 +129,7 @@ impl Compiler for Isolex {
             .collect();
         let ready = Ready {
             prepared,
-            files: files.iter().map(|(name, _)| name.clone()).collect(),
+            files: files.to_vec(),
         };
         (ready, problems, names)
     }
@@ -132,9 +140,22 @@ impl Compiler for Isolex {
             params: BTreeMap::new(),
         };
         let place = |span: isolex::ast::Span| Place {
-            file: ready.files.get(span.file).cloned().unwrap_or_default(),
+            file: ready
+                .files
+                .get(span.file)
+                .map(|f| f.0.clone())
+                .unwrap_or_default(),
             start: span.start,
             len: span.len,
+        };
+        // the node's name: the word its source starts with
+        let kind = |span: isolex::ast::Span| {
+            let text = ready.files.get(span.file).map_or("", |f| f.1.as_str());
+            let at = text.get(span.start..).unwrap_or("");
+            at.split(|c: char| c.is_whitespace() || c == '{')
+                .next()
+                .unwrap_or("")
+                .to_string()
         };
         match ready.prepared.icon(&request, cancel) {
             Err(isolex::Refused::Cancelled) => None,
@@ -154,9 +175,12 @@ impl Compiler for Isolex {
                         .into_iter()
                         .map(|s| Origin {
                             node: place(s.span),
+                            kind: kind(s.span),
                             definition: s.definition,
                             part: s.part,
                             sites: s.sites.iter().map(|site| place(site.span)).collect(),
+                            map: s.map,
+                            values: s.values,
                         })
                         .collect();
                     let drawing = Drawing { ir, sources };

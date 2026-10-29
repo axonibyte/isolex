@@ -14,6 +14,8 @@
   import IsoIcon from './components/IsoIcon.svelte';
   import PartsPanel from './components/PartsPanel.svelte';
   import { marks, pick, source, within } from './lib/select';
+  import { Tools } from './lib/tools.svelte';
+  import { STEPS, stepLabel } from './lib/snap';
 
   interface Props {
     backend: Backend;
@@ -50,6 +52,7 @@
   const library = $derived(view.library);
   const icon = $derived(studio.icon ? (view.icons[studio.icon] ?? null) : null);
   const def = $derived(studio.definition);
+  const flat = $derived(!!icon?.canvas);
   const sources = $derived(studio.icon ? (view.sources[studio.icon] ?? []) : []);
   /** The selected node's shapes on the canvas. */
   const marked = $derived(marks(sources, studio.editingNode, studio.selected));
@@ -113,8 +116,8 @@
       ready: true,
     },
     null,
-    { id: 'box', key: 'B', label: 'Box', d: 'M10 2 17 6v8l-7 4-7-4V6zM3 6l7 4 7-4M10 10v8', ready: false },
-    { id: 'tile', key: 'T', label: 'Tile', d: 'M10 5 18 10 10 15 2 10z', ready: false },
+    { id: 'box', key: 'B', label: 'Box', d: 'M10 2 17 6v8l-7 4-7-4V6zM3 6l7 4 7-4M10 10v8', ready: true },
+    { id: 'tile', key: 'T', label: 'Tile', d: 'M10 5 18 10 10 15 2 10z', ready: true },
     { id: 'cyl', key: 'C', label: 'Cylinder', d: 'M4 6a6 2.5 0 1 0 12 0a6 2.5 0 1 0-12 0M4 6v8a6 2.5 0 0 0 12 0V6', ready: false },
     { id: 'face', key: 'F', label: 'Face rect', d: 'M3 6l7 4v8l-7-4zM5 9.5l3 1.7v3.5l-3-1.7z', ready: false },
     null,
@@ -124,7 +127,14 @@
     { id: 'poly', key: 'G', label: 'Polygon', d: 'M10 3 17 8 14 17H6L3 8z', ready: false },
     { id: 'pen', key: 'P', label: 'Pen', d: 'M4 16 12 4l4 4L6 18zM12 4l2-2 4 4-2 2', ready: false },
   ];
-  let tool = $state('select');
+  const tools = new Tools(studio);
+  /** What each tool does, for the hint line. */
+  const HINTS: Record<string, string> = {
+    select: 'Click to select · drag to move · Alt+drag lifts · arrows nudge, PageUp and PageDown raise and lower',
+    box: 'Drag a footprint, move up for the height, and click · started on a top face, it stands on it',
+    tile: 'Drag a footprint on the floor',
+    hand: 'Drag to pan',
+  };
 
   const TABS = [
     ['design', 'Design'],
@@ -156,13 +166,21 @@
       e.preventDefault();
       void studio.redo();
     } else if (e.key === 'Escape') {
-      studio.select(null);
+      if (!tools.cancel()) studio.select(null);
+    } else if (tools.key({ key: e.key, shift: e.shiftKey, ctrl: mod })) {
+      e.preventDefault();
     } else if (!mod && !e.altKey && e.key === '0') {
       canvasView?.fitIcon();
     } else if (!mod && !e.altKey) {
       const t = TOOLS.find((t) => t?.key.toLowerCase() === key);
-      if (t?.ready) tool = t.id;
+      if (t?.ready) choose(t.id);
     }
+  }
+
+  function choose(tool: string) {
+    tools.cancel();
+    tools.tool = tool;
+    studio.message = '';
   }
 
   function chooseTheme(t: Theme) {
@@ -223,11 +241,11 @@
           {#if t}
             <button
               class="tool"
-              aria-pressed={tool === t.id}
+              aria-pressed={tools.tool === t.id}
               disabled={!t.ready}
               aria-label={t.label}
               title={t.ready ? `${t.label} (${t.key})` : `${t.label} (${t.key}): comes with the drawing tools`}
-              onclick={() => (tool = t.id)}
+              onclick={() => choose(t.id)}
               ><svg viewBox="0 0 20 20" aria-hidden="true"><path d={t.d} /></svg><kbd aria-hidden="true">{t.key}</kbd></button
             >
           {:else}
@@ -244,17 +262,25 @@
         <Canvas
           bind:this={canvasView}
           {icon}
-          {tool}
+          {tools}
           {marked}
           {hidden}
           onpointer={(p) => (pointer = p)}
           {onpick}
           onhover={(i) => (hover = i === null ? '' : drawnBy(i))}
         />
+        {#if icon && !flat}
+          <label class="snap">
+            Snap
+            <select bind:value={tools.step}>
+              {#each STEPS as s (s)}<option value={s}>{stepLabel(s)}</option>{/each}
+            </select>
+          </label>
+        {/if}
         {#if !icon}
           <p class="note">{view.compiled ? (studio.icon ? `${studio.icon} does not compile.` : 'This library emits no icon.') : 'Compiling…'}</p>
         {/if}
-        <div class="hint" role="status">{hover || studio.message || 'Scroll to zoom · Ctrl+scroll pans north–south · Shift+scroll east–west · 0 fits'}</div>
+        <div class="hint" role="status">{hover || studio.message || HINTS[tools.tool] || 'Scroll to zoom · Ctrl+scroll pans north–south · Shift+scroll east–west · 0 fits'}</div>
       </main>
 
       <aside class="side right" aria-label="Inspector">
@@ -514,6 +540,26 @@
     top: 40%;
     transform: translateX(-50%);
     color: var(--frame);
+  }
+  .snap {
+    position: absolute;
+    left: 12px;
+    top: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 6px 4px 10px;
+    border-radius: 8px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .snap select {
+    background: var(--raised);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 2px 4px;
   }
   .hint {
     position: absolute;

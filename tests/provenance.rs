@@ -320,3 +320,47 @@ fn compile_one_and_compile_many_carry_it_for_their_icon_alone() {
     assert_eq!(one.provenance.len(), 1);
     assert_eq!(one.provenance[0], all.provenance[poe]);
 }
+
+#[test]
+fn a_3d_shape_gives_the_numbers_its_node_came_to() {
+    let (_, sample) = FIXTURES[0];
+    let c = compiled("sample.ilx", sample);
+    let values = |icon: &str, prefix: &str| -> Vec<Vec<f64>> {
+        let at = c.doc.icons.iter().position(|i| i.name == icon).unwrap();
+        let mut out: Vec<Vec<f64>> = Vec::new();
+        for p in &c.provenance[at] {
+            if slice(sample, p.span).starts_with(prefix) && out.last() != Some(&p.values) {
+                out.push(p.values.clone());
+            }
+        }
+        out
+    };
+    // `u * 0.28`, with u at its default of 1
+    assert_eq!(
+        values("switch-l3", "box"),
+        [vec![0.0, 0.0, 0.0, 2.0, 1.0, 0.28]]
+    );
+    // each copy of a repeat its own: twelve ports, a stepping along
+    let ports = values("switch-l3", "facerect");
+    assert_eq!(ports.len(), 12);
+    for (i, p) in ports.iter().enumerate() {
+        let a = 0.1 + i as f64 * (1.8 / 12.0);
+        assert!((p[0] - a).abs() < 1e-9, "{p:?}");
+        assert_eq!(p[1..], [1.0, 0.09, 0.11, 0.11]);
+    }
+    assert_eq!(
+        values("switch-poe", "tile"),
+        [vec![0.0, 0.0, 0.0, 2.0, 1.0]]
+    );
+    assert_eq!(
+        values("switch-poe", "cylinder 0.5"),
+        [vec![0.5, 0.5, 0.0, 0.4, 0.12]]
+    );
+    assert_eq!(values("switch-poe", "shadow"), [vec![0.5, 0.5, 0.48, 0.48]]);
+    assert_eq!(
+        values("switch-poe", "seg"),
+        [vec![0.0, 0.0, 0.0, 2.0, 0.0, 0.0]]
+    );
+    // a flat shape gives none
+    assert_eq!(values("switch-l3", "path"), [Vec::<f64>::new()]);
+}

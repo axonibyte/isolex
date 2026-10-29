@@ -1,19 +1,24 @@
 <!--
   The canvas (docs/studio-interface.md, The canvas): the open icon as
   isolex draws it, over its grid and frame, zoomed and panned as the spec
-  says. A click selects the shape under the pointer (#68); drawing on it
-  comes with the tools (#69, #83).
+  says. The tools (lib/tools.svelte.ts) take presses on it: a click
+  selects (#68); the Select, Box and Tile tools drag, resize and draw
+  (#69), with handles, the shape being drawn, the snap indicator and the
+  size beside the pointer drawn over the icon, and the popover for an
+  edit the core needs a choice for.
 -->
 <script lang="ts">
   import type { IrIcon } from '../lib/isolex/ir';
   import { formatNumber as n } from '../lib/isolex/ir';
   import IsoShapes from './IsoShapes.svelte';
   import { fit, onFloor, project, toCanvas, wheel, zoomAt, type Camera } from '../lib/view';
+  import type { Press, Tools } from '../lib/tools.svelte';
+  import type { Point } from '../lib/geometry';
 
   interface Props {
     icon: IrIcon | null;
-    /** The tool: with Pan, a drag pans; with Select, a click selects. */
-    tool?: string;
+    /** The tools; without them, a click selects and nothing more. */
+    tools?: Tools;
     /** The shapes, by index, marked as selected, and those left out. */
     marked?: Set<number>;
     hidden?: Set<number>;
@@ -25,7 +30,7 @@
     onhover?: (shape: number | null) => void;
   }
 
-  let { icon, tool = 'select', marked, hidden, onpointer, onpick, onhover }: Props = $props();
+  let { icon, tools, marked, hidden, onpointer, onpick, onhover }: Props = $props();
 
   let host: HTMLDivElement;
   // unmeasured until the window lays it out
@@ -34,16 +39,18 @@
   let fitted: string | null = null;
   let pan = $state<{ x: number; y: number; cx: number; cy: number } | null>(null);
   let space = $state(false);
-  /** Where a click began, to tell it from a drag. */
-  let press: { x: number; y: number } | null = null;
+  /** A press the tools have, and the shape it was on. */
+  let pressed: { shape: number | null } | null = null;
   let hovered: number | null = null;
 
-  /** The index of the shape an event is on. */
+  const tool = $derived(tools?.tool ?? 'select');
+
+  /** The index of the shape an event is on, and the handle. */
   function shapeOf(e: Event): number | null {
-    const el = (e.target as Element | null)?.closest?.('[data-shape]');
-    const i = el?.getAttribute('data-shape');
+    const i = (e.target as Element | null)?.closest?.('[data-shape]')?.getAttribute('data-shape');
     return i == null ? null : Number(i);
   }
+  const handleOf = (e: Event): string | null => (e.target as Element | null)?.closest?.('[data-handle]')?.getAttribute('data-handle') ?? null;
 
   const flat = $derived(!!icon?.canvas);
 
@@ -64,6 +71,13 @@
     return [e.clientX - r.left, e.clientY - r.top];
   }
 
+  /** On screen, in the canvas: a point of the viewBox. */
+  const screen = (p: Point): Point => [camera.x + p[0] * camera.k, camera.y + p[1] * camera.k];
+
+  function press(e: PointerEvent, shape: number | null, handle: string | null): Press {
+    return { at: toCanvas(camera, local(e)), shape, handle, alt: e.altKey, shift: e.shiftKey, scale: camera.k };
+  }
+
   function onwheel(e: WheelEvent) {
     e.preventDefault();
     const a = wheel(e);
@@ -75,15 +89,22 @@
       e.preventDefault();
       (e.target as Element).setPointerCapture?.(e.pointerId);
       pan = { x: e.clientX, y: e.clientY, cx: camera.x, cy: camera.y };
-    } else if (e.button === 0 && tool === 'select') {
-      press = { x: e.clientX, y: e.clientY };
+      return;
     }
+    if (e.button !== 0 || !icon) return;
+    const shape = shapeOf(e);
+    pressed = { shape };
+    host.setPointerCapture?.(e.pointerId);
+    tools?.down(press(e, shape, handleOf(e)));
   }
 
   function onpointerup(e: PointerEvent) {
     pan = null;
-    if (press && Math.hypot(e.clientX - press.x, e.clientY - press.y) < 4) onpick?.(shapeOf(e));
-    press = null;
+    const p = pressed;
+    pressed = null;
+    if (!p) return;
+    const click = tools ? tools.up(press(e, p.shape, null)) : true;
+    if (click && tool === 'select') onpick?.(p.shape);
   }
 
   function onpointermove(e: PointerEvent) {
@@ -91,15 +112,18 @@
       camera = { ...camera, x: pan.cx + e.clientX - pan.x, y: pan.cy + e.clientY - pan.y };
       return;
     }
-    const over = shapeOf(e);
-    if (over !== hovered) {
-      hovered = over;
-      onhover?.(over);
+    const at = toCanvas(camera, local(e));
+    if (pressed || tool === 'box' || tool === 'tile') tools?.move(press(e, pressed?.shape ?? null, null));
+    if (!pressed) {
+      const over = shapeOf(e);
+      if (over !== hovered) {
+        hovered = over;
+        onhover?.(over);
+      }
     }
-    const p = toCanvas(camera, local(e));
-    if (flat) onpointer?.(`x ${n(p[0])} · y ${n(p[1])}`);
+    if (flat) onpointer?.(`x ${n(at[0])} · y ${n(at[1])}`);
     else {
-      const [x, y] = onFloor(p);
+      const [x, y] = onFloor(at);
       onpointer?.(`x ${n(x)} · y ${n(y)} · z 0.00`);
     }
   }
@@ -131,6 +155,9 @@
     }
     return lines;
   });
+
+  const handles = $derived(tools?.handles ?? []);
+  const line = (ps: Point[]) => ps.map((p) => p.join(',')).join(' ');
 </script>
 
 <svelte:window {onkeydown} {onkeyup} />
@@ -138,6 +165,7 @@
 <div
   class="canvas"
   class:panning={space || pan || tool === 'hand'}
+  class:drawing={tool === 'box' || tool === 'tile'}
   bind:this={host}
   bind:clientWidth={size.w}
   bind:clientHeight={size.h}
@@ -149,7 +177,8 @@
   {onpointerup}
   onpointercancel={() => {
     pan = null;
-    press = null;
+    pressed = null;
+    tools?.cancel();
   }}
   onpointerleave={() => {
     if (hovered !== null) onhover?.((hovered = null));
@@ -172,8 +201,53 @@
           vector-effect="non-scaling-stroke"
         />
         <IsoShapes shapes={icon.shapes} tagged {marked} {hidden} />
+        {#if tools}
+          {#each tools.preview as ps, i (i)}
+            <polyline class="preview" points={line(ps)} vector-effect="non-scaling-stroke" />
+          {/each}
+          {#if tools.indicator}
+            <circle class="snapped" cx={tools.indicator.at[0]} cy={tools.indicator.at[1]} r={5 / camera.k} vector-effect="non-scaling-stroke" />
+          {/if}
+          {#each handles as h (h.id)}
+            {@const r = 4.5 / camera.k}
+            {#if h.kind === 'height'}
+              <g class="handle height" data-handle={h.id}>
+                <line x1={h.at[0]} y1={h.at[1]} x2={h.at[0]} y2={h.at[1] - 18 / camera.k} vector-effect="non-scaling-stroke" />
+                <polygon
+                  points={line([
+                    [h.at[0] - r, h.at[1] - 14 / camera.k],
+                    [h.at[0] + r, h.at[1] - 14 / camera.k],
+                    [h.at[0], h.at[1] - 22 / camera.k],
+                  ])}
+                  vector-effect="non-scaling-stroke"
+                />
+              </g>
+            {:else if h.kind === 'radius'}
+              <circle class="handle" data-handle={h.id} cx={h.at[0]} cy={h.at[1]} {r} vector-effect="non-scaling-stroke" />
+            {:else}
+              <rect class="handle" data-handle={h.id} x={h.at[0] - r} y={h.at[1] - r} width={2 * r} height={2 * r} vector-effect="non-scaling-stroke" />
+            {/if}
+          {/each}
+        {/if}
       </g>
     </svg>
+    {#if tools?.indicator}
+      {@const at = screen(tools.indicator.at)}
+      <span class="tag snap" style="left: {at[0] + 10}px; top: {at[1] - 24}px">{tools.indicator.what}</span>
+    {/if}
+    {#if tools?.feedback}
+      {@const at = screen(tools.feedback.at)}
+      <span class="tag" role="status" style="left: {at[0] + 14}px; top: {at[1] + 12}px">{tools.feedback.text}</span>
+    {/if}
+    {#if tools?.choice}
+      {@const at = screen(tools.choice.at)}
+      <div class="choice" role="dialog" tabindex="-1" aria-label="This edit needs a choice" style="left: {at[0] + 12}px; top: {at[1] + 12}px" onpointerdown={(e) => e.stopPropagation()}>
+        {#each tools.choice.options as o, k (k)}
+          <button onclick={() => tools.choose(k)}><span>{o.label}</span><small>{o.detail}</small></button>
+        {/each}
+        <button class="cancel" onclick={() => tools.cancel()}>Cancel</button>
+      </div>
+    {/if}
   {/if}
 </div>
 
@@ -187,6 +261,9 @@
   }
   .canvas.panning {
     cursor: grab;
+  }
+  .canvas.drawing {
+    cursor: crosshair;
   }
   .canvas :global(.marked) {
     filter: drop-shadow(0 0 1px var(--accent)) drop-shadow(0 0 1px var(--accent));
@@ -205,5 +282,79 @@
     fill: none;
     stroke: var(--frame);
     stroke-dasharray: 3 3;
+  }
+  .preview {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 1.5;
+    stroke-dasharray: 4 3;
+  }
+  .snapped {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 2;
+  }
+  .handle,
+  .handle polygon {
+    fill: var(--canvas);
+    stroke: var(--accent);
+    stroke-width: 1.5;
+    cursor: pointer;
+  }
+  .handle.height line {
+    stroke: var(--accent);
+    stroke-width: 1.5;
+  }
+  .handle.height polygon {
+    fill: var(--accent);
+    cursor: ns-resize;
+  }
+  .tag {
+    position: absolute;
+    pointer-events: none;
+    padding: 2px 7px;
+    border-radius: 6px;
+    background: var(--panel);
+    color: var(--fg);
+    border: 1px solid var(--line);
+    font: 11px var(--font-mono);
+    white-space: nowrap;
+  }
+  .tag.snap {
+    color: var(--accent);
+  }
+  .choice {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 220px;
+    padding: 6px;
+    border-radius: 10px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
+  }
+  .choice button {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+    padding: 6px 9px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+  }
+  .choice button:hover,
+  .choice button:focus-visible {
+    background: var(--raised);
+  }
+  .choice small {
+    color: var(--muted);
+  }
+  .choice .cancel {
+    color: var(--muted);
   }
 </style>

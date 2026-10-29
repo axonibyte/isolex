@@ -435,6 +435,12 @@ fn a_drawing_says_where_each_shape_is_written() {
             .find(|s| sample[s.node.start..].starts_with(kind))
             .unwrap()
     };
+    for s in &d.sources {
+        assert!(sample[s.node.start..].starts_with(&format!("{} ", s.kind)));
+    }
+    assert_eq!(from("box").kind, "box");
+    assert_eq!(from("box").values, [0.0, 0.0, 0.0, 2.0, 1.0, 0.28]);
+    assert!(from("path").values.is_empty());
     assert_eq!(from("box").definition, "rack-unit");
     assert_eq!(from("box").part.as_deref(), Some("chassis"));
     assert_eq!(from("path").definition, "switch-l3");

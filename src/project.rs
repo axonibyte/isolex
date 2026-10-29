@@ -138,6 +138,10 @@ fn tile_map(turn: &Turn) -> Map3 {
 /// definition and part it is written in, the sites it was drawn through
 /// (outermost first), and the map from that node's own coordinates to the
 /// icon's viewBox, so a point on screen maps back to the numbers written.
+/// A 3-D shape's node also gives the numbers it came to (this copy's, in a
+/// repeat), in its own coordinates and the order they are written: `box`
+/// x y z w d h, `tile` x y z w d, `cylinder` cx cy z r h, `facerect` a b z
+/// extent h, `shadow` cx cy rx ry, `seg` its two points; none for others.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct ShapeSource {
     pub span: Span,
@@ -145,6 +149,7 @@ pub struct ShapeSource {
     pub part: Option<String>,
     pub sites: Vec<Site>,
     pub map: Map3,
+    pub values: Vec<f64>,
 }
 
 /// Where a shape came from while its icon is projected: `local` maps its
@@ -154,6 +159,7 @@ struct Src {
     span: Span,
     trail: Rc<Trail>,
     local: Map3,
+    values: Rc<[f64]>,
 }
 
 impl Src {
@@ -162,6 +168,15 @@ impl Src {
             span,
             trail: origin.trail.clone(),
             local,
+            values: Rc::from([]),
+        }
+    }
+
+    /// This, with the numbers its node came to.
+    fn with_values(self, values: Vec<f64>) -> Src {
+        Src {
+            values: values.into(),
+            ..self
         }
     }
 
@@ -175,6 +190,7 @@ impl Src {
             span: self.span,
             trail: trail.in_part(self.trail.part.clone()),
             local: self.local,
+            values: self.values.clone(),
         }
     }
 
@@ -185,6 +201,7 @@ impl Src {
             part: self.trail.part.as_deref().map(str::to_string),
             sites: self.trail.sites(),
             map,
+            values: self.values.to_vec(),
         }
     }
 }
@@ -646,6 +663,7 @@ fn finish(
                     span: draft.occs[o].span,
                     trail: draft.occs[o].trail.clone(),
                     local: PLANE,
+                    values: Rc::from([]),
                 },
                 None => src.clone(),
             };
@@ -702,6 +720,7 @@ fn finish(
             span: badge.span,
             trail: badge.trail.clone(),
             local: PLANE,
+            values: Rc::from([]),
         };
         let mut from = target_sources.iter();
         for t in &target.shapes {
@@ -1035,6 +1054,25 @@ fn repaint(shape: &mut IrShape, paint: &str) {
     }
 }
 
+/// The numbers a 3-D shape's node came to, as [`ShapeSource`] gives them.
+fn shape_values(shape: &Shape) -> Vec<f64> {
+    match shape {
+        Shape::Box3 {
+            x, y, z, w, d, h, ..
+        } => vec![*x, *y, *z, *w, *d, *h],
+        Shape::Tile { x, y, z, w, d, .. } => vec![*x, *y, *z, *w, *d],
+        Shape::Cylinder {
+            cx, cy, z, r, h, ..
+        } => vec![*cx, *cy, *z, *r, *h],
+        Shape::FaceRect {
+            a, b, z, extent, h, ..
+        } => vec![*a, *b, *z, *extent, *h],
+        Shape::Shadow { cx, cy, rx, ry, .. } => vec![*cx, *cy, *rx, *ry],
+        Shape::Seg { a, b, .. } => vec![a[0], a[1], a[2], b[0], b[1], b[2]],
+        _ => Vec::new(),
+    }
+}
+
 fn shape_span(shape: &Shape) -> Span {
     match shape {
         Shape::Box3 { span, .. }
@@ -1136,7 +1174,8 @@ fn project_shape(
     project_3d(ctx, shape, out, sources);
     // an anchor's children say where each of theirs came from
     if !matches!(shape, Shape::At { .. }) {
-        let src = Src::of(shape_span(shape), origin, tile_map(&origin.turn));
+        let src = Src::of(shape_span(shape), origin, tile_map(&origin.turn))
+            .with_values(shape_values(shape));
         sources.resize(sources.len() + out.len() - before, src);
     }
 }

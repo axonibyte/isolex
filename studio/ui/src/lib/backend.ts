@@ -74,10 +74,21 @@ export interface NodeAt {
     order the IR lists them, a group before its own. */
 export interface Origin {
   node: NodeAt;
+  /** The node's name: "box", "path"… */
+  kind: string;
   definition: string;
   part: string | null;
   sites: NodeAt[];
+  /** From the node's own coordinates to the viewBox: (x, y, z) goes to
+      (m0·x + m2·y + m4·z + m6, m1·x + m3·y + m5·z + m7). */
+  map: Map3;
+  /** The numbers a 3-D node came to in this copy, as written: box x y z
+      w d h; tile x y z w d; cylinder cx cy z r h; facerect a b z extent
+      h; shadow cx cy rx ry; seg its two points. None for others. */
+  values: number[];
 }
+
+export type Map3 = [number, number, number, number, number, number, number, number];
 
 /** A shape in a part, or a node holding shapes (at, repeat, transform,
     turn) with its own under it. */
