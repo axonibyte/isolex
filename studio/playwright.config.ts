@@ -1,8 +1,9 @@
 import { defineConfig } from '@playwright/test';
 
-// The interface in a browser, over the sample library (src/lib/fake.ts),
-// served by Vite: what the window shows and whether it is accessible.
-// The shell's own end-to-end test comes with tauri-driver (#73).
+// The interface in a browser, served by Vite, over the studio's core as a
+// WebAssembly module (src/lib/core.ts) and the sample library: what the
+// window shows and whether it is accessible. The built app's own
+// end-to-end test is e2e-app (WebdriverIO and tauri-driver, #73).
 export default defineConfig({
   testDir: 'e2e',
   retries: 0,

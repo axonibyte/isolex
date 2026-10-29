@@ -221,6 +221,9 @@ export interface Source {
 export interface Backend {
   /** The studio's and the compiler's versions, or none outside the app. */
   about(): Promise<{ studio: string; isolex: string } | null>;
+  /** The library folder the app was started with (`isolex-studio
+      <folder>`), which opens first; none outside the app. */
+  startup(): Promise<string | null>;
   /** Asks the person for a library folder; none if they cancel. */
   pickFolder(): Promise<string | null>;
   open(path: string): Promise<void>;
@@ -275,6 +278,7 @@ export async function shell(): Promise<Backend> {
   const dialog = await import('@tauri-apps/plugin-dialog');
   return {
     about: () => invoke('about'),
+    startup: () => invoke('startup'),
     pickFolder: async () => {
       const picked = await dialog.open({ directory: true, multiple: false, title: 'Open a library folder' });
       return typeof picked === 'string' ? picked : null;

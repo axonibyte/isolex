@@ -189,10 +189,27 @@ fn reload(open: State<Open>) -> Result<(), String> {
 
 /// Opens the window and serves the interface's commands until it closes;
 /// the folder is looked at for outside changes every second.
+/// The library folder the app was started with, if any: `isolex-studio
+/// <folder>` opens it.
+struct Startup(Option<String>);
+
+/// The first argument that is not a flag and is a folder.
+fn startup_folder(args: impl IntoIterator<Item = String>) -> Option<String> {
+    args.into_iter()
+        .find(|a| !a.starts_with('-') && std::path::Path::new(a).is_dir())
+}
+
+/// The folder the app was started with, which the interface opens first.
+#[tauri::command]
+fn startup(start: State<Startup>) -> Option<String> {
+    start.0.clone()
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(Open::default())
+        .manage(Startup(startup_folder(std::env::args().skip(1))))
         .setup(|app| {
             let handle = app.handle().clone();
             std::thread::spawn(move || loop {
@@ -210,6 +227,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             about,
+            startup,
             open,
             new_library,
             library_op,
@@ -242,5 +260,17 @@ mod tests {
         assert_eq!(about, isolex_studio_core::about());
         let json = serde_json::to_value(&about).unwrap();
         assert!(json["isolex"].as_str().is_some_and(|v| !v.is_empty()));
+    }
+
+    #[test]
+    fn a_folder_on_the_command_line_is_the_library_to_open() {
+        let here = env!("CARGO_MANIFEST_DIR").to_string();
+        let args = |a: &[&str]| a.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert_eq!(
+            super::startup_folder(args(&["--flag", &here])),
+            Some(here.clone())
+        );
+        assert_eq!(super::startup_folder(args(&["not-a-folder"])), None);
+        assert_eq!(super::startup_folder(args(&[])), None);
     }
 }

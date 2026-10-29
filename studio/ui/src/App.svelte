@@ -53,8 +53,12 @@
     void studio.start().then((s) => {
       if (gone) return s();
       stop = s;
-      // with the welcome panel off, the library opened last opens
-      if (inShell() && !startup && recents[0]) void openLibrary(recents[0].path);
+      // a folder the app was started with opens; else, with the welcome
+      // panel off, the library opened last
+      void backend.startup().then((folder) => {
+        if (folder) void openLibrary(folder);
+        else if (inShell() && !startup && recents[0]) void openLibrary(recents[0].path);
+      });
     });
     void backend.about().then((v) => (versions = v));
     return () => {

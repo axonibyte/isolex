@@ -54,6 +54,7 @@ export async function core(files: [string, string][] = [['sample.ilx', sampleSou
 
   return {
     about: async () => null,
+    startup: async () => null,
     pickFolder: async () => 'sample',
     open: async () => call({ call: 'open', files }),
     view: (editing, icon, visible) => later({ call: 'view', editing, icon, visible }),

@@ -29,6 +29,7 @@ npm run tauri dev    # the app, with the interface reloading as you edit
 npm run check        # svelte-check
 npm test             # vitest
 npm run e2e          # Playwright with axe (once: npx playwright install chromium)
+npm run e2e:app      # the built app, end to end (needs tauri-driver; see below)
 npm run tauri build  # an installer for this platform
 ```
 
@@ -39,6 +40,17 @@ folder, with the studio's core built as a WebAssembly module
 `e2e` build first; it needs the `wasm32-unknown-unknown` target). It
 edits, undoes and compiles as the app does, in memory: saving keeps the
 library as it is. vitest and the browser tests run against it.
+
+`npm run e2e:app` builds the app (debug, unbundled) and drives it
+through [tauri-driver](https://v2.tauri.app/develop/tests/webdriver/)
+with WebdriverIO: it opens a copy of the sample library, draws a box and
+a path, opens another icon from the Tree, saves, and `isolex check`s the
+folder. It needs `cargo install tauri-driver --locked`, and on Linux
+WebKitWebDriver (`webkit2gtk-driver`) and a display (`xvfb-run`), on
+Windows an msedgedriver matching the installed WebView2 on the PATH;
+macOS has no WebDriver for its webview.
+
+`isolex-studio <folder>` opens that library folder as it starts.
 
 `cargo test --manifest-path studio/src-tauri/Cargo.toml` runs the
 shell's own tests. The same checks run on every push to the GitHub
