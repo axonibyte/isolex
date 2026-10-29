@@ -340,12 +340,8 @@ fn in_the_background_an_edit_redraws_only_what_it_changes() {
             _ => None,
         })
         .collect();
-    // it starts first; with four workers, three others start beside it and
-    // may finish before it
-    assert!(
-        changed[..4].iter().any(|n| n == "switch-poe"),
-        "the open icon among the first: {changed:?}"
-    );
+    // it starts first, but with four workers on however many cores, any of
+    // the others may finish before it: the next test holds the order
     assert_eq!(changed.iter().cloned().collect::<BTreeSet<_>>(), all);
 
     // a different disk count in switch-poe: only it and its variants redraw
@@ -392,6 +388,23 @@ fn in_the_background_an_edit_redraws_only_what_it_changes() {
         !problems.errors.is_empty(),
         "the lexicon's own error is told, as an error"
     );
+    drop(bg);
+}
+
+#[test]
+fn in_the_background_the_open_icon_is_drawn_first() {
+    // one worker finishes in the order it starts, on any number of cores
+    let sample = include_str!("../../tests/fixtures/sample.ilx");
+    let (bg, rx) = Background::start(Isolex, 1);
+    bg.view(Some("switch-poe".into()), Vec::new());
+    bg.edit(1, files(sample));
+    let events = collect(&rx, |e| {
+        e.iter().any(|e| matches!(e, Event::Changed { .. }))
+    });
+    let Some(Event::Changed { name, .. }) = events.last() else {
+        unreachable!()
+    };
+    assert_eq!(name, "switch-poe", "{:?}", kinds(&events));
     drop(bg);
 }
 
