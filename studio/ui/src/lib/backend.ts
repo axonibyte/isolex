@@ -41,7 +41,10 @@ export type Notice =
       revision: number;
       modified: boolean;
       files: string[];
+      /** The steps that can be undone, oldest first; those that can be
+          redone, the next first. */
       history: string[];
+      future: string[];
       can_undo: boolean;
       can_redo: boolean;
     }
@@ -121,6 +124,10 @@ export interface Outline {
   parts: Part[];
   /** Drawn from the definitions it extends, each naming which. */
   inherited: { name: string; from: string; shapes: number }[];
+  /** Its footprint or canvas, its own or the nearest it extends. */
+  frame: { kind: 'footprint' | 'canvas'; args: string[]; from: string | null; node: NodeAt } | null;
+  /** Its params, own first, then inherited, nearest first. */
+  params: { name: string; default: string; value: number | null; from: string | null; node: NodeAt }[];
 }
 
 export type JsonValue = boolean | number | string | null;
@@ -139,6 +146,12 @@ export type Answer =
   | { kind: 'choose'; id: number; options: { label: string; detail: string }[] }
   | { kind: 'refused'; reason: string };
 
+/** An icon as drawn, and where each of its shapes is written. */
+export interface Drawing {
+  ir: IrIcon;
+  sources: Origin[];
+}
+
 export interface Source {
   revision: number;
   text: string;
@@ -154,6 +167,9 @@ export interface Backend {
   view(editing: string | null, icon: string | null, visible: string[]): Promise<void>;
   source(file: string): Promise<Source | null>;
   outline(definition: string): Promise<Outline | null>;
+  /** `icon` drawn with `params` set otherwise, the library unchanged;
+      none if it does not compile so. */
+  preview(icon: string, params: Record<string, number>): Promise<Drawing | null>;
   ask(ask: Ask, label: string): Promise<Answer>;
   choose(id: number, option: number): Promise<Answer>;
   beginGesture(): Promise<void>;
@@ -184,6 +200,7 @@ export async function shell(): Promise<Backend> {
     view: (editing, icon, visible) => invoke('view', { editing, icon, visible }),
     source: (file) => invoke('source', { file }),
     outline: (definition) => invoke('outline', { definition }),
+    preview: (icon, params) => invoke('preview', { icon, params }),
     ask: (ask, label) => invoke('ask', { ask, label }),
     choose: (id, option) => invoke('choose', { id, option }),
     beginGesture: () => invoke('begin_gesture'),

@@ -3,15 +3,18 @@
 // reactive and talks to the backend.
 
 import type { IrIcon } from './isolex/ir';
-import type { Backend, Diag, Graph, GraphDef, NodeAt, Notice, Origin, Outline } from './backend';
-import { atPath, find } from './select';
+import type { Backend, Diag, Drawing, Graph, GraphDef, NodeAt, Notice, Origin, Outline, Row } from './backend';
+import { atPath, find, same } from './select';
 
 export interface LibraryState {
   root: string;
   revision: number;
   modified: boolean;
   files: string[];
+  /** The steps that can be undone, oldest first; those that can be
+      redone, the next first. */
   history: string[];
+  future: string[];
   canUndo: boolean;
   canRedo: boolean;
 }
@@ -59,6 +62,7 @@ export function reduce(v: View, n: Notice): View {
           modified: n.modified,
           files: n.files,
           history: n.history,
+          future: n.future,
           canUndo: n.can_undo,
           canRedo: n.can_redo,
         },
@@ -132,6 +136,11 @@ export class Studio {
   locked = $state<Set<string>>(new Set());
   /** A message for the hint line, such as why an edit was refused. */
   message = $state<string>('');
+  /** A place in the source to show, such as a problem's. */
+  place = $state<{ file: string; line: number; col: number; message: string; severity: 'error' | 'warning' } | null>(null);
+  /** The open icon as previewed with other params, the library as it is;
+      gone once the library changes. */
+  previewing = $state<{ params: Record<string, number>; drawing: Drawing } | null>(null);
 
   constructor(readonly backend: Backend) {}
 
@@ -146,7 +155,38 @@ export class Studio {
     // the first icon compiled opens, when none is open
     if (!this.icon && n.kind === 'icon') this.openIcon(n.name);
     if (this.icon && n.kind === 'gone' && n.name === this.icon) this.icon = null;
-    if (n.kind === 'library' && n.revision !== revision) void this.refresh();
+    if (n.kind === 'library' && n.revision !== revision) {
+      this.previewing = null;
+      void this.refresh();
+    }
+  }
+
+  /** The open icon drawn with `params` set otherwise, nothing written;
+      none clears the preview. */
+  async preview(params: Record<string, number> | null) {
+    const icon = this.icon;
+    if (!params || !icon) {
+      this.previewing = null;
+      return;
+    }
+    const drawing = await this.backend.preview(icon, params);
+    if (icon === this.icon) this.previewing = drawing ? { params, drawing } : null;
+    if (!drawing) this.message = `${icon} does not compile with those values`;
+  }
+
+  /** Back or forward through the undo history by `steps`: back for fewer
+      than none. */
+  async travel(steps: number) {
+    for (let k = 0; k < Math.abs(steps); k++) {
+      const label = await (steps < 0 ? this.backend.undo() : this.backend.redo());
+      if (!label) break;
+    }
+    this.message = steps < 0 ? `Went back ${-steps} step${steps === -1 ? '' : 's'}` : `Went forward ${steps} step${steps === 1 ? '' : 's'}`;
+  }
+
+  /** Opens a problem's place: the Source tab, at its line. */
+  reveal(d: Diag, severity: 'error' | 'warning') {
+    this.place = { file: d.file, line: d.line, col: d.col, message: d.message, severity };
   }
 
   /** The definition being edited, as the graph has it. */
@@ -174,6 +214,8 @@ export class Studio {
     if (emits.length && (!this.icon || !emits.includes(this.icon))) this.icon = emits[0]!;
     if (name !== this.editing) {
       this.editing = name;
+      this.previewing = null;
+      this.place = null;
       this.outline = null;
       this.selected = null;
       this.selectedPath = null;
@@ -227,6 +269,20 @@ export class Studio {
     const answer = await this.backend.ask(ask, label);
     if (answer.kind === 'refused') this.message = answer.reason;
     return answer;
+  }
+
+  /** Sends a reorder of `siblings[index]` (at `path`), the selection
+      following the row it moved. */
+  async reorder(ask: { node: NodeAt; before: NodeAt | null } | null, siblings: Row[], index: number, path: string) {
+    const outline = this.outline;
+    if (!ask || !outline) return;
+    const moved = siblings[index]!;
+    const to = ask.before ? siblings.filter((_, i) => i !== index).findIndex((r) => same(r.node, ask.before!)) : siblings.length - 1;
+    const parent = path.slice(0, path.lastIndexOf('/'));
+    const was = this.selected && same(this.selected, moved.node);
+    if (was) this.follow(`${parent}/${to}`);
+    const answer = await this.ask({ kind: 'move-before', node: ask.node, before: ask.before }, `Move ${moved.kind} in ${outline.definition}`);
+    if (answer.kind !== 'applied' && was) this.follow(path);
   }
 
   async undo() {

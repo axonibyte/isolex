@@ -1,19 +1,22 @@
 <!--
-  The Design tab (docs/studio-interface.md, Design), as far as drawing
-  needs it (#83): the selected shape's paint, chosen from the lexicon's
-  tokens and stroke widths and never typed; a rectangle's corner radius; a
-  path open or closed; and the shape repeated along an axis as one
-  `repeat`. Its numbers, order and params come with #70.
+  The Design tab (docs/studio-interface.md, Design). With a shape
+  selected: its numbers as the source names them, its paint chosen from
+  the lexicon's tokens and stroke widths and never typed, its opacity, a
+  rectangle's corner radius, a path open or closed, the shape repeated
+  along an axis as one `repeat` (#83), and its order. With nothing
+  selected: the icon's frame, and its params, each with a slider that
+  previews a value and *Set as default*, which writes it (#70).
 -->
 <script lang="ts">
   import type { Studio } from '../lib/state.svelte';
   import type { Tools } from '../lib/tools.svelte';
   import type { Ask, NodeAt } from '../lib/backend';
+  import type { IrIcon } from '../lib/isolex/ir';
   import { DEFAULT_PALETTE } from '../lib/theme';
-  import { SLOTS, FLAT } from '../lib/geometry';
-  import { argText, counter, inRepeat, propsOf, withArg } from '../lib/kdl';
+  import { apply, SLOTS, FLAT, type Point } from '../lib/geometry';
+  import { argText, counter, inRepeat, propsOf, stepIn, withArg } from '../lib/kdl';
   import { parse, toD } from '../lib/path';
-  import { atPath, find } from '../lib/select';
+  import { atPath, find, move, type Move } from '../lib/select';
   import { clean } from '../lib/snap';
   import { plainData } from '../lib/flat';
 
@@ -22,9 +25,11 @@
     tools: Tools;
     /** The canvas's look, which the swatches are shown in. */
     look: string;
+    /** The open icon as compiled, for its footprint as drawn. */
+    icon: IrIcon | null;
   }
 
-  let { studio, tools, look }: Props = $props();
+  let { studio, tools, look, icon }: Props = $props();
 
   const found = $derived(find(studio.outline, studio.selected));
   const row = $derived(found?.row ?? null);
@@ -59,15 +64,72 @@
   };
   const paint = $derived(DEFAULTS[kind] ?? null);
 
+  /** Where a choice the core needs is offered: by the selected shape. */
+  const anchor = $derived.by((): Point => {
+    const s = tools.selected;
+    if (!s || s.values.length < 2) return [0, 0];
+    return apply(s.map, [s.values[0]!, s.values[1]!, FLAT.has(s.kind) ? 0 : (s.values[2] ?? 0)]);
+  });
+
   /** Asks on the selected node, one undo step. */
   async function ask(make: (node: NodeAt) => Ask, label: string) {
     const node = studio.selected;
-    if (!node) return;
-    await studio.backend.beginGesture();
-    const answer = await studio.ask(make(node), label);
-    await studio.backend.endGesture();
-    if (answer.kind === 'applied') await studio.refresh();
+    if (node) await tools.change(node, label, anchor, [make]);
   }
+
+  // --- numbers, opacity, order ----------------------------------------------
+
+  const slots = $derived(SLOTS[kind] ?? null);
+  /** Each number as written, by what the language calls it. */
+  const numbers = $derived(slots ? slots.names.map((name, i) => ({ name, k: slots.first + i, written: argText(text, slots.first + i) ?? '' })) : []);
+  /** A number typed: a number, or else an expression, as written. */
+  function setNumber(k: number, name: string, typed: string) {
+    const t = typed.trim();
+    if (!t || t === argText(text, k)) return;
+    const value = /^-?(\d+\.?\d*|\.\d+)$/.test(t) ? Number(t) : t;
+    void ask((node) => ({ kind: 'set-arg', node, index: k, value }), `Set ${name} of ${what}`);
+  }
+
+  function order(how: Move) {
+    if (!found) return;
+    void studio.reorder(move(found.siblings, found.index, how), found.siblings, found.index, found.path);
+  }
+
+  // --- the frame and the params, with nothing selected ---------------------
+
+  const frame = $derived(studio.outline?.frame ?? null);
+  function setFrame(k: number, typed: string) {
+    const f = frame;
+    const v = Number(typed);
+    if (!f || !(v > 0) || String(v) === f.args[k]) return;
+    void tools.change(f.node, `Set the canvas of ${studio.editing}`, [0, 0], [(node) => ({ kind: 'set-arg', node, index: k, value: v })]);
+  }
+
+  /** Values tried on the sliders, not yet written. */
+  let trial = $state<Record<string, number>>({});
+  // the library changed: what was tried is gone with its preview
+  $effect(() => {
+    void studio.view.library?.revision;
+    void studio.editing;
+    trial = {};
+  });
+  function tryValue(name: string, v: number) {
+    trial = { ...trial, [name]: v };
+    void studio.preview(trial);
+  }
+  function reset(name: string) {
+    const { [name]: _, ...rest } = trial;
+    trial = rest;
+    void studio.preview(Object.keys(rest).length ? rest : null);
+  }
+  function setDefault(p: { name: string; node: NodeAt }) {
+    const v = trial[p.name];
+    if (v === undefined) return;
+    void tools.change(p.node, `Set ${p.name} to ${v}`, [0, 0], [(node) => ({ kind: 'set-arg', node, index: 1, value: v })]);
+  }
+  /** A slider's reach about a default: to twice it, by whole steps for a
+      whole number. */
+  const range = (v: number) => ({ min: Math.min(0, v * 2), max: Math.max(v * 2, v + 1, 1), step: Number.isInteger(v) ? 1 : 0.01 });
 
   const what = $derived(`${kind} in ${studio.editing}`);
   function setProp(key: string, value: string | number, fallback: string | number | null) {
@@ -137,7 +199,7 @@
     // the node keeps its place: its line's indentation
     const bytes = new TextEncoder().encode(src.text);
     const line = bytes.lastIndexOf(10, node.start - 1) + 1;
-    const indent = new TextDecoder().decode(bytes.slice(line, node.start)).match(/^[ 	]*/)?.[0] ?? '';
+    const indent = new TextDecoder().decode(bytes.slice(line, node.start)).match(/^[ \t]*/)?.[0] ?? '';
     const wrapped = wrap(
       text,
       moved.map((i) => i + first),
@@ -148,8 +210,11 @@
       studio.message = 'This shape’s numbers are written as expressions: repeat it in the Source tab';
       return;
     }
+    // the shape stays selected, now the repeat's: its copies and step show
+    const path = found?.path;
     await ask((n) => ({ kind: 'type', file: n.file, at: n.start, len: n.len, text: wrapped }), `Repeat ${what} ×${count}`);
-    studio.select(null);
+    if (path) studio.follow(`${path}/0`);
+    await studio.refresh();
   }
 
   /** The node in a repeat, each argument of `ks` stepping from its value
@@ -171,13 +236,86 @@
     void ask(() => ({ kind: 'set-arg', node: r.node, index: 0, value: n }), `Repeat ${what} ×${n}`);
   }
   const copies = $derived(repeat ? Number(repeat.note.replace('×', '')) || 0 : 0);
+  /** How the repeated shape steps, when it is written as `"a + i * s"`. */
+  const stepping = $derived(repeat ? stepIn(text) : null);
+  function setStep(by: number) {
+    const s = stepping;
+    if (!s || !by || by === s.by) return;
+    void ask((node) => ({ kind: 'set-arg', node, index: s.k, value: `${clean(s.from)} + ${s.v} * ${clean(by)}` }), `Step ${what} by ${by}`);
+  }
 </script>
 
 <div class="design {look}">
   {#if !row}
-    <p class="empty">Select a shape to paint it, or to repeat it.</p>
+    <h2>{studio.editing ?? 'Nothing open'} <small>{studio.outline?.kind ?? ''}</small></h2>
+    {#if frame}
+      <section aria-labelledby="frame">
+        <h3 id="frame">{frame.kind === 'canvas' ? 'Canvas' : 'Footprint'}</h3>
+        {#if frame.kind === 'canvas'}
+          {#each ['Width', 'Height'] as label, k (label)}
+            <label class="row">
+              <span class="label">{label}</span>
+              <input type="text" value={frame.args[k] ?? ''} onchange={(e) => setFrame(k, e.currentTarget.value)} />
+            </label>
+          {/each}
+        {:else}
+          <p class="note">
+            <code>footprint {frame.args.join(' ')}</code>{#if icon?.footprint}, drawn as {icon.footprint.join(' × ')}{/if}: what is drawn decides it.
+          </p>
+        {/if}
+        {#if frame.from}<p class="note">From {frame.from}.</p>{/if}
+      </section>
+    {/if}
+    <section aria-labelledby="params">
+      <h3 id="params">Params</h3>
+      {#each studio.outline?.params ?? [] as p (p.name)}
+        {@const tried = trial[p.name]}
+        <div class="param" role="group" aria-label="Param {p.name}">
+          <div class="head">
+            <code class="name">{p.name}</code>
+            <span class="default">{p.default}</span>
+            {#if p.from}<span class="from">from {p.from}</span>{/if}
+          </div>
+          {#if p.value !== null}
+            {@const r = range(p.value)}
+            <div class="slide">
+              <input type="range" aria-label="Preview {p.name}" min={r.min} max={r.max} step={r.step} value={tried ?? p.value} oninput={(e) => tryValue(p.name, Number(e.currentTarget.value))} />
+              <output class="value">{tried ?? p.value}</output>
+            </div>
+            {#if tried !== undefined && tried !== p.value}
+              <div class="actions">
+                <button class="primary" onclick={() => setDefault(p)}>Set as default</button>
+                <button onclick={() => reset(p.name)}>Reset</button>
+              </div>
+            {/if}
+          {:else}
+            <p class="note">Worked out from its expression; change it in the Source tab.</p>
+          {/if}
+        </div>
+      {:else}
+        <p class="note">{studio.editing ?? 'This'} has no params.</p>
+      {/each}
+    </section>
+    <p class="empty">Select a shape to see its numbers and paint it.</p>
   {:else}
     <h2>{kind} <small>{row.note}</small></h2>
+
+    {#if numbers.length}
+      <section aria-labelledby="numbers">
+        <h3 id="numbers">Numbers</h3>
+        {#if kind === 'facerect'}<p class="note">On the {argText(text, 0) ?? 'front'} face.</p>{/if}
+        <div class="numbers">
+          {#each numbers as num (num.k)}
+            <label class="number">
+              <span class="label">{num.name}</span>
+              <input type="text" value={num.written} spellcheck="false" onchange={(e) => setNumber(num.k, num.name, e.currentTarget.value)} />
+            </label>
+          {/each}
+        </div>
+      </section>
+    {:else if kind === 'poly' || kind === 'path' || kind === 'poly3d'}
+      <p class="note">Its points are shaped with the node tool, or in the Source tab.</p>
+    {/if}
 
     <section aria-labelledby="paint">
       <h3 id="paint">Paint</h3>
@@ -190,14 +328,14 @@
         </div>
       {:else if kind === 'cylinder'}
         {#each [['top', 'Top', 'body-top'], ['side', 'Side', 'body-right']] as [key, label, fallback] (key)}
-          <div class="row" role="group" aria-label={label}>
+          <div class="row paint" role="group" aria-label={label}>
             <span class="label">{label}</span>
             <div class="swatches">
               {#each tokens as t (t)}
                 <button class="swatch" style="--c: var(--iso-{t})" aria-label="{label}: {t}" title={t} aria-pressed={(written[key] ?? fallback) === t} onclick={() => setProp(key, t, fallback)}></button>
               {/each}
+              <span class="token">{written[key] ?? fallback}</span>
             </div>
-            <span class="token">{written[key] ?? fallback}</span>
           </div>
         {/each}
       {:else if kind === 'shadow'}
@@ -206,15 +344,15 @@
         {#each [['fill', 'Fill'], ['stroke', 'Stroke']] as [key, label] (key)}
           {@const fallback = paint[key as 'fill' | 'stroke']}
           {@const now = written[key] ?? fallback}
-          <div class="row" role="group" aria-label={label}>
+          <div class="row paint" role="group" aria-label={label}>
             <span class="label">{label}</span>
             <div class="swatches">
               <button class="swatch none" aria-label="{label}: none" title="none" aria-pressed={now === 'none'} onclick={() => setProp(key, 'none', fallback)}></button>
               {#each tokens as t (t)}
                 <button class="swatch" style="--c: var(--iso-{t})" aria-label="{label}: {t}" title={t} aria-pressed={now === t} onclick={() => setProp(key, t, fallback)}></button>
               {/each}
+              <span class="token">{now}</span>
             </div>
-            <span class="token">{now}</span>
           </div>
         {/each}
         <label class="row">
@@ -227,6 +365,16 @@
         <p class="note">This is painted where it is written.</p>
       {/if}
     </section>
+
+    {#if kind !== 'shadow' && SLOTS[kind]}
+      <section aria-labelledby="opacity">
+        <h3 id="opacity">Opacity</h3>
+        <label class="row">
+          <span class="label">Opacity</span>
+          <input type="number" min="0" max="1" step="0.05" value={Number(written.opacity ?? 1)} onchange={(e) => setProp('opacity', clean(Math.min(1, Math.max(0, Number(e.currentTarget.value)))), 1)} />
+        </label>
+      </section>
+    {/if}
 
     {#if kind === 'rect'}
       <section aria-labelledby="corners">
@@ -255,7 +403,14 @@
           <span class="label">Copies</span>
           <input type="number" min="1" step="1" value={copies} onchange={(e) => setCount(Number(e.currentTarget.value))} />
         </label>
-        <p class="note">Written as one <code>repeat</code>; its step is in the source.</p>
+        {#if stepping}
+          <label class="row">
+            <span class="label">Step</span>
+            <input type="number" step="any" value={stepping.by} onchange={(e) => setStep(Number(e.currentTarget.value))} />
+          </label>
+        {:else}
+          <p class="note">Written as one <code>repeat</code>; its step is in the source.</p>
+        {/if}
       {:else if axes}
         <label class="row">
           <span class="label">Copies</span>
@@ -275,6 +430,16 @@
       {:else}
         <p class="note">A {kind} is repeated in the Source tab.</p>
       {/if}
+    </section>
+
+    <section aria-labelledby="order">
+      <h3 id="order">Order</h3>
+      <div class="buttons">
+        <button onclick={() => order('raise')} disabled={!found || found.index >= found.siblings.length - 1}>Bring forward</button>
+        <button onclick={() => order('lower')} disabled={!found || found.index <= 0}>Send back</button>
+        <button onclick={() => studio.selected && tools.duplicate(studio.selected)}>Duplicate</button>
+        <button onclick={() => studio.selected && tools.remove(studio.selected)}>Delete</button>
+      </div>
     </section>
   {/if}
 </div>
@@ -319,8 +484,42 @@
     color: var(--muted);
     font-size: 12px;
   }
+  .row.paint {
+    grid-template-columns: 56px 1fr;
+    align-items: start;
+  }
+  .row.paint .label {
+    padding-top: 3px;
+  }
   .token {
+    flex-basis: 100%;
     font: 11px var(--font-mono);
+    color: var(--muted);
+  }
+  button:not(.swatch) {
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    background: var(--raised);
+    color: var(--fg);
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  button:not(.swatch):hover:not(:disabled) {
+    border-color: var(--muted);
+  }
+  button:not(.swatch):disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+  button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-fg);
+  }
+  .seg button[aria-pressed='false'] {
+    background: transparent;
     color: var(--muted);
   }
   .swatches {
@@ -359,7 +558,65 @@
     color: var(--fg);
   }
   input[type='number'],
+  input[type='text'],
   select {
     width: 100%;
+    box-sizing: border-box;
+  }
+  .numbers {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+  .number {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .number input {
+    font: 12px var(--font-mono);
+  }
+  .buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .param {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 6px 0;
+    border-top: 1px solid var(--line);
+  }
+  .param .head {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+  }
+  .param .name {
+    font: 12px var(--font-mono);
+    color: var(--fg);
+  }
+  .param .default,
+  .param .from {
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .param .default {
+    font-family: var(--font-mono);
+  }
+  .slide {
+    display: grid;
+    grid-template-columns: 1fr 44px;
+    gap: 8px;
+    align-items: center;
+  }
+  .value {
+    font: 12px var(--font-mono);
+    text-align: right;
+  }
+  .actions {
+    display: flex;
+    gap: 4px;
   }
 </style>

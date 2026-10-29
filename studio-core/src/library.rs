@@ -280,6 +280,11 @@ impl Library {
         self.undo.iter().map(|s| s.label.as_str()).collect()
     }
 
+    /// The labels of the steps that can be redone, the next first.
+    pub fn future(&self) -> Vec<&str> {
+        self.redo.iter().rev().map(|s| s.label.as_str()).collect()
+    }
+
     pub fn can_undo(&self) -> bool {
         !self.undo.is_empty()
     }

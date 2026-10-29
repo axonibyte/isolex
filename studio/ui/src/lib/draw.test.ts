@@ -7,7 +7,7 @@ import { BOUND, TOOLS, fits, keyName, toolFor } from './keymap';
 import { angleOf, angled, arcText, ellipseText, flatStep, lineText, moveFlat, plainData, polyText, rectText, resizeRect, resizeRound, snapAngle, squared, withPoints } from './flat';
 import { fewest, insertPoint, moveHandle, movePoint, nearestSide, parse, removePoint, shiftData, toD, toggle, type Path } from './path';
 import { cylinderText, faceRectText, poly3dText, segText, shadowText } from './gesture';
-import { argSpans, argText, counter, inRepeat, propsOf, withArg } from './kdl';
+import { argSpans, argText, counter, inRepeat, propsOf, stepIn, withArg } from './kdl';
 
 describe('the keymap', () => {
   it('binds no key twice', () => {
@@ -222,6 +222,12 @@ describe('node text', () => {
   it('reads the properties written before the children', () => {
     expect(propsOf('rect 3 3 18 18 rx=3 stroke="ink-muted" width=1.5 dash="3 2.5"')).toEqual({ rx: '3', stroke: 'ink-muted', width: '1.5', dash: '3 2.5' });
     expect(propsOf('poly fill="ink" {\n  pt 0 0 fill="no"\n}')).toEqual({ fill: 'ink' });
+  });
+
+  it('finds the argument a repeat steps, and by how much', () => {
+    expect(stepIn('tile 0 "1 + i * 0.5" 0 2 1')).toEqual({ k: 1, v: 'i', from: 1, by: 0.5 });
+    expect(stepIn('facerect "front" "0.1 + i * (1.8 / ports)" 1')).toBeNull();
+    expect(stepIn('tile 0 0 0 2 1')).toBeNull();
   });
 
   it('wraps a node in a repeat, an argument stepping', () => {

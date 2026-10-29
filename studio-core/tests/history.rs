@@ -272,3 +272,28 @@ fn a_gesture_is_one_step_and_a_refused_edit_changes_nothing() {
         assert_eq!(r, Err(EditError::BadPath(bad.into())), "{bad:?}");
     }
 }
+
+#[test]
+fn undone_steps_are_listed_to_redo_the_next_first() {
+    let mut lib = library();
+    for label in ["One", "Two", "Three"] {
+        lib.apply(Transaction::new(
+            label,
+            vec![Patch::Splice {
+                file: "a.ilx".into(),
+                at: 0,
+                len: 0,
+                text: label.into(),
+            }],
+        ))
+        .unwrap();
+    }
+    assert!(lib.future().is_empty());
+    lib.undo();
+    lib.undo();
+    assert_eq!(lib.history(), ["One"]);
+    assert_eq!(lib.future(), ["Two", "Three"]);
+    lib.redo();
+    assert_eq!(lib.history(), ["One", "Two"]);
+    assert_eq!(lib.future(), ["Three"]);
+}

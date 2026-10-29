@@ -388,3 +388,35 @@ fn in_memory_every_call_returns_compiled() {
     assert_eq!(s.undo().as_deref(), Some("Move seg"));
     assert_eq!(icons(mark).len(), 3);
 }
+
+#[test]
+fn a_preview_draws_an_icon_with_other_params_and_changes_nothing() {
+    let files = [(
+        "sample.ilx".to_string(),
+        include_str!("../../tests/fixtures/sample.ilx").to_string(),
+    )]
+    .into_iter()
+    .collect();
+    let window = Arc::new(Window::default());
+    let s = Session::in_memory(Library::new("sample", files), window.clone());
+    let mark = window.len();
+    let ports = |n: f64| {
+        let params = [("ports".to_string(), n)].into_iter().collect();
+        let d = s.preview("switch-l3", &params).unwrap();
+        d.sources.iter().filter(|o| o.kind == "facerect").count()
+    };
+    // twelve ports as written; four, or twenty, as previewed
+    assert_eq!(ports(12.0), 12);
+    assert_eq!(ports(4.0), 4);
+    assert_eq!(ports(20.0), 20);
+    // the chassis is u tiles of 0.28: its box's height as previewed
+    let params = [("u".to_string(), 2.0)].into_iter().collect();
+    let d = s.preview("switch-l3", &params).unwrap();
+    let chassis = d.sources.iter().find(|o| o.kind == "box").unwrap();
+    assert_eq!(chassis.values[5], 0.56);
+    // nothing changed, nothing told
+    assert_eq!(s.library().revision(), 0);
+    assert_eq!(window.len(), mark);
+    // an icon that is not there
+    assert!(s.preview("nope", &params).is_err());
+}

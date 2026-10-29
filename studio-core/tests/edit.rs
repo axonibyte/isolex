@@ -712,3 +712,61 @@ fn typed_text_is_one_splice_and_a_range_that_is_not_there_is_refused() {
     );
     assert_eq!(plan(&lib, &req), Err(Refusal::BadRange));
 }
+
+#[test]
+fn an_inherited_param_is_set_in_its_base_or_declared_where_it_is_edited() {
+    let mut lib = sample();
+    let src = lib.files()["sample.ilx"].clone();
+    let ports = node(&src, "param ports 12");
+    let req = Request::new(
+        &lib,
+        Some("switch-l3"),
+        "Set ports to 4",
+        Intent::SetValue {
+            node: ports,
+            slot: Slot::Arg(1),
+            // as the interface sends a number: written as a whole one
+            value: Value::Float(4.0),
+        },
+    );
+    let Ok(Plan::Choose(choices)) = plan(&lib, &req) else {
+        panic!("an inherited param asks")
+    };
+    assert!(matches!(&choices[0], Choice::EditInBase { base, .. } if base == "switch"));
+    let Choice::DeclareHere {
+        param,
+        definition,
+        then,
+    } = &choices[1]
+    else {
+        panic!("{choices:?}")
+    };
+    assert_eq!(
+        (param.as_str(), definition.as_str()),
+        ("ports", "switch-l3")
+    );
+    let Ok(Plan::Apply(tx)) = plan(&lib, then) else {
+        panic!()
+    };
+    lib.apply(tx).unwrap();
+    let text = &lib.files()["sample.ilx"];
+    // declared before its parts, the base keeping its own
+    assert!(
+        text.contains(
+            "  describe \"Adds the routing-arrows badge on the top face.\"\n  param ports 4\n  part \"routing-badge\" {"
+        ),
+        "{text}"
+    );
+    assert!(text.contains("param ports 12"));
+    let c = isolex::compile(&lib.sources());
+    assert!(c.errors.is_empty(), "{:?}", c.errors);
+    let ports_in = |name: &str| {
+        let at = c.doc.icons.iter().position(|i| i.name == name).unwrap();
+        c.provenance[at]
+            .iter()
+            .filter(|p| text[p.span.start..].starts_with("facerect"))
+            .count()
+    };
+    assert_eq!(ports_in("switch-l3"), 4);
+    assert_eq!(ports_in("switch-l2"), 12);
+}

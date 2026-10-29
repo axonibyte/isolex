@@ -186,3 +186,51 @@ fn a_cycle_of_extends_ends() {
         ["y"]
     );
 }
+
+#[test]
+fn a_definition_has_its_frame_and_its_params_own_and_inherited() {
+    // its own params first, then those it extends, nearest first
+    let l3 = of("switch-l3");
+    let params: Vec<(String, String, Option<f64>, Option<String>)> = l3
+        .params
+        .iter()
+        .map(|p| (p.name.clone(), p.default.clone(), p.value, p.from.clone()))
+        .collect();
+    assert_eq!(
+        params,
+        [
+            (
+                "ports".into(),
+                "12".into(),
+                Some(12.0),
+                Some("switch".into())
+            ),
+            ("u".into(), "1".into(), Some(1.0), Some("rack-unit".into())),
+        ]
+    );
+    let src = SAMPLE;
+    let at = |p: &isolex_studio_core::compile::Place| &src[p.start..p.start + p.len];
+    assert_eq!(at(&l3.params[0].node), "param ports 12");
+    // the frame it draws in, from where it is written
+    let frame = l3.frame.as_ref().unwrap();
+    assert_eq!(frame.kind, "footprint");
+    assert_eq!(frame.args, ["2", "1", "u * 0.28"]);
+    assert_eq!(frame.from.as_deref(), Some("rack-unit"));
+    assert_eq!(at(&frame.node), "footprint 2 1 \"u * 0.28\"");
+    // a flat icon's own canvas; a fragment's own params
+    let planned = of("state-planned");
+    let canvas = planned.frame.unwrap();
+    assert_eq!((canvas.kind.as_str(), canvas.from), ("canvas", None));
+    assert_eq!(canvas.args, ["24", "24"]);
+    assert!(planned.params.is_empty());
+    let stack = of("disk-stack");
+    assert_eq!(
+        stack
+            .params
+            .iter()
+            .map(|p| p.name.as_str())
+            .collect::<Vec<_>>(),
+        ["cx", "cy", "z", "n"]
+    );
+    assert!(stack.params.iter().all(|p| p.from.is_none()));
+}

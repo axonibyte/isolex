@@ -1,7 +1,8 @@
 <!--
   The Source tab (docs/studio-interface.md, Source): the file the open
   definition is written in, its problems marked, the definition's line
-  highlighted. Typing edits the library as any gesture does: each change
+  highlighted; or the file of a place opened from the problems list
+  (#70), at that place. Typing edits the library as any gesture does: each change
   is sent as one splice, grouped into undo steps by word and pause.
 -->
 <script lang="ts">
@@ -18,13 +19,25 @@
 
   let { studio }: Props = $props();
 
-  const file = $derived(studio.definition?.file ?? studio.view.library?.files[0] ?? null);
+  const file = $derived(studio.place?.file ?? studio.definition?.file ?? studio.view.library?.files[0] ?? null);
+  let editor: SourceEditor | undefined = $state();
+  /** The place last revealed, so each is revealed once, its text loaded. */
+  let revealed: object | null = null;
+  $effect(() => {
+    const p = studio.place;
+    void loaded;
+    if (!p || p === revealed || !editor || shown !== p.file || !text) return;
+    revealed = p;
+    void editor.reveal({ line: p.line, col: p.col, message: p.message, severity: p.severity });
+  });
   let text = $state('');
   /** What the core holds, as far as this tab knows: edits are made
       against it. */
   let known = '';
   let shown: string | null = null;
   let sending: Promise<unknown> = Promise.resolve();
+  /** Counts texts loaded, for what waits on one. */
+  let loaded = $state(0);
 
   const typist = new Typist({
     begin: () => void studio.backend.beginGesture(),
@@ -43,6 +56,7 @@
         shown = f;
         known = src.text;
         if (src.text !== text) text = src.text;
+        loaded++;
       }
     });
   });
@@ -95,7 +109,7 @@
   <div class="source">
     <div class="head"><span class="file">{file}</span><span class="note">recompiles as you type</span></div>
     <div class="body" onfocusout={() => typist.close()}>
-      <SourceEditor bind:value={text} {problems} {vocabulary} {highlight} label="Source of {file}" {onedit} {oncaret} />
+      <SourceEditor bind:this={editor} bind:value={text} {problems} {vocabulary} {highlight} label="Source of {file}" {onedit} {oncaret} />
     </div>
   </div>
 {:else}

@@ -66,17 +66,7 @@
     studio[set] = next;
   }
 
-  /** Sends a reorder, the selection following the row it moved. */
-  async function reorder(ask: ReturnType<typeof move>, siblings: Row[], index: number, path: string) {
-    if (!ask || !outline) return;
-    const moved = siblings[index]!;
-    const to = ask.before ? siblings.filter((_, i) => i !== index).findIndex((r) => same(r.node, ask.before!)) : siblings.length - 1;
-    const parent = path.slice(0, path.lastIndexOf('/'));
-    const was = studio.selected && same(studio.selected, moved.node);
-    if (was) studio.follow(`${parent}/${to}`);
-    const answer = await studio.ask({ kind: 'move-before', node: ask.node, before: ask.before }, `Move ${moved.kind} in ${outline.definition}`);
-    if (answer.kind !== 'applied' && was) studio.follow(path);
-  }
+  const reorder = (ask: ReturnType<typeof move>, siblings: Row[], index: number, path: string) => studio.reorder(ask, siblings, index, path);
 
   function onrowkey(e: KeyboardEvent, siblings: Row[], index: number, path: string) {
     const how = KEYS[e.key];

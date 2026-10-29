@@ -164,7 +164,8 @@ export class Tools {
       points with the node tool. */
   get handles(): Handle[] {
     const s = this.selected;
-    if (!s) return [];
+    // a preview is drawn from other numbers: nothing on it is the source's
+    if (!s || this.studio.previewing) return [];
     if (this.tool === 'node') return this.nodeHandles(s);
     if (this.tool !== 'select') return [];
     const v = s.values;
@@ -235,6 +236,10 @@ export class Tools {
 
   down(p: Press) {
     this.choice = null;
+    if (this.studio.previewing) {
+      this.studio.message = 'This is a preview: set the param as its default, or reset it, to draw';
+      return;
+    }
     if (DRAWS.has(this.tool)) return this.downDraw(p);
     if (this.tool === 'node') return this.downNode(p);
     if (this.tool !== 'select') return;
@@ -626,9 +631,20 @@ export class Tools {
     return src ? new TextDecoder().decode(new TextEncoder().encode(src.text).slice(node.start, node.start + node.len)) : '';
   }
 
+  /** One edit of `node` from a panel, one undo step: its asks in turn,
+      a choice the core needs offered on the canvas at `at`. A node the
+      outline does not list (a param, a frame) is asked of as it is. */
+  change(node: NodeAt, label: string, at: Point, steps: ((node: NodeAt) => Ask | null | Promise<Ask | null>)[]) {
+    this.sent = '';
+    this.path = find(this.studio.outline, node)?.path ?? null;
+    this.edit(label, at, steps, this.path ? null : node);
+    this.end();
+    return this.settled();
+  }
+
   /** Each step's ask in turn, on the node as it is after the last, the
-      gesture begun first. */
-  edit(label: string, at: Point, steps: ((node: NodeAt) => Ask | null | Promise<Ask | null>)[]) {
+      gesture begun first; on `fixed`, when given, as it is. */
+  edit(label: string, at: Point, steps: ((node: NodeAt) => Ask | null | Promise<Ask | null>)[], fixed: NodeAt | null = null) {
     const path = this.path;
     this.queue = this.queue.then(async () => {
       if (!this.gesture) {
@@ -637,7 +653,7 @@ export class Tools {
       }
       for (const step of steps) {
         const f = path ? atPath(this.studio.outline, path) : null;
-        const node = f?.row?.node;
+        const node = fixed ?? f?.row?.node;
         if (!node) return;
         const ask = await step(node);
         if (!ask) return;
@@ -722,7 +738,7 @@ export class Tools {
   }
 
   /** The selected node again, beside it: after it in its part. */
-  private async duplicate(node: NodeAt) {
+  async duplicate(node: NodeAt) {
     const f = find(this.studio.outline, node);
     if (!f?.row) return;
     const text = await this.text(node);
@@ -737,7 +753,7 @@ export class Tools {
     }
   }
 
-  private async remove(node: NodeAt) {
+  async remove(node: NodeAt) {
     const f = find(this.studio.outline, node);
     if (!f?.row) return;
     const answer = await this.studio.ask({ kind: 'delete', node }, `Delete ${f.row.kind} in ${this.studio.editing}`);

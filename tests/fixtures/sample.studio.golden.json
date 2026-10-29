@@ -274,7 +274,54 @@
           ]
         }
       ],
-      "inherited": []
+      "inherited": [],
+      "frame": null,
+      "params": [
+        {
+          "name": "cx",
+          "default": "0.5",
+          "value": 0.5,
+          "from": null,
+          "node": {
+            "file": "sample.ilx",
+            "start": 2295,
+            "len": 12
+          }
+        },
+        {
+          "name": "cy",
+          "default": "0.5",
+          "value": 0.5,
+          "from": null,
+          "node": {
+            "file": "sample.ilx",
+            "start": 2310,
+            "len": 12
+          }
+        },
+        {
+          "name": "z",
+          "default": "0",
+          "value": 0.0,
+          "from": null,
+          "node": {
+            "file": "sample.ilx",
+            "start": 2325,
+            "len": 9
+          }
+        },
+        {
+          "name": "n",
+          "default": "3",
+          "value": 3.0,
+          "from": null,
+          "node": {
+            "file": "sample.ilx",
+            "start": 2337,
+            "len": 9
+          }
+        }
+      ]
     },
     "mini-glyph": {
       "definition": "mini-glyph",
@@ -309,7 +356,21 @@
           ]
         }
       ],
-      "inherited": []
+      "inherited": [],
+      "frame": null,
+      "params": [
+        {
+          "name": "size",
+          "default": "3",
+          "value": 3.0,
+          "from": null,
+          "node": {
+            "file": "sample.ilx",
+            "start": 2731,
+            "len": 12
+          }
+        }
+      ]
     },
     "rack-unit": {
       "definition": "rack-unit",
@@ -344,7 +405,34 @@
           ]
         }
       ],
-      "inherited": []
+      "inherited": [],
+      "frame": {
+        "kind": "footprint",
+        "args": [
+          "2",
+          "1",
+          "u * 0.28"
+        ],
+        "from": null,
+        "node": {
+          "file": "sample.ilx",
+          "start": 299,
+          "len": 24
+        }
+      },
+      "params": [
+        {
+          "name": "u",
+          "default": "1",
+          "value": 1.0,
+          "from": null,
+          "node": {
+            "file": "sample.ilx",
+            "start": 287,
+            "len": 9
+          }
+        }
+      ]
     },
     "state": {
       "definition": "state",
@@ -401,7 +489,9 @@
           ]
         }
       ],
-      "inherited": []
+      "inherited": [],
+      "frame": null,
+      "params": []
     },
     "state-down": {
       "definition": "state-down",
@@ -457,7 +547,21 @@
           ]
         }
       ],
-      "inherited": []
+      "inherited": [],
+      "frame": {
+        "kind": "canvas",
+        "args": [
+          "24",
+          "24"
+        ],
+        "from": null,
+        "node": {
+          "file": "sample.ilx",
+          "start": 2840,
+          "len": 12
+        }
+      },
+      "params": []
     },
     "state-planned": {
       "definition": "state-planned",
@@ -503,7 +607,21 @@
           ]
         }
       ],
-      "inherited": []
+      "inherited": [],
+      "frame": {
+        "kind": "canvas",
+        "args": [
+          "24",
+          "24"
+        ],
+        "from": null,
+        "node": {
+          "file": "sample.ilx",
+          "start": 3205,
+          "len": 12
+        }
+      },
+      "params": []
     },
     "switch": {
       "definition": "switch",
@@ -555,6 +673,44 @@
           "from": "rack-unit",
           "shapes": 1
         }
+      ],
+      "frame": {
+        "kind": "footprint",
+        "args": [
+          "2",
+          "1",
+          "u * 0.28"
+        ],
+        "from": "rack-unit",
+        "node": {
+          "file": "sample.ilx",
+          "start": 299,
+          "len": 24
+        }
+      },
+      "params": [
+        {
+          "name": "ports",
+          "default": "12",
+          "value": 12.0,
+          "from": null,
+          "node": {
+            "file": "sample.ilx",
+            "start": 490,
+            "len": 14
+          }
+        },
+        {
+          "name": "u",
+          "default": "1",
+          "value": 1.0,
+          "from": "rack-unit",
+          "node": {
+            "file": "sample.ilx",
+            "start": 287,
+            "len": 9
+          }
+        }
       ]
     },
     "switch-l2": {
@@ -577,6 +733,44 @@
           "name": "ports",
           "from": "switch",
           "shapes": 1
+        }
+      ],
+      "frame": {
+        "kind": "footprint",
+        "args": [
+          "2",
+          "1",
+          "u * 0.28"
+        ],
+        "from": "rack-unit",
+        "node": {
+          "file": "sample.ilx",
+          "start": 299,
+          "len": 24
+        }
+      },
+      "params": [
+        {
+          "name": "ports",
+          "default": "12",
+          "value": 12.0,
+          "from": "switch",
+          "node": {
+            "file": "sample.ilx",
+            "start": 490,
+            "len": 14
+          }
+        },
+        {
+          "name": "u",
+          "default": "1",
+          "value": 1.0,
+          "from": "rack-unit",
+          "node": {
+            "file": "sample.ilx",
+            "start": 287,
+            "len": 9
+          }
         }
       ]
     },
@@ -634,6 +828,44 @@
           "name": "ports",
           "from": "switch",
           "shapes": 1
+        }
+      ],
+      "frame": {
+        "kind": "footprint",
+        "args": [
+          "2",
+          "1",
+          "u * 0.28"
+        ],
+        "from": "rack-unit",
+        "node": {
+          "file": "sample.ilx",
+          "start": 299,
+          "len": 24
+        }
+      },
+      "params": [
+        {
+          "name": "ports",
+          "default": "12",
+          "value": 12.0,
+          "from": "switch",
+          "node": {
+            "file": "sample.ilx",
+            "start": 490,
+            "len": 14
+          }
+        },
+        {
+          "name": "u",
+          "default": "1",
+          "value": 1.0,
+          "from": "rack-unit",
+          "node": {
+            "file": "sample.ilx",
+            "start": 287,
+            "len": 9
+          }
         }
       ]
     },
@@ -855,7 +1087,45 @@
           ]
         }
       ],
-      "inherited": []
+      "inherited": [],
+      "frame": {
+        "kind": "footprint",
+        "args": [
+          "2",
+          "1",
+          "u * 0.28"
+        ],
+        "from": "rack-unit",
+        "node": {
+          "file": "sample.ilx",
+          "start": 299,
+          "len": 24
+        }
+      },
+      "params": [
+        {
+          "name": "ports",
+          "default": "12",
+          "value": 12.0,
+          "from": "switch",
+          "node": {
+            "file": "sample.ilx",
+            "start": 490,
+            "len": 14
+          }
+        },
+        {
+          "name": "u",
+          "default": "1",
+          "value": 1.0,
+          "from": "rack-unit",
+          "node": {
+            "file": "sample.ilx",
+            "start": 287,
+            "len": 9
+          }
+        }
+      ]
     }
   },
   "sources": {

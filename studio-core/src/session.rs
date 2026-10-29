@@ -35,7 +35,10 @@ pub enum Notice {
         revision: u64,
         modified: bool,
         files: Vec<String>,
+        /// The steps that can be undone, oldest first, and those that can
+        /// be redone, the next first.
         history: Vec<String>,
+        future: Vec<String>,
         can_undo: bool,
         can_redo: bool,
     },
@@ -303,6 +306,17 @@ impl Session {
         crate::outline::outline(&self.lib.sources(), definition)
     }
 
+    /// `icon` as it would be drawn with `params` set to other values,
+    /// compiled from the library as it is, which nothing changes: a param's
+    /// slider previews a value before it is written.
+    pub fn preview(
+        &self,
+        icon: &str,
+        params: &BTreeMap<String, f64>,
+    ) -> Result<Drawing, Vec<Diag>> {
+        crate::compile::preview(&self.lib.sources(), icon, params)
+    }
+
     /// What the interface shows: the definition and icon open, and the
     /// thumbnails on screen, which compile first.
     pub fn view(&mut self, editing: Option<String>, open: Option<String>, visible: Vec<String>) {
@@ -330,7 +344,8 @@ impl Session {
             Choice::EditParam { then, .. }
             | Choice::ReplaceWithNumber { then }
             | Choice::EditInBase { then, .. }
-            | Choice::OverrideHere { then, .. } => then,
+            | Choice::OverrideHere { then, .. }
+            | Choice::DeclareHere { then, .. } => then,
         };
         self.carry_out(then)
     }
@@ -460,6 +475,7 @@ impl Session {
             modified: self.lib.is_modified(),
             files: self.lib.files().keys().cloned().collect(),
             history: self.lib.history().iter().map(|s| s.to_string()).collect(),
+            future: self.lib.future().iter().map(|s| s.to_string()).collect(),
             can_undo: self.lib.can_undo(),
             can_redo: self.lib.can_redo(),
         });
@@ -551,6 +567,12 @@ fn describe(c: &Choice) -> ChoiceOption {
         Choice::OverrideHere { part, .. } => ChoiceOption {
             label: "Override here".into(),
             detail: format!("Copies part \"{part}\" into this definition"),
+        },
+        Choice::DeclareHere {
+            param, definition, ..
+        } => ChoiceOption {
+            label: format!("Set it in {definition}"),
+            detail: format!("Declares {param} there, for it and what extends it"),
         },
     }
 }

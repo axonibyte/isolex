@@ -150,60 +150,90 @@ impl Compiler for Isolex {
             icon: name.to_string(),
             params: BTreeMap::new(),
         };
-        let place = |span: isolex::ast::Span| Place {
-            file: ready
-                .files
-                .get(span.file)
-                .map(|f| f.0.clone())
-                .unwrap_or_default(),
-            start: span.start,
-            len: span.len,
-        };
-        // the node's name: the word its source starts with
-        let kind = |span: isolex::ast::Span| {
-            let text = ready.files.get(span.file).map_or("", |f| f.1.as_str());
-            let at = text.get(span.start..).unwrap_or("");
-            at.split(|c: char| c.is_whitespace() || c == '{')
-                .next()
-                .unwrap_or("")
-                .to_string()
-        };
-        match ready.prepared.icon(&request, cancel) {
-            Err(isolex::Refused::Cancelled) => None,
-            Err(isolex::Refused::Request(why)) => Some(Outcome::Broken(vec![Diag {
-                file: String::new(),
-                line: 0,
-                col: 0,
-                message: why,
-            }])),
-            Ok(c) if !c.errors.is_empty() => Some(Outcome::Broken(c.errors)),
-            Ok(mut c) => match c.doc.icons.pop() {
-                Some(ir) => {
-                    let sources = c
-                        .provenance
-                        .pop()
-                        .unwrap_or_default()
-                        .into_iter()
-                        .map(|s| Origin {
-                            node: place(s.span),
-                            kind: kind(s.span),
-                            definition: s.definition,
-                            part: s.part,
-                            sites: s.sites.iter().map(|site| place(site.span)).collect(),
-                            map: s.map,
-                            values: s.values,
-                        })
-                        .collect();
-                    let drawing = Drawing { ir, sources };
-                    let json = serde_json::to_string(&drawing).expect("a drawing serializes");
-                    Some(Outcome::Drawn {
-                        hash: hash(&json),
-                        drawing: Arc::new(drawing),
+        draw(ready, &request, cancel)
+    }
+}
+
+/// `icon` drawn from `files` with `params` set as a host sets them,
+/// compiled on the spot: what a param's slider previews.
+pub fn preview(
+    files: &[(String, String)],
+    icon: &str,
+    params: &BTreeMap<String, f64>,
+) -> Result<Drawing, Vec<Diag>> {
+    let (ready, problems, _) = Isolex.prepare(files);
+    if !problems.errors.is_empty() {
+        return Err(problems.errors);
+    }
+    let request = isolex::Only {
+        icon: icon.to_string(),
+        params: params
+            .iter()
+            .map(|(k, v)| (k.clone(), isolex::HostValue::Num(*v)))
+            .collect(),
+    };
+    match draw(&ready, &request, &AtomicBool::new(false)) {
+        Some(Outcome::Drawn { drawing, .. }) => Ok((*drawing).clone()),
+        Some(Outcome::Broken(diags)) => Err(diags),
+        None => Err(Vec::new()),
+    }
+}
+
+/// One icon drawn, with where each of its shapes came from.
+fn draw(ready: &Ready, request: &isolex::Only, cancel: &AtomicBool) -> Option<Outcome> {
+    let place = |span: isolex::ast::Span| Place {
+        file: ready
+            .files
+            .get(span.file)
+            .map(|f| f.0.clone())
+            .unwrap_or_default(),
+        start: span.start,
+        len: span.len,
+    };
+    // the node's name: the word its source starts with
+    let kind = |span: isolex::ast::Span| {
+        let text = ready.files.get(span.file).map_or("", |f| f.1.as_str());
+        let at = text.get(span.start..).unwrap_or("");
+        at.split(|c: char| c.is_whitespace() || c == '{')
+            .next()
+            .unwrap_or("")
+            .to_string()
+    };
+    match ready.prepared.icon(request, cancel) {
+        Err(isolex::Refused::Cancelled) => None,
+        Err(isolex::Refused::Request(why)) => Some(Outcome::Broken(vec![Diag {
+            file: String::new(),
+            line: 0,
+            col: 0,
+            message: why,
+        }])),
+        Ok(c) if !c.errors.is_empty() => Some(Outcome::Broken(c.errors)),
+        Ok(mut c) => match c.doc.icons.pop() {
+            Some(ir) => {
+                let sources = c
+                    .provenance
+                    .pop()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|s| Origin {
+                        node: place(s.span),
+                        kind: kind(s.span),
+                        definition: s.definition,
+                        part: s.part,
+                        sites: s.sites.iter().map(|site| place(site.span)).collect(),
+                        map: s.map,
+                        values: s.values,
                     })
-                }
-                None => Some(Outcome::Broken(Vec::new())),
-            },
-        }
+                    .collect();
+                let drawing = Drawing { ir, sources };
+                let json = serde_json::to_string(&drawing).expect("a drawing serializes");
+                Some(Outcome::Drawn {
+                    hash: hash(&json),
+                    drawing: Arc::new(drawing),
+                })
+            }
+            None => Some(Outcome::Broken(Vec::new())),
+        },
     }
 }
 

@@ -7,7 +7,7 @@
 
 import moduleUrl from './studio-core.wasm?url';
 import sampleSource from '../../../../tests/fixtures/sample.ilx?raw';
-import type { Answer, Backend, Notice, Outline, Source } from './backend';
+import type { Answer, Backend, Drawing, Notice, Outline, Source } from './backend';
 
 interface Exports {
   memory: WebAssembly.Memory;
@@ -57,6 +57,7 @@ export async function core(): Promise<Backend> {
     view: (editing, icon, visible) => later({ call: 'view', editing, icon, visible }),
     source: (file) => later<Source | null>({ call: 'source', file }),
     outline: (definition) => later<Outline | null>({ call: 'outline', definition }),
+    preview: (icon, params) => later<Drawing | null>({ call: 'preview', icon, params }),
     ask: (ask, label) => later<Answer>({ call: 'ask', ask, label }),
     choose: (id, option) => later<Answer>({ call: 'choose', id, option }),
     beginGesture: () => later({ call: 'begin_gesture' }),

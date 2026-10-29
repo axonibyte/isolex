@@ -26,6 +26,19 @@ fn a_library_opened_edited_undone_and_saved() {
     assert_eq!(k[..3], ["graph", "library", "compiled"]);
     assert!(k.iter().filter(|k| *k == "icon").count() > 5);
 
+    // a param previewed: the icon drawn with it, and nothing told
+    let preview = send(json!({ "call": "preview", "icon": "switch-l3", "params": { "ports": 4 } }));
+    let ports = preview["result"]["sources"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|o| o["kind"] == "facerect")
+        .count();
+    assert_eq!(ports, 4);
+    assert!(kinds(&preview).is_empty());
+    let none = send(json!({ "call": "preview", "icon": "nope", "params": {} }));
+    assert!(none["result"].is_null());
+
     let source = send(json!({ "call": "source", "file": "sample.ilx" }));
     assert_eq!(source["result"]["text"], SAMPLE);
     let outline = send(json!({ "call": "outline", "definition": "switch-poe" }));

@@ -33,6 +33,7 @@ const library = (modified: boolean): Notice => ({
   modified,
   files: ['a.ilx'],
   history: [],
+  future: [],
   can_undo: false,
   can_redo: false,
 });

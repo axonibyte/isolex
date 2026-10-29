@@ -69,7 +69,9 @@ lexicon (SPEC §1). It reads and writes nothing else.
 
 - **Top bar:** what is being edited, as its kind ("icon", "icon,
   extends server-2u", "variant down of axis") and a name field that
-  renames it; undo and redo; the two theme switches.
+  renames it; undo and redo, and beside them the undo history (every
+  step done, oldest first, then those undone; a click goes back or
+  forward to one); the two theme switches.
 - **Tool rail (left):** one button per tool with its key, grouped:
   selecting (Select, Node, Pan), 3-D (Box, Tile, Cylinder, Face rect,
   Shadow, Segment, 3-D polygon), flat (Line, Rectangle, Ellipse, Arc,
@@ -85,7 +87,9 @@ lexicon (SPEC §1). It reads and writes nothing else.
 - **Status bar:** the compile state (compiled, with the compiler's
   version and how long it took; or *does not compile*, with the first
   error, while the last good drawing stays); the pointer's coordinates
-  (tile x, y and the floor's z, or flat x and y); counts.
+  (tile x, y and the floor's z, or flat x and y); counts. The compile
+  state opens the problems list: the library's errors and warnings by
+  file, each opening its place in the Source tab.
 
 Below 900 px wide the panels stack under the canvas.
 
@@ -299,6 +303,10 @@ Fonts are part of the library and are edited in the same editor (#84):
   the icons that follow) or *Override here*, which copies the part into
   the open definition. *Remember for this drag* applies the choice to
   the rest of the gesture.
+- **An inherited param,** set as its default from the Design tab: *Edit
+  in switch* (listing the icons that follow) or *Set it in switch-l3*,
+  which declares the param in the open definition with the new value,
+  for it and what extends it.
 - **A copy from a repeat:** dragging one moves them all, and the hint
   line says so ("Moves all 8 copies").
 - **A refusal** always says why, in the hint line.

@@ -143,6 +143,14 @@ pub enum Choice {
         part: String,
         then: Request,
     },
+    /// Declare the param `param` again in `definition`, the one being
+    /// edited, with the value asked for: it and what extends it draw with
+    /// it, and the base keeps its own.
+    DeclareHere {
+        param: String,
+        definition: String,
+        then: Request,
+    },
 }
 
 /// Why a request was refused, with nothing changed.
@@ -376,6 +384,41 @@ fn inherited(
             ..req.clone()
         },
     }];
+    // a param's default: declared again where it is being edited, before
+    // that definition's parts
+    let f = &flat[idx];
+    if f.parent == Some(f.top) && f.node.name().value() == "param" {
+        if let (
+            Intent::SetValue {
+                slot: Slot::Arg(1),
+                value,
+                ..
+            },
+            Some(param),
+            Some(here),
+        ) = (
+            &req.intent,
+            definition_name(&f.node),
+            definition_at(lib, editing),
+        ) {
+            choices.push(Choice::DeclareHere {
+                param: param.clone(),
+                definition: editing.to_string(),
+                then: Request {
+                    revision: req.revision,
+                    editing: Some(editing.to_string()),
+                    intent: Intent::Insert {
+                        before: first_part(lib, &here),
+                        parent: here,
+                        text: format!("param {param} {}", kdl::write_value(&tidy(value))),
+                    },
+                    label: format!("Declare {param} in {editing}"),
+                    in_base: false,
+                    replace_expression: false,
+                },
+            });
+        }
+    }
     // the part it is in, copied into the definition being edited
     let mut at = Some(idx);
     while let Some(i) = at {
@@ -408,6 +451,23 @@ fn inherited(
         at = f.parent;
     }
     Ok(Some(choices))
+}
+
+/// The first part a definition writes, where a param declared in it
+/// goes before; none if it writes none.
+fn first_part(lib: &Library, def: &NodeRef) -> Option<NodeRef> {
+    let (_, doc) = parse(lib, &def.file).ok()?;
+    let flat = flatten(&doc);
+    let top = flat
+        .iter()
+        .position(|f| f.start == def.start && f.end - f.start == def.len)?;
+    flat.iter()
+        .find(|f| f.parent == Some(top) && f.node.name().value() == "part")
+        .map(|f| NodeRef {
+            file: def.file.clone(),
+            start: f.start,
+            len: f.end - f.start,
+        })
 }
 
 /// Where a definition is written.

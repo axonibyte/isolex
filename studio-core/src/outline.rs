@@ -1,12 +1,14 @@
 //! A definition's parts, as the Parts panel lists them (#68,
 //! docs/studio-interface.md, Parts): its own, in source order, each with
 //! its shapes; and those it draws but does not own, from the definitions
-//! it extends, each naming where it comes from.
+//! it extends, each naming where it comes from. With them, what the
+//! Design tab shows with nothing selected (#70): its frame, and its
+//! params, own and inherited.
 //!
 //! Read from the source as written, so it is there while the library does
 //! not compile, as far as the parser got.
 
-use isolex::ast::{DefKind, Definition, Lexicon, PartDecl, PartOp, Span};
+use isolex::ast::{DefKind, Definition, Lexicon, Num, Param, PartDecl, PartOp, Span};
 use serde::Serialize;
 
 use crate::compile::Place;
@@ -25,6 +27,35 @@ pub struct Outline {
     /// The parts it draws from the definitions it extends, nearest last,
     /// less those it replaces or removes.
     pub inherited: Vec<Inherited>,
+    /// Its `footprint` or `canvas`, its own or the nearest it extends.
+    pub frame: Option<Frame>,
+    /// Its params: its own in the order written, then those it extends
+    /// and does not declare again, nearest first.
+    pub params: Vec<ParamRow>,
+}
+
+/// A definition's frame, as written.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Frame {
+    /// "footprint" or "canvas".
+    pub kind: String,
+    pub args: Vec<String>,
+    /// The definition that writes it, when not this one.
+    pub from: Option<String>,
+    pub node: Place,
+}
+
+/// A param, as written where it is declared.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ParamRow {
+    pub name: String,
+    /// Its default as written: "12", "u * 0.28", or text.
+    pub default: String,
+    /// The default, when it is written as a number.
+    pub value: Option<f64>,
+    /// The definition that declares it, when not this one.
+    pub from: Option<String>,
+    pub node: Place,
 }
 
 /// A part the definition writes.
@@ -86,6 +117,51 @@ pub fn outline(files: &[(String, String)], definition: &str) -> Option<Outline> 
             }
         }
     }
+    // the chain, this one first; a cycle the resolver reports ends it
+    let mut chain: Vec<&Definition> = vec![def];
+    while let Some(parent) = chain.last().and_then(|d| d.extends.as_deref()) {
+        match lexicon.defs.iter().find(|d| d.name == parent) {
+            Some(d) if !chain.iter().any(|c| c.name == d.name) => chain.push(d),
+            _ => break,
+        }
+    }
+    let from = |d: &Definition| (d.name != def.name).then(|| d.name.clone());
+    let frame = chain.iter().find_map(|d| {
+        let node = lexicon.sources.get(d.span)?.children.iter().find_map(|c| {
+            let src = lexicon.sources.get(*c)?;
+            (src.name == "footprint" || src.name == "canvas").then_some((*c, src))
+        })?;
+        Some(Frame {
+            kind: node.1.name.clone(),
+            args: node.1.args.iter().map(|a| read.value(*a)).collect(),
+            from: from(d),
+            node: read.place(node.0),
+        })
+    });
+    let mut params: Vec<ParamRow> = Vec::new();
+    for d in &chain {
+        for (name, param, span) in &d.body.params {
+            if params.iter().any(|p| p.name == *name) {
+                continue;
+            }
+            let default = lexicon
+                .sources
+                .get(*span)
+                .and_then(|s| s.args.get(1))
+                .map(|a| read.value(*a))
+                .unwrap_or_default();
+            params.push(ParamRow {
+                name: name.clone(),
+                default,
+                value: match param {
+                    Param::Num(Num::Lit(v)) => Some(*v),
+                    _ => None,
+                },
+                from: from(d),
+                node: read.place(*span),
+            });
+        }
+    }
     Some(Outline {
         definition: def.name.clone(),
         kind: kind(def),
@@ -93,6 +169,8 @@ pub fn outline(files: &[(String, String)], definition: &str) -> Option<Outline> 
         node: read.place(def.span),
         parts,
         inherited,
+        frame,
+        params,
     })
 }
 

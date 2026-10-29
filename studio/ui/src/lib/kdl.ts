@@ -78,6 +78,17 @@ export function inRepeat(text: string, indent: string, k: number, value: number,
   return `repeat ${count} "${v}" {${nl}${body}${nl}${indent}}`;
 }
 
+/** The first argument of a node written as `"a + v * s"`: which it is,
+    its counter, and where it steps from and by. */
+export function stepIn(text: string): { k: number; v: string; from: number; by: number } | null {
+  for (const [k, a] of argSpans(text).entries()) {
+    const t = text.slice(a.start, a.end);
+    const m = t.match(/^"\s*(-?[\d.]+)\s*\+\s*([A-Za-z_]\w*)\s*\*\s*(-?[\d.]+)\s*"$/);
+    if (m) return { k, v: m[2]!, from: Number(m[1]), by: Number(m[3]) };
+  }
+  return null;
+}
+
 /** What a repeated argument steps by, and from where, if it is written
     as `"a + v * s"`. */
 export function stepOf(text: string, v: string): { from: number; by: number } | null {

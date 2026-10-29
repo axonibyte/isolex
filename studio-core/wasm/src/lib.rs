@@ -109,6 +109,15 @@ fn answer(v: &Value) -> Result<Value, String> {
                 session.end_gesture();
                 Ok(Value::Null)
             }
+            "preview" => {
+                let params = serde_json::from_value(v["params"].clone())
+                    .map_err(|e| format!("preview: {e}"))?;
+                to(serde_json::to_value(
+                    session
+                        .preview(&s("icon").unwrap_or_default(), &params)
+                        .ok(),
+                ))
+            }
             "undo" => Ok(json!(session.undo())),
             "redo" => Ok(json!(session.redo())),
             "save" => session

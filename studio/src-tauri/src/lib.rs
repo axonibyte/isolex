@@ -3,9 +3,11 @@
 //! `isolex-studio-core`'s [`Session`], whose notices reach the window as
 //! `isolex` events.
 
+use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use isolex_studio_core::compile::Drawing;
 use isolex_studio_core::outline::Outline;
 use isolex_studio_core::session::{Answer, Ask, Notice, Session, Sink, Source};
 use isolex_studio_core::About;
@@ -81,6 +83,16 @@ fn outline(open: State<Open>, definition: String) -> Result<Option<Outline>, Str
     with(&open, |s| s.outline(&definition))
 }
 
+/// The icon drawn with other params, or none if it does not compile so.
+#[tauri::command]
+fn preview(
+    open: State<Open>,
+    icon: String,
+    params: BTreeMap<String, f64>,
+) -> Result<Option<Drawing>, String> {
+    with(&open, |s| s.preview(&icon, &params).ok())
+}
+
 #[tauri::command]
 fn ask(open: State<Open>, ask: Ask, label: String) -> Result<Answer, String> {
     with(&open, |s| s.ask(&ask, &label))
@@ -148,6 +160,7 @@ pub fn run() {
             view,
             source,
             outline,
+            preview,
             ask,
             choose,
             begin_gesture,

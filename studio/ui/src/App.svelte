@@ -17,6 +17,9 @@
   import { Tools } from './lib/tools.svelte';
   import { TOOLS, fits, toolFor, type Tool } from './lib/keymap';
   import DesignTab from './components/DesignTab.svelte';
+  import PreviewTab from './components/PreviewTab.svelte';
+  import HistoryMenu from './components/HistoryMenu.svelte';
+  import ProblemsMenu from './components/ProblemsMenu.svelte';
   import { STEPS, stepLabel } from './lib/snap';
 
   interface Props {
@@ -96,8 +99,12 @@
     }
     studio.select(n);
   }
-  const errors = $derived(view.compiled?.errors.length ?? 0);
-  const warnings = $derived(view.compiled?.warnings.length ?? 0);
+  /** The icon as drawn now: as previewed with other params, or as it is. */
+  const shown = $derived(studio.previewing?.drawing.ir ?? icon);
+  // a place opened from the problems list is shown in the Source tab
+  $effect(() => {
+    if (studio.place) tab = 'source';
+  });
 
   /** The palette as the canvas paints it: the library's, or isolex's own. */
   const paletteStyle = $derived.by(() => {
@@ -221,6 +228,7 @@
       <button class="icon-btn" onclick={() => studio.redo()} disabled={!library.canRedo} aria-label="Redo" title="Redo (Ctrl+Shift+Z)"
         ><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m13 5 4 4-4 4" /><path d="M17 9H8a5 5 0 0 0 0 10h2" /></svg></button
       >
+      <HistoryMenu {studio} />
       <span class="spacer"></span>
       <div class="seg" role="group" aria-label="Canvas">
         <button aria-pressed={canvas === 'light'} onclick={() => chooseCanvas('light')}>Light canvas</button>
@@ -261,10 +269,10 @@
       <main class="stage {canvas === 'dark' ? 'iso-dark' : 'iso-light'}" aria-label="Canvas area">
         <Canvas
           bind:this={canvasView}
-          {icon}
+          icon={shown}
           {tools}
-          {marked}
-          {hidden}
+          marked={studio.previewing ? undefined : marked}
+          hidden={studio.previewing ? undefined : hidden}
           onpointer={(p) => (pointer = p)}
           {onpick}
           onhover={(i) => (hover = i === null ? '' : drawnBy(i))}
@@ -280,7 +288,7 @@
         {#if !icon}
           <p class="note">{view.compiled ? (studio.icon ? `${studio.icon} does not compile.` : 'This library emits no icon.') : 'Compiling…'}</p>
         {/if}
-        <div class="hint" role="status">{hover || studio.message || HINTS[tools.tool] || 'Scroll to zoom · Ctrl+scroll pans north–south · Shift+scroll east–west · 0 fits'}</div>
+        <div class="hint" role="status">{studio.previewing ? `Previewing ${Object.entries(studio.previewing.params).map(([k, v]) => `${k} = ${v}`).join(', ')}: nothing is written until Set as default` : hover || studio.message || HINTS[tools.tool] || 'Scroll to zoom · Ctrl+scroll pans north–south · Shift+scroll east–west · 0 fits'}</div>
       </main>
 
       <aside class="side right" aria-label="Inspector">
@@ -293,7 +301,9 @@
           {#if tab === 'source'}
             <SourceTab {studio} />
           {:else if tab === 'design'}
-            <DesignTab {studio} {tools} look={canvas === 'dark' ? 'iso-dark' : 'iso-light'} />
+            <DesignTab {studio} {tools} {icon} look={canvas === 'dark' ? 'iso-dark' : 'iso-light'} />
+          {:else if tab === 'preview'}
+            <PreviewTab icon={shown} />
           {:else if tab === 'tree'}
             <ul class="icons {canvas === 'dark' ? 'iso-dark' : 'iso-light'}" aria-label="Icons">
               {#each view.compiled?.icons ?? [] as name (name)}
@@ -306,8 +316,6 @@
                 </li>
               {/each}
             </ul>
-          {:else}
-            <p class="empty">The open icon at real sizes appears here.</p>
           {/if}
         </div>
       </aside>
@@ -322,12 +330,7 @@
     {/if}
 
     <footer class="status">
-      <span>
-        {#if !view.compiled}<span class="dot"></span>Compiling…
-        {:else if errors}<span class="dot bad"></span>{errors} error{errors === 1 ? '' : 's'}
-        {:else}<span class="dot ok"></span>Compiled revision {view.compiled.revision}{/if}
-        {#if warnings}<span class="warn"> · {warnings} warning{warnings === 1 ? '' : 's'}</span>{/if}
-      </span>
+      <ProblemsMenu {studio} />
       <span class="num">{pointer}</span>
       <span>{library.modified ? '● unsaved changes' : 'saved'}</span>
       <span class="spacer"></span>
@@ -413,26 +416,6 @@
   .spacer {
     flex: 1;
   }
-  .icon-btn {
-    display: inline-grid;
-    place-items: center;
-    width: 30px;
-    height: 30px;
-    border-radius: 7px;
-    background: transparent;
-    border: 1px solid transparent;
-    color: var(--muted);
-    cursor: pointer;
-  }
-  .icon-btn:hover:not(:disabled) {
-    background: var(--raised);
-    color: var(--fg);
-  }
-  .icon-btn:disabled {
-    opacity: 0.35;
-    cursor: default;
-  }
-  .icon-btn svg,
   .tool svg {
     width: 18px;
     height: 18px;
@@ -534,10 +517,6 @@
   .right {
     border-right: 0;
     border-left: 1px solid var(--line);
-  }
-  .empty {
-    margin: 4px 12px;
-    color: var(--muted);
   }
   .stage {
     position: relative;
@@ -685,23 +664,6 @@
   .num {
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
-  }
-  .warn {
-    color: var(--warn);
-  }
-  .dot {
-    display: inline-block;
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    margin-right: 6px;
-    background: var(--muted);
-  }
-  .dot.ok {
-    background: var(--ok);
-  }
-  .dot.bad {
-    background: var(--danger);
   }
   @media (max-width: 900px) {
     .main {
