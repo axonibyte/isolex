@@ -423,3 +423,144 @@ jobs:
           [ "$got" = 200 ] || { echo "downloading $fname anonymously answered $got"; exit 1; }
           cmp -s "../dist/$fname" "../fetched-$fname" || { echo "the served asset is not the file this run built"; exit 1; }
           echo "read back anonymously -> $got, $fname byte-identical to the build"
+
+  # THE STUDIO'S INSTALLERS, ATTACHED BY THIS FORGE, NOT PUSHED TO IT. Tauri
+  # does not build in this jail, so GitHub builds them on the same tag, once
+  # the push mirror carries it there (.github/workflows/studio-release.yml),
+  # and leaves them as one artifact, studio-installers, with
+  # SHA256SUMS-studio inside. This job waits for that run, downloads the
+  # artifact, checks every file against the sums, and attaches them to the
+  # release the build job made, with the token Forgejo mints per run: GitHub
+  # holds no credential for the forge. Downloading an artifact needs a
+  # GitHub token even from a public repository, so the forge holds one,
+  # GH_ARTIFACTS_TOKEN: a fine-grained token with read-only access to public
+  # repositories and nothing else.
+  #
+  # IT HOLDS THE RUNNER WHILE IT WAITS: up to ~15 minutes for the mirror and
+  # the build's own hour, polled a minute apart. That is the price of the
+  # forge publishing everything itself, and it is paid once per release.
+  studio:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: freebsd-15-jail
+    timeout-minutes: 120
+    steps:
+      - name: on a tag, wait for GitHub's studio build, and attach its installers
+        env:
+          RELEASE_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_ARTIFACTS_TOKEN }}
+        run: |
+          set -o pipefail
+          [ -n "$RELEASE_TOKEN" ] || { echo "the job was minted no token: nothing can be attached"; exit 1; }
+          [ -n "$GH_TOKEN" ] || { echo "GH_ARTIFACTS_TOKEN is not set: GitHub's artifact cannot be downloaded"; exit 1; }
+          command -v jq > /dev/null 2>&1 || { echo "jq is ABSENT and this step reads JSON with it. PROVISIONING finding."; exit 1; }
+          tag="${GITHUB_REF_NAME}"
+          forge="${GITHUB_SERVER_URL:-https://forge.axonibyte.com}"
+          api="$forge/api/v1/repos/${GITHUB_REPOSITORY}"
+          gh="https://api.github.com/repos/axonibyte/isolex"
+          # Both credentials reach curl through 0600 config files, never argv.
+          work=$(mktemp -d)
+          trap 'rm -rf "$work"' EXIT
+          fcfg="$work/forge.cfg"
+          gcfg="$work/github.cfg"
+          (
+            umask 077
+            printf 'header = "Authorization: token %s"\n' "$RELEASE_TOKEN" > "$fcfg"
+            printf 'header = "Authorization: Bearer %s"\n' "$GH_TOKEN" > "$gcfg"
+            printf 'header = "Accept: application/vnd.github+json"\n' >> "$gcfg"
+            printf 'header = "X-GitHub-Api-Version: 2022-11-28"\n' >> "$gcfg"
+          )
+
+          # THE COMMIT THE TAG NAMES, peeled: GitHub's runs are keyed by
+          # commit, and an annotated tag's own object is not one.
+          remote="$forge/${GITHUB_REPOSITORY}.git"
+          sha=$(timeout 60 git ls-remote "$remote" "refs/tags/$tag^{}" | cut -f1)
+          [ -n "$sha" ] || sha=$(timeout 60 git ls-remote "$remote" "refs/tags/$tag" | cut -f1)
+          [ -n "$sha" ] || { echo "the forge does not know tag $tag"; exit 1; }
+          echo "tag $tag is commit $sha"
+
+          # WAIT FOR GITHUB'S RUN to appear (the mirror) and to finish (the
+          # build), a minute apart, for up to 100 minutes. The newest run of
+          # the commit wins, so a re-run on GitHub is what gets attached.
+          run=""
+          status=""
+          conclusion=""
+          i=0
+          while [ "$i" -lt 100 ]; do
+            i=$((i + 1))
+            code=$(timeout 60 curl --config "$gcfg" -s -o "$work/runs.json" -w '%{http_code}' \
+                   "$gh/actions/workflows/studio-release.yml/runs?head_sha=$sha&event=push&per_page=5") || code=timeout
+            if [ "$code" = 200 ] && [ "$(jq '.total_count' < "$work/runs.json")" -gt 0 ]; then
+              run=$(jq -r '.workflow_runs[0].id' < "$work/runs.json")
+              status=$(jq -r '.workflow_runs[0].status' < "$work/runs.json")
+              conclusion=$(jq -r '.workflow_runs[0].conclusion // ""' < "$work/runs.json")
+              [ "$status" = completed ] && break
+              echo "GitHub run $run is $status, minute $i of 100"
+            else
+              echo "GitHub has no studio-release run for $sha yet ($code), minute $i of 100"
+            fi
+            sleep 60
+          done
+          [ "$status" = completed ] || { echo "GitHub's studio build did not finish in 100 minutes ${run:+(run $run)}"; exit 1; }
+          [ "$conclusion" = success ] || { echo "GitHub's studio build ended $conclusion: https://github.com/axonibyte/isolex/actions/runs/$run"; exit 1; }
+          echo "GitHub run $run: success"
+
+          code=$(timeout 60 curl --config "$gcfg" -s -o "$work/artifacts.json" -w '%{http_code}' \
+                 "$gh/actions/runs/$run/artifacts?name=studio-installers")
+          [ "$code" = 200 ] || { echo "listing run $run's artifacts answered $code"; exit 1; }
+          url=$(jq -r '[.artifacts[] | select(.name == "studio-installers" and .expired == false)][0].archive_download_url // ""' < "$work/artifacts.json")
+          [ -n "$url" ] || { echo "run $run left no studio-installers artifact"; exit 1; }
+          code=$(timeout 900 curl --config "$gcfg" -s -L -o "$work/studio.zip" -w '%{http_code}' "$url") || code=timeout
+          [ "$code" = 200 ] || { echo "downloading studio-installers answered $code"; exit 1; }
+          mkdir "$work/dist"
+          tar -xf "$work/studio.zip" -C "$work/dist" || { echo "studio-installers is not a readable zip"; exit 1; }
+
+          # EVERY FILE AGAINST THE SUMS GITHUB WROTE, and the sums against
+          # every file: nothing unlisted is attached, nothing listed missing.
+          cd "$work/dist" || exit 1
+          [ -f SHA256SUMS-studio ] || { echo "the artifact carries no SHA256SUMS-studio"; exit 1; }
+          n=0
+          while read -r want name; do
+            name="${name#\*}"
+            [ -f "$name" ] || { echo "SHA256SUMS-studio lists $name, which the artifact lacks"; exit 1; }
+            [ "$(sha256 -q "$name")" = "$want" ] || { echo "$name does not match SHA256SUMS-studio"; exit 1; }
+            n=$((n + 1))
+          done < SHA256SUMS-studio
+          files=$(ls | grep -cvxF SHA256SUMS-studio)
+          [ "$n" -ge 1 ] && [ "$n" = "$files" ] || { echo "SHA256SUMS-studio lists $n file(s) and the artifact holds $files"; exit 1; }
+          echo "checked $n installer(s) against SHA256SUMS-studio"
+
+          # THE RELEASE THE BUILD JOB MADE. A re-run attaches what is missing
+          # and never replaces a file already published.
+          code=$(timeout 60 curl --config "$fcfg" -s -o "$work/rel.json" -w '%{http_code}' "$api/releases/tags/$tag")
+          [ "$code" = 200 ] || { echo "reading release $tag answered $code"; exit 1; }
+          id=$(jq -r '.id' < "$work/rel.json")
+          have=$(jq -r '.assets[].name' < "$work/rel.json")
+          for f in *; do
+            if printf '%s\n' "$have" | grep -qxF "$f"; then
+              echo "already attached: $f"
+              continue
+            fi
+            code=$(timeout 900 curl --config "$fcfg" -s -o "$work/asset.log" -w '%{http_code}' \
+                   -X POST -F "attachment=@$f" "$api/releases/$id/assets?name=$f") || code=timeout
+            echo "attach $f -> $code"
+            case "$code" in
+              200 | 201) : ;;
+              *) echo "attaching $f failed"; head -c 300 "$work/asset.log"; exit 1 ;;
+            esac
+          done
+
+          # READ BACK: the release carries every file, and one installer
+          # downloads anonymously byte-identical to what GitHub built.
+          code=$(timeout 60 curl --config "$fcfg" -s -o "$work/rel2.json" -w '%{http_code}' "$api/releases/$id")
+          [ "$code" = 200 ] || { echo "reading release $id back answered $code"; exit 1; }
+          for f in *; do
+            jq -e --arg f "$f" 'any(.assets[]; .name == $f)' < "$work/rel2.json" > /dev/null \
+              || { echo "REFUSED: release $tag does not carry $f"; exit 1; }
+          done
+          first=$(ls | grep -vxF SHA256SUMS-studio | head -1)
+          dl=$(jq -r --arg f "$first" '.assets[] | select(.name == $f) | .browser_download_url' < "$work/rel2.json")
+          code=$(timeout 900 curl -sS -L -o "$work/fetched" -w '%{http_code}' "$dl")
+          [ "$code" = 200 ] || { echo "downloading $first anonymously answered $code"; exit 1; }
+          cmp -s "$first" "$work/fetched" || { echo "the served $first is not the file GitHub built"; exit 1; }
+          echo "asserted: release $tag carries the studio's $n installer(s) and SHA256SUMS-studio; $first read back byte-identical"

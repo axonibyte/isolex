@@ -1,15 +1,14 @@
 # isolex studio's installers, on a release tag (#74): built here, where
-# the desktop targets are, and attached to the forge's release of the same
-# tag, which the forge's FreeBSD CI creates with the compiler's binaries.
-# Releases live on the forge; this only builds.
+# the desktop targets are, and collected as one artifact,
+# studio-installers, with SHA256SUMS-studio. Releases live on the forge,
+# and its own CI attaches them: on the same tag it waits for this run,
+# downloads the artifact, checks it, and attaches it to the release it
+# made with the compiler's binaries (.forgejo/workflows/ci.yml). This
+# only builds, and holds no credential for the forge.
 #
 # The installers are unsigned: AppImage and deb for Linux, msi and NSIS
 # setup for Windows, and a universal dmg for macOS. Each is named for the
-# studio's version and its platform, and SHA256SUMS-studio goes with them.
-#
-# Publishing needs FORGEJO_RELEASE_TOKEN, a token of a bot user who can
-# write only to isolex: it never reaches a command line, only curl's
-# config file, as the forge's CI keeps its own.
+# studio's version and its platform.
 name: studio-release
 
 on:
@@ -108,10 +107,11 @@ jobs:
           path: ${{ runner.temp }}/installers/*
           if-no-files-found: error
 
-  publish:
+  # one artifact for the forge to download, its checksums inside it
+  collect:
     needs: build
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    timeout-minutes: 15
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -127,48 +127,10 @@ jobs:
           mv ../SHA256SUMS-studio .
           cat SHA256SUMS-studio
 
-      - name: attached to the forge's release of the tag, once it is there
-        working-directory: dist
-        env:
-          RELEASE_TOKEN: ${{ secrets.FORGEJO_RELEASE_TOKEN }}
-          TAG: ${{ github.ref_name }}
-        run: |
-          set -o pipefail
-          [ -n "$RELEASE_TOKEN" ] || { echo "FORGEJO_RELEASE_TOKEN is not set: nothing can be attached"; exit 1; }
-          api="https://forge.axonibyte.com/api/v1/repos/axonibyte/isolex"
-          # the token reaches curl through a 0600 config file, never argv
-          cfg=$(mktemp); chmod 600 "$cfg"
-          printf 'header = "Authorization: token %s"\n' "$RELEASE_TOKEN" > "$cfg"
-          trap 'rm -f "$cfg"' EXIT
-
-          # The forge's CI creates the release when the same tag is built
-          # there; it takes minutes. Poll, a minute apart, for up to 90.
-          id=""
-          for i in $(seq 1 90); do
-            code=$(timeout 60 curl --config "$cfg" -s -o rel.json -w '%{http_code}' "$api/releases/tags/$TAG") || code=timeout
-            if [ "$code" = 200 ]; then
-              id=$(jq -r '.id' < rel.json)
-              break
-            fi
-            echo "release $TAG not there yet ($code), try $i of 90"
-            sleep 60
-          done
-          [ -n "$id" ] && [ "$id" != null ] || { echo "the forge made no release of $TAG in 90 minutes"; exit 1; }
-          echo "release $TAG -> id $id"
-
-          # A re-run attaches what is missing and never replaces a file
-          # already published.
-          have=$(jq -r '.assets[].name' < rel.json)
-          rm -f rel.json
-          for f in *; do
-            if printf '%s\n' "$have" | grep -qxF "$f"; then
-              echo "already attached: $f"
-              continue
-            fi
-            code=$(timeout 600 curl --config "$cfg" -s -o /dev/null -w '%{http_code}' \
-                   -F "attachment=@$f" "$api/releases/$id/assets?name=$f") || code=timeout
-            case "$code" in
-              200 | 201) echo "attached $f" ;;
-              *) echo "attaching $f failed: $code"; exit 1 ;;
-            esac
-          done
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: studio-installers
+          path: dist/*
+          if-no-files-found: error
+          # the forge downloads it within the hour; a week is room for a re-run
+          retention-days: 7

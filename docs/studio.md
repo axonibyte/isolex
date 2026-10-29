@@ -204,12 +204,14 @@ Windows, run on every push to the GitHub mirror
 says of the same commit, without failing on it.
 
 **Releases.** A bare version tag (`0.6.0`) makes the forge's CI create
-the release with the compiler's binaries;
+the release with the compiler's binaries.
 `.github/workflows/studio-release.yml` builds the installers for the
-same tag on GitHub, waits for that release, and attaches them with
-`SHA256SUMS-studio`. It needs the repository secret
-`FORGEJO_RELEASE_TOKEN`, a token of a bot user who can write only to
-isolex.
+same tag on GitHub, once the mirror carries it there, and leaves them
+as one artifact with `SHA256SUMS-studio`. The forge's CI waits for that
+run, downloads the artifact, checks it against the sums, and attaches
+it to the release itself. Downloading an artifact needs a GitHub token,
+so the forge holds the secret `GH_ARTIFACTS_TOKEN`: a fine-grained
+token with read-only access to public repositories.
 
 The app's icon is drawn in isolex: `studio/src-tauri/icons/icon.ilx`,
 rendered to `icon.svg`, from which `npm run tauri -- icon
