@@ -337,14 +337,13 @@ jobs:
           # reader's downloads folder, and nothing on the file itself says
           # which tag or which platform it came from.
           rm -rf ../dist && mkdir -p ../dist
-          n=0
-          for f in target/release/*; do
-            [ -f "$f" ] && [ -x "$f" ] || continue
-            case "$f" in *.d | *.rlib | *.rmeta) continue ;; esac
-            cp "$f" "../dist/$(basename "$f")-$ver-x86_64-unknown-freebsd" || exit 1
-            n=$((n + 1))
-          done
-          [ "$n" -ge 1 ] || { echo "the release build produced no executable to attach"; exit 1; }
+          # THE COMPILER ALONE, BY NAME. The crate builds other executables
+          # (battery, the test exerciser reaper runs), and a loop over
+          # target/release attached them to 0.5.0 as if they shipped.
+          f="target/release/$crate"
+          [ -f "$f" ] && [ -x "$f" ] || { echo "the release build produced no $crate to attach"; exit 1; }
+          cp "$f" "../dist/$crate-$ver-x86_64-unknown-freebsd" || exit 1
+          n=1
           # The module is the same file on every platform, so its name carries
           # no target.
           cp target/wasm32-unknown-unknown/release/isolex_wasm.wasm "../dist/$crate-$ver.wasm" || exit 1
