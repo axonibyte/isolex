@@ -74,11 +74,17 @@ fn answer(v: &Value) -> Result<Value, String> {
         OPEN.with(|o| *o.borrow_mut() = Some((session, heard)));
         return Ok(json!({ "result": null, "notices": drain() }));
     }
+    // nothing open, nothing to attach to
+    if name == "attach" && OPEN.with(|o| o.borrow().is_none()) {
+        return Ok(json!({ "result": null, "notices": [] }));
+    }
     let result = OPEN.with(|o| -> Result<Value, String> {
         let mut o = o.borrow_mut();
         let (session, _) = o.as_mut().ok_or("no library open")?;
         let to = |r: Result<Value, serde_json::Error>| r.map_err(|e| e.to_string());
         match name.as_str() {
+            // a second window, opened on the library open (#119)
+            "attach" => to(serde_json::to_value(session.current())),
             "view" => {
                 let visible = serde_json::from_value(v["visible"].clone()).unwrap_or_default();
                 session.view(s("editing"), s("icon"), visible);
@@ -93,9 +99,11 @@ fn answer(v: &Value) -> Result<Value, String> {
             "ask" => {
                 let ask: Ask =
                     serde_json::from_value(v["ask"].clone()).map_err(|e| format!("ask: {e}"))?;
-                to(serde_json::to_value(
-                    session.ask(&ask, &s("label").unwrap_or_default()),
-                ))
+                to(serde_json::to_value(session.ask_in(
+                    &ask,
+                    &s("label").unwrap_or_default(),
+                    s("editing").as_deref(),
+                )))
             }
             "choose" => {
                 let id = v["id"].as_u64().ok_or("choose: no id")?;

@@ -1066,10 +1066,6 @@ export class Tools {
     if (this.tool === 'node' && (e.key === 'Delete' || e.key === 'Backspace')) return this.removeNode();
     const sel = this.studio.selected;
     if (!sel || this.tool !== 'select') return false;
-    if (e.ctrl && e.key.toLowerCase() === 'd') {
-      void this.duplicate(sel);
-      return true;
-    }
     if (e.key === 'Delete' || e.key === 'Backspace') {
       void this.remove(sel);
       return true;
@@ -1094,6 +1090,15 @@ export class Tools {
     if (!next) return false;
     this.edit(`Nudge ${s.kind} in ${this.studio.editing}`, apply(s.map, [s.values[0]!, s.values[1]!, 0]), changes(s, next).map(setArg));
     this.end();
+    return true;
+  }
+
+  /** The selection duplicated, with the selector; true if there was one
+      to duplicate. */
+  duplicateSelected(): boolean {
+    const sel = this.studio.selected;
+    if (!sel || this.tool !== 'select') return false;
+    void this.duplicate(sel);
     return true;
   }
 

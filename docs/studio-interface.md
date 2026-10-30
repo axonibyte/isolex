@@ -71,8 +71,8 @@ lexicon (SPEC §1). It reads and writes nothing else.
   extends server-2u", "variant down of axis") and a name field that
   renames it; undo and redo, and beside them the undo history (every
   step done, oldest first, then those undone; a click goes back or
-  forward to one); the Library, Lexicon and Export dialogs; the two
-  theme switches.
+  forward to one); the Library, Lexicon and Export dialogs; New window
+  and Preferences; the two theme switches.
 - **Tool rail (left):** one button per tool with its key, grouped:
   selecting (Select, Node, Pan), 3-D (Box, Tile, Cylinder, Face rect,
   Shadow, Segment, 3-D polygon), flat (Line, Rectangle, Ellipse, Arc,
@@ -84,7 +84,8 @@ lexicon (SPEC §1). It reads and writes nothing else.
   while drawing, the plane being drawn on (top left); a hint line saying
   what the tool does and which keys change it (bottom center); zoom
   out, the zoom level, zoom in and Fit (bottom right).
-- **Tabs (right):** Design, Arrange, Source, Tree and Preview.
+- **Tabs (right):** Design, Arrange, Source, Tree and Preview. Each can
+  float (see *Floating panels and more windows*).
 - **Status bar:** the compile state (compiled, with the compiler's
   version and how long it took; or *does not compile*, with the first
   error, while the last good drawing stays); the pointer's coordinates
@@ -221,12 +222,49 @@ flat rectangle, radius handles on an ellipse.
 | Ctrl+Z, Ctrl+Shift+Z (Ctrl+Y) | Undo, redo |
 | Ctrl+Shift+A | Align and Distribute (the Arrange tab) |
 | Ctrl+F | Find, across the library |
+| Ctrl+, | Preferences, and the keyboard shortcuts |
+| Ctrl+Shift+N | Another window on the library |
 | Esc | Cancel what is being drawn; else clear the selection, all of it |
 | Enter | Finish a pen path open, or close a polygon |
 | Space (held) | Pan by dragging |
 
 The keymap is one table in the code, with a test that fails on any key
-bound twice.
+bound twice. Ctrl is Cmd on a Mac.
+
+### Preferences
+
+Preferences (Ctrl+,) has Inkscape's Keyboard Shortcuts page:
+
+- **Every command and its keys,** in four tables (File, Edit, View and
+  the tools), filtered by a name or a key.
+- **Rebinding:** choose a command's key and press the new one. Escape
+  gives up, and Backspace leaves the command without a key. A changed
+  command's name is bold, with Reset beside it, and Reset all puts back
+  every key.
+- **Refused, saying why:** a key another command has ("Shift+S is
+  already Shadow: change that first"), and a key kept for what it does
+  everywhere: Escape, Enter, Delete, Backspace, Space, Tab, the arrows,
+  PageUp, PageDown, Home, End, F2, with or without Shift, and Ctrl+C,
+  Ctrl+V and Ctrl+X. A key is never bound twice.
+- **Kept per person,** in every window. Keys stored that would clash,
+  such as one a later studio gives a command of its own, are dropped,
+  and that command has its own key again.
+
+## Floating panels and more windows
+
+- **A floating panel,** as Inkscape's dialogs float: the button at the
+  end of the tabs floats the tab shown, or a tab dragged out of the row
+  floats where it is dropped. It floats over the window with a title bar
+  to drag it by, and its corner resizes it. Its title bar dragged onto
+  the tabs, or its Dock button, puts it back. With every panel floating,
+  the canvas takes the right side's room. Which panels float, where and
+  at what size, is kept per person; a panel is never left out of reach,
+  even in a smaller window.
+- **Another window** (New window, Ctrl+Shift+N, in the app) opens on
+  the same library at the icon open, and can open any other. The windows
+  share the one library: an edit in one is drawn in every one, there is
+  one undo history and one save, and each edits the definition it has
+  open.
 
 ## Parts
 
@@ -517,3 +555,4 @@ Two dialogs from the top bar manage what is not drawn:
 | Insert and Badge | #116 |
 | Measure, Dropper and Find | #117 |
 | Alignment guides and advanced snapping | #118 |
+| Customizable shortcuts, floating panels and more windows | #119 |

@@ -47,8 +47,8 @@ The first icon the library emits opens on the canvas.
 
 - **Top bar:** what is being edited, undo and redo, the undo history
   (every step, a click goes back or forward to it), the Library,
-  Lexicon and Export dialogs, and the switches for a light or dark canvas and
-  window.
+  Lexicon and Export dialogs, New window, Preferences, and the switches
+  for a light or dark canvas and window.
 - **Tools** down the left, each with its key.
 - **Parts** (or a font's glyphs): the definition's parts and their
   shapes, the topmost first; a click selects (Shift or Ctrl+click
@@ -65,7 +65,10 @@ The first icon the library emits opens on the canvas.
   nodes, the frame, and alignment guides); a hint at its foot says what
   the tool does. While dragging, a point lines up with other shapes'
   along a dashed guide.
-- **Tabs:** Design, Arrange, Source, Tree and Preview.
+- **Tabs:** Design, Arrange, Source, Tree and Preview. The button at
+  the end of the tabs, or a tab dragged out, floats one over the window;
+  dragged back onto the tabs, or its Dock button, docks it. Where each
+  panel is, is remembered.
 - **Status bar:** whether the library compiles (a click lists its
   problems, each opening its place in the Source tab), and where the
   pointer is.
@@ -188,7 +191,13 @@ choose. A library with errors is not exported until they are fixed.
 
 Ctrl+S writes every changed file at once, never half; `●` in the status
 bar means there are unsaved changes. One undo history (Ctrl+Z,
-Ctrl+Shift+Z) covers the whole library, a gesture one step.
+Ctrl+Shift+Z) covers the whole library, a gesture one step, in every
+window open on it: New window (Ctrl+Shift+N) opens another on the same
+library, and an edit in either is seen in both.
+
+Every key can be changed in Preferences (Ctrl+,): choose a command's
+key and press the new one. A key another command has is refused, saying
+which.
 
 When the folder changes on disk (git, another editor), with nothing
 unsaved the change is loaded and marked as any edit is; with unsaved

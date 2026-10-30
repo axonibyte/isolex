@@ -1,6 +1,8 @@
-// The tools and their keys (docs/studio-interface.md, Tools and Keys):
-// one table, which the rail is drawn from and keys are looked up in. A
-// test fails on any key bound twice. Pure.
+// The commands and their keys (docs/studio-interface.md, Tools and Keys,
+// and Preferences): one table, which the rail and Preferences are drawn
+// from and keys are looked up in, with the keys a person has rebound laid
+// over it (#119). A key is never bound twice: a test fails on the
+// defaults, and a rebinding that would is refused. Pure.
 
 /** What a tool draws in: a 3-D icon's tiles, a flat icon's units, or
     either. */
@@ -53,19 +55,133 @@ export const TOOLS: (Tool | null)[] = [
   { id: 'badge', key: 'Shift+B', label: 'Badge an icon', d: 'M3 7h11v10H3zM15 2a3 3 0 1 0 0.01 0', dims: 'any', ready: true },
 ];
 
-/** Keys bound to something other than a tool, with or without Shift. */
-export const BOUND = ['0', 'Shift+0', 'Escape', 'Enter', 'Delete', 'Backspace', 'Space', 'PageUp', 'PageDown', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
+/** A command a key runs: one of the studio's, or a tool chosen. */
+export interface Command {
+  id: string;
+  label: string;
+  /** Where Preferences lists it. */
+  group: 'File' | 'Edit' | 'View' | 'Tools';
+  /** Its keys unless rebound, as the table writes keys: "Ctrl+Shift+E". */
+  keys: string[];
+  /** It runs from a text field too, as saving does; else the field's own
+      keys come first. */
+  anywhere?: boolean;
+}
 
-/** The key a press names, as the table writes keys: "B", "Shift+S". */
-export const keyName = (key: string, shift: boolean): string => {
-  const k = key.length === 1 ? key.toUpperCase() : key;
-  return shift ? `Shift+${k}` : k;
-};
+/** Every command, in Preferences' order: the studio's, then the tools,
+    as the rail has them. Ctrl is Cmd on a Mac. */
+export const COMMANDS: Command[] = [
+  { id: 'open', label: 'Open a library folder', group: 'File', keys: ['Ctrl+O'], anywhere: true },
+  { id: 'new', label: 'New library', group: 'File', keys: ['Ctrl+N'], anywhere: true },
+  { id: 'window', label: 'New window', group: 'File', keys: ['Ctrl+Shift+N'], anywhere: true },
+  { id: 'save', label: 'Save', group: 'File', keys: ['Ctrl+S'], anywhere: true },
+  { id: 'export', label: 'Export', group: 'File', keys: ['Ctrl+Shift+E'], anywhere: true },
+  { id: 'preferences', label: 'Preferences', group: 'File', keys: ['Ctrl+,'], anywhere: true },
+  { id: 'undo', label: 'Undo', group: 'Edit', keys: ['Ctrl+Z'] },
+  { id: 'redo', label: 'Redo', group: 'Edit', keys: ['Ctrl+Shift+Z', 'Ctrl+Y'] },
+  { id: 'duplicate', label: 'Duplicate', group: 'Edit', keys: ['Ctrl+D'] },
+  { id: 'find', label: 'Find', group: 'Edit', keys: ['Ctrl+F'], anywhere: true },
+  { id: 'arrange', label: 'Align and Distribute', group: 'View', keys: ['Ctrl+Shift+A'], anywhere: true },
+  { id: 'fit', label: 'Fit the icon', group: 'View', keys: ['0'] },
+  ...TOOLS.flatMap((t): Command[] => (t ? [{ id: `tool:${t.id}`, label: t.label, group: 'Tools', keys: [t.key] }] : [])),
+];
 
-/** The tool a key chooses, if any. */
-export function toolFor(key: string, shift: boolean): Tool | null {
-  const name = keyName(key, shift);
-  return TOOLS.find((t) => t?.key === name) ?? null;
+/** Keys kept for what they do everywhere, with or without Shift, which
+    no command takes: cancelling, finishing, deleting, panning with Space,
+    nudging and reordering, moving between fields, renaming, and a text
+    field's clipboard. */
+export const KEPT = ['Escape', 'Enter', 'Delete', 'Backspace', 'Space', 'Tab', 'PageUp', 'PageDown', 'Home', 'End', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'F2', 'Ctrl+C', 'Ctrl+V', 'Ctrl+X'];
+
+/** `key` is kept, and no command may take it. */
+export const kept = (key: string): boolean => KEPT.includes(key.replace('Shift+', ''));
+
+const MODIFIERS = new Set(['Control', 'Shift', 'Alt', 'Meta', 'AltGraph', 'CapsLock', 'Fn', 'OS']);
+
+/** The key a press names, as the table writes keys: "B", "Shift+S",
+    "Ctrl+Shift+E"; none for a modifier alone. A digit is named by where
+    it is, as Shift turns it into another character. */
+export function chord(e: { key: string; code?: string; ctrlKey?: boolean; metaKey?: boolean; altKey?: boolean; shiftKey?: boolean }): string | null {
+  if (MODIFIERS.has(e.key)) return null;
+  const digit = /^Digit(\d)$/.exec(e.code ?? '');
+  const key = digit ? digit[1]! : e.key === ' ' ? 'Space' : e.key.length === 1 ? e.key.toUpperCase() : e.key;
+  return [(e.ctrlKey || e.metaKey) && 'Ctrl', e.altKey && 'Alt', e.shiftKey && 'Shift', key].filter(Boolean).join('+');
+}
+
+/** The keys a person has rebound, by command; a command not in it has
+    its own. */
+export type Bindings = Record<string, string[]>;
+
+/** The command `id`. */
+export const command = (id: string): Command | undefined => COMMANDS.find((c) => c.id === id);
+
+/** The keys of `id`, as rebound. */
+export const keysOf = (id: string, over: Bindings = {}): string[] => over[id] ?? command(id)?.keys ?? [];
+
+/** The command `key` runs, as rebound. */
+export function commandFor(key: string, over: Bindings = {}): Command | null {
+  return COMMANDS.find((c) => keysOf(c.id, over).includes(key)) ?? null;
+}
+
+/** The keys bound to more than one command, or kept: none, unless
+    something is wrong. */
+export function clashes(over: Bindings = {}): string[] {
+  const all = COMMANDS.flatMap((c) => keysOf(c.id, over));
+  return [...new Set(all.filter((k, i) => kept(k) || all.indexOf(k) !== i))];
+}
+
+/** The overrides, less any that is its command's own keys. */
+const tidy = (over: Bindings): Bindings =>
+  Object.fromEntries(
+    Object.entries(over).filter(([id, keys]) => {
+      const own = command(id)?.keys ?? [];
+      return !(keys.length === own.length && keys.every((k, i) => k === own[i]));
+    }),
+  );
+
+/** `id` bound to `key` alone, or to none; refused, saying why, if
+    another command has the key or it is kept. */
+export function rebind(over: Bindings, id: string, key: string | null): { over: Bindings } | { refused: string } {
+  if (key !== null) {
+    if (kept(key)) return { refused: `${key} is kept for what it does everywhere` };
+    const holder = commandFor(key, over);
+    if (holder && holder.id !== id) return { refused: `${key} is already ${holder.label}: change that first` };
+  }
+  return { over: tidy({ ...over, [id]: key === null ? [] : [key] }) };
+}
+
+/** `id` given its own keys again; refused if another command took one. */
+export function reset(over: Bindings, id: string): { over: Bindings } | { refused: string } {
+  const rest = { ...over };
+  delete rest[id];
+  const taken = keysOf(id)
+    .map((k) => commandFor(k, over))
+    .find((c) => c && c.id !== id);
+  if (taken) return { refused: `${keysOf(id).join(', ')} is ${taken.label} now: change that first` };
+  return { over: rest };
+}
+
+/** The rebindings as stored, if they can be read: those of commands that
+    are no more, or of keys that are kept, left out, and any that would
+    bind a key twice dropped, as when a later studio gives a command of
+    its own a key someone had rebound another to. */
+export function readBindings(raw: string | null): Bindings {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw ?? '{}');
+  } catch {
+    return {};
+  }
+  if (!parsed || typeof parsed !== 'object') return {};
+  const over: Bindings = {};
+  for (const [id, keys] of Object.entries(parsed as Record<string, unknown>)) {
+    if (command(id) && Array.isArray(keys) && keys.every((k) => typeof k === 'string' && k && !kept(k))) over[id] = keys as string[];
+  }
+  for (;;) {
+    const twice = clashes(over)[0];
+    if (twice === undefined) return tidy(over);
+    const id = Object.keys(over).find((i) => over[i]!.includes(twice))!;
+    delete over[id];
+  }
 }
 
 /** A tool can draw in an icon that is flat or not. */

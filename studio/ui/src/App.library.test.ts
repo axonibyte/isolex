@@ -126,7 +126,7 @@ describe('a change on disk', () => {
 
   it('with unsaved edits, is flagged; kept, reloaded after asking, or saved over', async () => {
     const { backend, text } = await opened();
-    await backend.ask({ kind: 'type', file: 'sample.ilx', at: 0, len: 0, text: '// mine\n' }, 'Type');
+    await backend.ask({ kind: 'type', file: 'sample.ilx', at: 0, len: 0, text: '// mine\n' }, 'Type', null);
     const theirs = source.replace('param ports 12', 'param ports 6');
     await backend.outside!([['sample.ilx', theirs]]);
     const strip = await screen.findByRole('alert');
@@ -142,7 +142,7 @@ describe('a change on disk', () => {
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
 
     // again, and this time saved over
-    await backend.ask({ kind: 'type', file: 'sample.ilx', at: 0, len: 0, text: '// mine\n' }, 'Type');
+    await backend.ask({ kind: 'type', file: 'sample.ilx', at: 0, len: 0, text: '// mine\n' }, 'Type', null);
     await backend.outside!([['sample.ilx', source]]);
     const again = await screen.findByRole('alert');
     await fireEvent.click(within(again).getByRole('button', { name: 'Save over it' }));

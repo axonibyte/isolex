@@ -133,3 +133,34 @@ fn the_library_exported_as_svg_ir_and_a_zip() {
     let refused = send(json!({ "call": "export_svgs", "icons": ["nope"], "ground": "light" }));
     assert!(refused["error"].as_str().unwrap().contains("nope"));
 }
+
+/// A second window (#119) attaches to the library open, told what the
+/// first has been; with none open, nothing.
+#[test]
+fn a_second_window_attaches_to_the_library_open() {
+    let none = send(json!({ "call": "attach" }));
+    assert!(none["result"].is_null());
+    send(json!({ "call": "open", "files": [["sample.ilx", SAMPLE]] }));
+    let attached = send(json!({ "call": "attach" }));
+    let told: Vec<&str> = attached["result"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|n| n["kind"].as_str().unwrap())
+        .collect();
+    assert_eq!(told[..3], ["library", "graph", "compiled"]);
+    assert!(told.iter().filter(|k| **k == "icon").count() > 5);
+    // attaching changes nothing, so tells nothing
+    assert!(kinds(&attached).is_empty());
+
+    // an edit named in its window's definition
+    let l3 =
+        send(json!({ "call": "outline", "definition": "switch-l3" }))["result"]["node"].clone();
+    let asked = send(json!({
+        "call": "ask",
+        "label": "Add part",
+        "editing": "switch-l3",
+        "ask": { "kind": "insert", "parent": l3, "text": "part \"x\" {\n  box 0 0 0.28 1 1 0.5\n}", "before": null }
+    }));
+    assert_eq!(asked["result"], json!({ "kind": "applied", "revision": 1 }));
+}

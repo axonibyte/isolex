@@ -95,7 +95,13 @@ export async function core(files: [string, string][] = [['sample.ilx', sampleSou
     outside: (changes) => later({ call: 'outside', changes }),
     pickFile: async () => null,
     pickSave: async () => null,
-    ask: (ask, label) => later<Answer>({ call: 'ask', ask, label }),
+    ask: (ask, label, editing) => later<Answer>({ call: 'ask', ask, label, editing }),
+    attach: () => later<Notice[] | null>({ call: 'attach' }),
+    // a page has one window; two share a core only as a test renders them
+    newWindow: async () => {
+      throw new Error('Windows are opened in the studio’s app');
+    },
+    openedOn: async () => null,
     choose: (id, option) => later<Answer>({ call: 'choose', id, option }),
     beginGesture: () => later({ call: 'begin_gesture' }),
     endGesture: () => later({ call: 'end_gesture' }),

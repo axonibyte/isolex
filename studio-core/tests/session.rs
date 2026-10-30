@@ -420,3 +420,149 @@ fn a_preview_draws_an_icon_with_other_params_and_changes_nothing() {
     // an icon that is not there
     assert!(s.preview("nope", &params).is_err());
 }
+
+/// A second window (#119) starts where the first is: the session's newest
+/// notices, one of each that stands, bring it up to now.
+#[test]
+fn a_second_window_starts_where_the_first_is() {
+    let files = [(
+        "sample.ilx".to_string(),
+        include_str!("../../tests/fixtures/sample.ilx").to_string(),
+    )]
+    .into_iter()
+    .collect();
+    let window = Arc::new(Window::default());
+    let mut s = Session::in_memory(Library::new("sample", files), window.clone());
+    let seg = node(&s, "seg 0 0 0 2 0 0");
+    let answer = s.ask(
+        &Ask::SetArg {
+            node: seg,
+            index: 3,
+            value: JsonValue::Number(3.0),
+        },
+        "Move seg",
+    );
+    assert_eq!(answer, Answer::Applied { revision: 1 });
+
+    let now = s.current();
+    let kinds: Vec<String> = now.iter().map(kind).collect();
+    assert_eq!(kinds[..3], ["library", "graph", "compiled"]);
+    // the library as the edit left it, with its history to undo
+    let Notice::Library {
+        revision: 1,
+        modified: true,
+        history,
+        ..
+    } = &now[0]
+    else {
+        panic!("{:?}", now[0])
+    };
+    assert_eq!(history, &["Move seg"]);
+    // the newest compile, and every icon once, as last drawn
+    let Notice::Compiled { revision: 1, .. } = &now[2] else {
+        panic!("{:?}", now[2])
+    };
+    let all = isolex::compile(&s.library().sources()).doc.icons.len();
+    assert_eq!(kinds.iter().filter(|k| *k == "icon").count(), all);
+    let drawn = |ns: &[Notice]| {
+        ns.iter()
+            .rev()
+            .find_map(|n| match n {
+                Notice::Icon { name, ir, .. } if name == "switch-poe" => {
+                    Some(serde_json::to_string(ir).unwrap())
+                }
+                _ => None,
+            })
+            .unwrap()
+    };
+    assert_eq!(drawn(&now), drawn(&window.seen.lock().unwrap()));
+
+    // undone: the second window hears it as the first does
+    s.undo();
+    let Notice::Library {
+        revision: 2,
+        modified: false,
+        ..
+    } = &s.current()[0]
+    else {
+        panic!()
+    };
+}
+
+/// Each window edits in a definition of its own (#119): an edit names it,
+/// whatever the last view was.
+#[test]
+fn an_edit_names_the_definition_its_window_edits() {
+    let files = [(
+        "sample.ilx".to_string(),
+        include_str!("../../tests/fixtures/sample.ilx").to_string(),
+    )]
+    .into_iter()
+    .collect();
+    let window = Arc::new(Window::default());
+    let mut s = Session::in_memory(Library::new("sample", files), window.clone());
+    let boxed = node(&s, "box 0 0 0 2 1 \"u * 0.28\"");
+    let resize = Ask::SetArg {
+        node: boxed,
+        index: 5,
+        value: JsonValue::Number(0.56),
+    };
+    // another window last viewed switch-l2, which draws the box from
+    // rack-unit; this one edits rack-unit itself
+    s.view(
+        Some("switch-l2".into()),
+        Some("switch-l2".into()),
+        Vec::new(),
+    );
+    let labels = |a: Answer| match a {
+        Answer::Choose { options, .. } => options.into_iter().map(|o| o.label).collect::<Vec<_>>(),
+        other => panic!("{other:?}"),
+    };
+    let own = labels(s.ask_in(&resize, "Resize box", Some("rack-unit")));
+    assert_eq!(own[0], "Edit param u");
+    let from = labels(s.ask(&resize, "Resize box"));
+    assert!(from.iter().any(|l| l == "Edit in rack-unit"), "{from:?}");
+}
+
+/// Files out of sync are told to a second window until saving or
+/// reloading settles them, as the first window folds them.
+#[test]
+fn out_of_sync_stands_until_it_is_settled() {
+    use isolex_studio_core::session::Latest;
+    let library = |modified: bool| Notice::Library {
+        root: "sample".into(),
+        revision: 1,
+        modified,
+        files: vec!["a.ilx".into()],
+        history: Vec::new(),
+        future: Vec::new(),
+        can_undo: false,
+        can_redo: false,
+    };
+    let mut l = Latest::default();
+    l.hear(&library(true));
+    l.hear(&Notice::OutOfSync {
+        files: vec!["a.ilx".into()],
+    });
+    l.hear(&Notice::OutOfSync {
+        files: vec!["a.ilx".into(), "b.ilx".into()],
+    });
+    let out = |l: &Latest| {
+        l.notices().into_iter().find_map(|n| match n {
+            Notice::OutOfSync { files } => Some(files),
+            _ => None,
+        })
+    };
+    assert_eq!(out(&l), Some(vec!["a.ilx".into(), "b.ilx".into()]));
+    l.hear(&Notice::Reloaded { files: Vec::new() });
+    assert_eq!(out(&l), None);
+    l.hear(&Notice::OutOfSync {
+        files: vec!["a.ilx".into()],
+    });
+    l.hear(&library(false));
+    assert_eq!(out(&l), None);
+    l.hear(&Notice::Gone {
+        name: "nothing".into(),
+    });
+    assert_eq!(l.notices().len(), 1);
+}

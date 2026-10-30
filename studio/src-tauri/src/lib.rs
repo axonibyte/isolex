@@ -3,7 +3,7 @@
 //! `isolex-studio-core`'s [`Session`], whose notices reach the window as
 //! `isolex` events.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -16,7 +16,7 @@ use isolex_studio_core::session::{
     Answer, Ask, FontImport, LibraryOp, Notice, Session, Sink, Source,
 };
 use isolex_studio_core::About;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewWindowBuilder};
 
 /// The event every notice is sent as.
 pub const EVENT: &str = "isolex";
@@ -25,7 +25,8 @@ pub const EVENT: &str = "isolex";
 #[derive(Default)]
 struct Open(Mutex<Option<Session>>);
 
-/// Notices, to the window.
+/// Notices, to every window: each shows the one library, and hears every
+/// change made in any of them.
 struct Window(AppHandle);
 
 impl Sink for Window {
@@ -177,9 +178,94 @@ fn write_export(out: String, data: Vec<u8>) -> Result<(), String> {
     isolex_studio_core::export::write(std::path::Path::new(&out), &data)
 }
 
+/// `ask`, in the definition the asking window edits.
 #[tauri::command]
-fn ask(open: State<Open>, ask: Ask, label: String) -> Result<Answer, String> {
-    with(&open, |s| s.ask(&ask, &label))
+fn ask(
+    open: State<Open>,
+    ask: Ask,
+    label: String,
+    editing: Option<String>,
+) -> Result<Answer, String> {
+    with(&open, |s| s.ask_in(&ask, &label, editing.as_deref()))
+}
+
+/// What a window opened on the library open has missed, to start where
+/// the others are (#119); none if no library is open.
+#[tauri::command]
+fn attach(open: State<Open>) -> Result<Option<Vec<Notice>>, String> {
+    let guard = open
+        .0
+        .lock()
+        .map_err(|_| "the library is unavailable".to_string())?;
+    Ok(guard.as_ref().map(Session::current))
+}
+
+/// The windows opened after the first, by label, each with the icon it
+/// was opened on until it asks for it.
+#[derive(Default)]
+struct Windows {
+    opened: Mutex<(u32, HashMap<String, Option<String>>)>,
+}
+
+/// Every window after the first is labeled so, which the capability's
+/// window list matches.
+const WINDOW_PREFIX: &str = "studio-";
+
+impl Windows {
+    /// A label for another window, which opens on `icon`.
+    fn add(&self, icon: Option<String>) -> String {
+        let mut opened = self.opened.lock().expect("the windows");
+        opened.0 += 1;
+        let label = format!("{WINDOW_PREFIX}{}", opened.0 + 1);
+        opened.1.insert(label.clone(), icon);
+        label
+    }
+
+    /// The icon the window `label` was opened on, told once.
+    fn take(&self, label: &str) -> Option<String> {
+        self.opened
+            .lock()
+            .expect("the windows")
+            .1
+            .remove(label)
+            .flatten()
+    }
+}
+
+/// Another window on the library open (#119), showing `icon`: it shares
+/// the one library and its undo history. Async, as a window made in a
+/// command must be on Windows.
+#[tauri::command]
+async fn new_window(
+    app: AppHandle,
+    windows: State<'_, Windows>,
+    icon: Option<String>,
+) -> Result<(), String> {
+    let label = windows.add(icon);
+    let window =
+        WebviewWindowBuilder::new(&app, &label, tauri::WebviewUrl::App("index.html".into()))
+            .title("isolex studio")
+            .inner_size(1200.0, 800.0)
+            .min_inner_size(900.0, 600.0);
+    for_driver(window).build().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// The icon this window was opened on, if it is not the first.
+#[tauri::command]
+fn opened_on(window: tauri::WebviewWindow, windows: State<Windows>) -> Option<String> {
+    windows.take(window.label())
+}
+
+/// A window as a driver debugging the app asks for it: WebView2 told what
+/// the driver set (only then: otherwise as wry has it).
+fn for_driver<'a, R: tauri::Runtime, M: Manager<R>>(
+    window: WebviewWindowBuilder<'a, R, M>,
+) -> WebviewWindowBuilder<'a, R, M> {
+    match std::env::var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS") {
+        Ok(extra) => window.additional_browser_args(&browser_args(WEBVIEW2_DEFAULT_ARGS, &extra)),
+        Err(_) => window,
+    }
 }
 
 #[tauri::command]
@@ -279,6 +365,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(Open::default())
+        .manage(Windows::default())
         .manage(Startup(startup_folder(
             std::env::args().skip(1),
             std::env::var("ISOLEX_STUDIO_LIBRARY").ok(),
@@ -293,12 +380,7 @@ pub fn run() {
                 .first()
                 .cloned()
                 .ok_or("tauri.conf.json declares no window")?;
-            let mut window = tauri::WebviewWindowBuilder::from_config(app.handle(), &config)?;
-            if let Ok(extra) = std::env::var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS") {
-                window =
-                    window.additional_browser_args(&browser_args(WEBVIEW2_DEFAULT_ARGS, &extra));
-            }
-            window.build()?;
+            for_driver(WebviewWindowBuilder::from_config(app.handle(), &config)?).build()?;
 
             let handle = app.handle().clone();
             std::thread::spawn(move || loop {
@@ -333,6 +415,9 @@ pub fn run() {
             export_zip,
             write_export,
             ask,
+            attach,
+            new_window,
+            opened_on,
             choose,
             begin_gesture,
             end_gesture,
@@ -374,6 +459,33 @@ mod tests {
                 "the interface calls {call} and the window is not granted {permission}"
             );
         }
+    }
+
+    /// A window after the first is one the capability lets call the
+    /// studio's commands, and is told the icon it opened on once.
+    #[test]
+    fn another_window_may_call_the_studio_and_opens_on_its_icon() {
+        let capability: serde_json::Value =
+            serde_json::from_str(include_str!("../capabilities/default.json")).unwrap();
+        let windows: Vec<&str> = capability["windows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|w| w.as_str())
+            .collect();
+        let windows_ = super::Windows::default();
+        let second = windows_.add(Some("switch-poe".into()));
+        let third = windows_.add(None);
+        assert_eq!((second.as_str(), third.as_str()), ("studio-2", "studio-3"));
+        assert!(windows.contains(&"main"));
+        assert!(
+            windows.contains(&format!("{}*", super::WINDOW_PREFIX).as_str()),
+            "the capability does not cover {second}: {windows:?}"
+        );
+        assert_eq!(windows_.take(&second).as_deref(), Some("switch-poe"));
+        assert_eq!(windows_.take(&second), None);
+        assert_eq!(windows_.take(&third), None);
+        assert_eq!(windows_.take("main"), None);
     }
 
     #[test]

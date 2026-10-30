@@ -62,7 +62,10 @@ export const empty = (): View => ({
 /** The view after `n`. */
 export function reduce(v: View, n: Notice): View {
   switch (n.kind) {
-    case 'library':
+    case 'library': {
+      // another library opened, in another window: nothing of this one
+      // stands
+      if (v.library && v.library.root !== n.root) v = empty();
       return {
         ...v,
         library: {
@@ -78,6 +81,7 @@ export function reduce(v: View, n: Notice): View {
         // nothing unsaved: whatever was out of sync no longer is
         outOfSync: n.modified ? v.outOfSync : [],
       };
+    }
     case 'graph':
       return { ...v, graph: n.graph, tree: n.tree };
     case 'compiled': {
@@ -186,6 +190,22 @@ export class Studio {
       this.previewing = null;
       void this.refresh();
     }
+  }
+
+  /** Joins the library open in another window (#119), from what the
+      core says stands now, and opens `icon` there; false if none is open.
+      What this window has heard already is as new, and stands. */
+  async attach(icon: string | null): Promise<boolean> {
+    const notices = await this.backend.attach();
+    if (!notices) return false;
+    for (const n of notices) {
+      if (n.kind === 'library' && this.view.library && this.view.library.revision >= n.revision) continue;
+      if (n.kind === 'graph' && this.view.graph) continue;
+      if ((n.kind === 'icon' || n.kind === 'broken') && (n.name in this.view.icons || n.name in this.view.broken)) continue;
+      this.hear(n);
+    }
+    if (icon && icon in this.view.icons) this.openIcon(icon);
+    return true;
   }
 
   /** The open icon drawn with `params` set otherwise, nothing written;
@@ -411,7 +431,7 @@ export class Studio {
 
   /** Asks the core, telling the person why if it refuses. */
   async ask(ask: Parameters<Backend['ask']>[0], label: string) {
-    const answer = await this.backend.ask(ask, label);
+    const answer = await this.backend.ask(ask, label, this.editing);
     if (answer.kind === 'refused') this.message = answer.reason;
     return answer;
   }

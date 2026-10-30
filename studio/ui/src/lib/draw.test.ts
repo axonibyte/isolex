@@ -3,7 +3,7 @@
 // node text the Design tab writes.
 
 import { describe, expect, it } from 'vitest';
-import { BOUND, TOOLS, fits, keyName, toolFor } from './keymap';
+import { TOOLS, chord, clashes, commandFor, fits } from './keymap';
 import { angleOf, angled, arcText, ellipseText, flatStep, lineText, moveFlat, plainData, polyText, rectText, resizeRect, resizeRound, snapAngle, squared, withPoints } from './flat';
 import { fewest, insertPoint, moveHandle, movePoint, nearestSide, parse, parseAll, removePoint, shiftData, toD, toDAll, toggle, type Path } from './path';
 import { cylinderText, faceRectText, poly3dText, segText, shadowText } from './gesture';
@@ -11,17 +11,17 @@ import { argSpans, argText, counter, inRepeat, propsOf, stepIn, withArg } from '
 
 describe('the keymap', () => {
   it('binds no key twice', () => {
-    const keys = [...TOOLS.filter((t) => t).map((t) => t!.key), ...BOUND];
-    expect(new Set(keys).size).toBe(keys.length);
+    expect(clashes()).toEqual([]);
   });
 
   it('finds a tool by its key, with Shift or without', () => {
-    expect(toolFor('b', false)?.id).toBe('box');
-    expect(toolFor('S', true)?.id).toBe('shadow');
-    expect(toolFor('a', false)?.id).toBe('node');
-    expect(toolFor('A', true)?.id).toBe('arc');
-    expect(toolFor('q', false)).toBeNull();
-    expect(keyName('g', true)).toBe('Shift+G');
+    const tool = (key: string, shiftKey = false) => commandFor(chord({ key, shiftKey })!)?.id ?? null;
+    expect(tool('b')).toBe('tool:box');
+    expect(tool('S', true)).toBe('tool:shadow');
+    expect(tool('a')).toBe('tool:node');
+    expect(tool('A', true)).toBe('tool:arc');
+    expect(tool('q')).toBeNull();
+    expect(chord({ key: 'g', shiftKey: true })).toBe('Shift+G');
   });
 
   it('keeps 3-D tools out of a flat icon', () => {

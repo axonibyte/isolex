@@ -29,7 +29,7 @@ async function opened(backend?: Backend) {
   const typed = async (from: string, to: string, file = 'sample.ilx') => {
     const t = await text(file);
     const at = new TextEncoder().encode(t.slice(0, t.indexOf(from))).length;
-    await b.ask({ kind: 'type', file, at, len: new TextEncoder().encode(from).length, text: to }, 'Type');
+    await b.ask({ kind: 'type', file, at, len: new TextEncoder().encode(from).length, text: to }, 'Type', null);
   };
   return { backend: b, text, typed };
 }

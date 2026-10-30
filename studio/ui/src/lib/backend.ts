@@ -283,7 +283,16 @@ export interface Backend {
   /** `kind` names the files `extensions` filter for: "Font", unless
       said. */
   pickSave(title: string, name: string, extensions: string[], kind?: string): Promise<string | null>;
-  ask(ask: Ask, label: string): Promise<Answer>;
+  /** `ask` in the definition `editing`, the asking window's own. */
+  ask(ask: Ask, label: string, editing: string | null): Promise<Answer>;
+  /** What a window opened on the library open has missed, to start where
+      the others are (#119); none if no library is open. */
+  attach(): Promise<Notice[] | null>;
+  /** Another window on the library open, showing `icon` (#119): only in
+      the app. */
+  newWindow(icon: string | null): Promise<void>;
+  /** The icon this window was opened on, if it is not the first. */
+  openedOn(): Promise<string | null>;
   choose(id: number, option: number): Promise<Answer>;
   beginGesture(): Promise<void>;
   endGesture(): Promise<void>;
@@ -331,7 +340,10 @@ export async function shell(): Promise<Backend> {
     exportZip: async () => new Uint8Array(await invoke<number[]>('export_zip')),
     // bytes as a list of numbers, which the command reads as Vec<u8>
     writeExport: (path, data) => invoke('write_export', { out: path, data: Array.from(typeof data === 'string' ? new TextEncoder().encode(data) : data) }),
-    ask: (ask, label) => invoke('ask', { ask, label }),
+    ask: (ask, label, editing) => invoke('ask', { ask, label, editing }),
+    attach: () => invoke('attach'),
+    newWindow: (icon) => invoke('new_window', { icon }),
+    openedOn: () => invoke('opened_on'),
     choose: (id, option) => invoke('choose', { id, option }),
     beginGesture: () => invoke('begin_gesture'),
     endGesture: () => invoke('end_gesture'),

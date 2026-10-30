@@ -124,7 +124,7 @@ describe('App', () => {
   it('undoes and redoes from the keyboard', async () => {
     const backend = await core();
     await opened(backend);
-    await backend.ask({ kind: 'type', file: 'sample.ilx', at: 0, len: 0, text: '// a\n' }, 'Type');
+    await backend.ask({ kind: 'type', file: 'sample.ilx', at: 0, len: 0, text: '// a\n' }, 'Type', null);
     const undo = screen.getByRole('button', { name: 'Undo' });
     await waitFor(() => expect(undo.hasAttribute('disabled')).toBe(false));
     await fireEvent.keyDown(window, { key: 'z', ctrlKey: true });
@@ -144,7 +144,7 @@ describe('App', () => {
     };
     const reload = vi.spyOn(backend, 'reload');
     await opened(backend);
-    await backend.ask({ kind: 'type', file: 'sample.ilx', at: 0, len: 0, text: '// a\n' }, 'Type');
+    await backend.ask({ kind: 'type', file: 'sample.ilx', at: 0, len: 0, text: '// a\n' }, 'Type', null);
     tell!({ kind: 'out-of-sync', files: ['sample.ilx'] });
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toContain('sample.ilx');

@@ -97,6 +97,16 @@ describe('reduce', () => {
     expect(reduce(v, library(false)).outOfSync).toEqual([]);
     expect(reduce(v, { kind: 'reloaded', files: ['a.ilx'] }).outOfSync).toEqual([]);
   });
+
+  it('keeps nothing of a library another window replaced with another (#119)', () => {
+    let v = [library(false), compiled(1), drawn('a')].reduce(reduce, empty());
+    v = reduce(v, { ...library(false), root: 'elsewhere' } as Notice);
+    expect(v.library?.root).toBe('elsewhere');
+    expect(v.icons).toEqual({});
+    expect(v.compiled).toBeNull();
+    // the same library again keeps what it has
+    expect(reduce(v, { ...library(true), root: 'elsewhere' } as Notice).library?.modified).toBe(true);
+  });
 });
 
 describe('definitionOf', () => {

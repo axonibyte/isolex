@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "What the main window's interface may do: call the studio's own commands, and ask for a folder or file to open, or a place to save one.",
-  "windows": ["main"],
+  "description": "What the studio's windows may do: call the studio's own commands, and ask for a folder or file to open, or a place to save one.",
+  "windows": ["main", "studio-*"],
   "permissions": ["core:default", "dialog:allow-open", "dialog:allow-save"]
 }

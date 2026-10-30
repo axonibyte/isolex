@@ -160,7 +160,7 @@ describe('Parts and selection', () => {
     const listed = () => within(parts).getAllByRole('button').map((b) => b.querySelector('.kind')?.textContent);
 
     await fireEvent.keyDown(within(parts).getByRole('button', { name: /^seg/ }), { key: 'PageUp' });
-    expect(ask).toHaveBeenLastCalledWith({ kind: 'move-before', node: rows[4]!.node, before: rows[6]!.node }, 'Move seg in switch-poe');
+    expect(ask).toHaveBeenLastCalledWith({ kind: 'move-before', node: rows[4]!.node, before: rows[6]!.node }, 'Move seg in switch-poe', 'switch-poe');
     // drawn after the at now: listed above it
     await waitFor(async () => expect((await text()).indexOf('seg 0 0 0 2')).toBeGreaterThan((await text()).indexOf('at 0.5 0.5 0.6')));
     await waitFor(() => expect(listed().indexOf('seg')).toBeLessThan(listed().indexOf('at')));
@@ -175,6 +175,7 @@ describe('Parts and selection', () => {
     expect(ask).toHaveBeenLastCalledWith(
       { kind: 'set-arg', node: outline.parts[2]!.node, index: 0, value: 'rest' },
       'Rename part everything-else to rest',
+      'switch-poe',
     );
     await within(parts).findByRole('button', { name: /^rest/ });
 

@@ -8,7 +8,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::mpsc::Receiver;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use isolex::ir::IrIcon;
 use isolex::kdl::Value;
@@ -23,6 +23,87 @@ use crate::watch::{DiskOutcome, PollingWatcher, Watcher};
 /// Where notices go: the window, or a test's record of them.
 pub trait Sink: Send + Sync + 'static {
     fn notify(&self, notice: Notice);
+}
+
+/// What a window opened on a library already open has missed (#119): the
+/// newest of each notice that still stands, folded as the interface folds
+/// them, so a second window starts where the first is.
+#[derive(Debug, Default)]
+pub struct Latest {
+    library: Option<Notice>,
+    graph: Option<Notice>,
+    compiled: Option<(u64, Notice)>,
+    /// Each icon's newest drawing, or why it does not compile now.
+    icons: BTreeMap<String, Notice>,
+    /// Files changed on disk while there are unsaved edits.
+    out_of_sync: Vec<String>,
+}
+
+impl Latest {
+    /// Folds in `n`.
+    pub fn hear(&mut self, n: &Notice) {
+        match n {
+            Notice::Library { modified, .. } => {
+                if !modified {
+                    self.out_of_sync.clear();
+                }
+                self.library = Some(n.clone());
+            }
+            Notice::Graph { .. } => self.graph = Some(n.clone()),
+            Notice::Compiled { generation, .. } => {
+                if self.compiled.as_ref().is_none_or(|(g, _)| g <= generation) {
+                    self.compiled = Some((*generation, n.clone()));
+                }
+            }
+            Notice::Icon { name, .. } | Notice::Broken { name, .. } => {
+                self.icons.insert(name.clone(), n.clone());
+            }
+            Notice::Gone { name } => {
+                self.icons.remove(name);
+            }
+            Notice::Reloaded { .. } => self.out_of_sync.clear(),
+            Notice::OutOfSync { files } => {
+                for f in files {
+                    if !self.out_of_sync.contains(f) {
+                        self.out_of_sync.push(f.clone());
+                    }
+                }
+            }
+        }
+    }
+
+    /// The notices that bring a new window up to now, in the order it
+    /// folds them.
+    pub fn notices(&self) -> Vec<Notice> {
+        let mut out: Vec<Notice> = [&self.library, &self.graph]
+            .into_iter()
+            .flatten()
+            .cloned()
+            .collect();
+        out.extend(self.compiled.iter().map(|(_, n)| n.clone()));
+        out.extend(self.icons.values().cloned());
+        if !self.out_of_sync.is_empty() {
+            out.push(Notice::OutOfSync {
+                files: self.out_of_sync.clone(),
+            });
+        }
+        out
+    }
+}
+
+/// A sink that keeps the [`Latest`] of what passes through it.
+struct Remember {
+    inner: Arc<dyn Sink>,
+    latest: Arc<Mutex<Latest>>,
+}
+
+impl Sink for Remember {
+    fn notify(&self, notice: Notice) {
+        if let Ok(mut l) = self.latest.lock() {
+            l.hear(&notice);
+        }
+        self.inner.notify(notice);
+    }
 }
 
 /// A font to import, as the interface's dialog asks for it.
@@ -261,6 +342,8 @@ pub struct Session {
     pending: BTreeMap<u64, Vec<Choice>>,
     next_choice: u64,
     editing: Option<String>,
+    /// The newest of what the windows have been told.
+    latest: Arc<Mutex<Latest>>,
     /// For a library kept in memory, the files as its "disk" holds them:
     /// what saving writes, reloading reads, and `outside` changes.
     memory: Option<BTreeMap<String, String>>,
@@ -305,9 +388,16 @@ impl Session {
 
     /// A library already loaded, for tests and for a new library.
     pub fn with(lib: Library, watcher: Option<PollingWatcher>, sink: Arc<dyn Sink>) -> Session {
+        let (sink, latest) = remembered(sink);
         let (background, events) = Background::start(Isolex, workers());
         forward(events, sink.clone());
-        Session::start(lib, watcher, sink, Compiling::Background(background))
+        Session::start(
+            lib,
+            watcher,
+            sink,
+            latest,
+            Compiling::Background(background),
+        )
     }
 
     /// A library kept in memory alone, compiled as it changes before each
@@ -315,10 +405,12 @@ impl Session {
     /// studio's core in a browser. Saving there marks it saved.
     pub fn in_memory(lib: Library, sink: Arc<dyn Sink>) -> Session {
         let disk = lib.files().clone();
+        let (sink, latest) = remembered(sink);
         let mut s = Session::start(
             lib,
             None,
             sink,
+            latest,
             Compiling::Inline(Box::new(Inline::new(Isolex))),
         );
         s.memory = Some(disk);
@@ -329,6 +421,7 @@ impl Session {
         lib: Library,
         watcher: Option<PollingWatcher>,
         sink: Arc<dyn Sink>,
+        latest: Arc<Mutex<Latest>>,
         compiling: Compiling,
     ) -> Session {
         let mut s = Session {
@@ -339,6 +432,7 @@ impl Session {
             pending: BTreeMap::new(),
             next_choice: 0,
             editing: None,
+            latest,
             memory: None,
         };
         s.changed();
@@ -347,6 +441,12 @@ impl Session {
 
     pub fn library(&self) -> &Library {
         &self.lib
+    }
+
+    /// What a window opened on this library since has missed: the newest
+    /// of each notice that still stands (#119).
+    pub fn current(&self) -> Vec<Notice> {
+        self.latest.lock().map(|l| l.notices()).unwrap_or_default()
     }
 
     /// A file's text now, with the revision it is at, for the Source tab.
@@ -485,9 +585,17 @@ impl Session {
         }
     }
 
-    /// Plans and, if it is unambiguous, applies `ask`.
+    /// Plans and, if it is unambiguous, applies `ask`, in the definition
+    /// the last `view` named.
     pub fn ask(&mut self, ask: &Ask, label: &str) -> Answer {
-        let req = Request::new(&self.lib, self.editing.as_deref(), label, ask.into());
+        let editing = self.editing.clone();
+        self.ask_in(ask, label, editing.as_deref())
+    }
+
+    /// `ask` in the definition `editing`: each window names its own, as
+    /// two windows edit two (#119).
+    pub fn ask_in(&mut self, ask: &Ask, label: &str, editing: Option<&str>) -> Answer {
+        let req = Request::new(&self.lib, editing, label, ask.into());
         self.carry_out(req)
     }
 
@@ -708,6 +816,16 @@ impl Session {
             can_redo: self.lib.can_redo(),
         });
     }
+}
+
+/// `sink`, keeping the newest of what passes through it.
+fn remembered(sink: Arc<dyn Sink>) -> (Arc<dyn Sink>, Arc<Mutex<Latest>>) {
+    let latest = Arc::new(Mutex::new(Latest::default()));
+    let sink = Arc::new(Remember {
+        inner: sink,
+        latest: latest.clone(),
+    });
+    (sink, latest)
 }
 
 /// How many threads compile icons: all but one of the machine's, so the

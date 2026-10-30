@@ -69,7 +69,7 @@
     const f = file;
     typist.before();
     sending = sending.then(async () => {
-      const answer = await studio.backend.ask({ kind: 'type', file: f, ...change }, `Type in ${f}`);
+      const answer = await studio.backend.ask({ kind: 'type', file: f, ...change }, `Type in ${f}`, studio.editing);
       if (answer.kind === 'refused') studio.message = answer.reason;
     });
     typist.after(change.text);
