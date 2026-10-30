@@ -108,7 +108,7 @@ fn what_it_refuses() {
     );
     assert_eq!(
         send(json!({ "call": "about" }))["result"]["studio"],
-        "0.1.0"
+        "0.2.0"
     );
 }
 

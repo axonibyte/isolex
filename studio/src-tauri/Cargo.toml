@@ -1,6 +1,6 @@
 [package]
 name = "isolex-studio"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.97"
 description = "isolex studio: draw and manage an isolex library, with a live tree of its icons."

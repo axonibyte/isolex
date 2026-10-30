@@ -1483,7 +1483,7 @@ dependencies = [
 
 [[package]]
 name = "isolex-studio"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "isolex-studio-core",
  "serde",
@@ -1495,7 +1495,7 @@ dependencies = [
 
 [[package]]
 name = "isolex-studio-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "isolex",
  "miniz_oxide 0.9.1",

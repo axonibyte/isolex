@@ -1,6 +1,6 @@
 [package]
 name = "isolex-studio-core"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.97"
 description = "What isolex studio does, without a window: the library, its edits and undo, saving, compiling in the background and watching the folder."

@@ -1,7 +1,7 @@
 {
   "name": "isolex-studio",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "isolex studio's interface, in the Tauri shell's window (src-tauri).",
   "scripts": {
