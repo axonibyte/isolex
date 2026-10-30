@@ -29,7 +29,7 @@
   import { inShell } from './lib/backend';
   import HistoryMenu from './components/HistoryMenu.svelte';
   import ProblemsMenu from './components/ProblemsMenu.svelte';
-  import { STEPS, stepLabel } from './lib/snap';
+  import SnapControl from './components/SnapControl.svelte';
 
   interface Props {
     backend: Backend;
@@ -421,12 +421,7 @@
           <PlacePicker {studio} {tools} kind={tools.tool} />
         {/if}
         {#if icon}
-          <label class="snap">
-            Snap
-            <select bind:value={tools.step}>
-              {#each STEPS as s (s)}<option value={s}>{stepLabel(s)}</option>{/each}
-            </select>
-          </label>
+          <SnapControl {tools} />
         {/if}
         {#if !icon}
           <p class="note">{view.compiled ? (studio.icon ? `${studio.icon} does not compile.` : 'This library emits no icon.') : 'Compiling…'}</p>
@@ -789,26 +784,6 @@
   .styles button[aria-pressed='true'] {
     background: var(--raised);
     color: var(--fg);
-  }
-  .snap {
-    position: absolute;
-    left: 12px;
-    top: 12px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 6px 4px 10px;
-    border-radius: 8px;
-    background: var(--panel);
-    border: 1px solid var(--line);
-    font-size: 12px;
-    color: var(--muted);
-  }
-  .snap select {
-    background: var(--raised);
-    border: 1px solid var(--line);
-    border-radius: 5px;
-    padding: 2px 4px;
   }
   .hint {
     position: absolute;

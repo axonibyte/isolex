@@ -263,6 +263,9 @@
             {/if}
           {/each}
           {#if tools.indicator}
+            {#each tools.indicator.guides as g, i (i)}
+              <line class="aligned" x1={g.a[0]} y1={g.a[1]} x2={g.b[0]} y2={g.b[1]} vector-effect="non-scaling-stroke" />
+            {/each}
             <circle class="snapped" cx={tools.indicator.at[0]} cy={tools.indicator.at[1]} r={5 / camera.k} vector-effect="non-scaling-stroke" />
           {/if}
           {#each handles as h (h.id)}
@@ -410,6 +413,11 @@
   }
   .handle.control {
     fill: var(--accent);
+  }
+  .aligned {
+    stroke: var(--accent);
+    stroke-width: 1;
+    stroke-dasharray: 4 3;
   }
   .snapped {
     fill: none;

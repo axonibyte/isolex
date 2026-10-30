@@ -114,9 +114,30 @@ Below 900 px wide the panels stack under the canvas.
 
 - **Snapping.** Positions snap to the step chosen on the canvas: 1, ½,
   ¼ or ⅛ of a tile, or off. Flat positions snap to four times that
-  step in output units (¼ tile is 1 unit), never finer than ½. Corners
-  and edges of other shapes are snap targets too, shown by an indicator
-  naming what was snapped to.
+  step in output units (¼ tile is 1 unit), never finer than ½. Other
+  shapes are snap targets too, within 8 pixels on screen, shown by an
+  indicator naming what was snapped to: a point first, then an edge.
+- **Alignment guides**, as Inkscape 1.2 draws them. A point that is
+  not on another shape's point can still line up with one along the
+  plane's axes (the tile x and y on a 3-D floor, across and down when
+  flat), when that guide is nearer than the grid's line. The guide is
+  drawn dashed from the point lined up with, and the indicator names
+  it. Moving a shape lines up its own corners, edge midpoints and
+  center, not only the point it was grabbed by.
+- **Advanced**, beside the step, lists each kind of target, each
+  switched on or off, and remembered per person:
+
+  | Target | What |
+  |---|---|
+  | Grid lines and intersections | The step; off, positions are free |
+  | Corners | Of boxes' and tiles' footprints, at their floor and top; of flat rectangles |
+  | Edges | Of the same, anywhere along them |
+  | Edge midpoints | Of those edges, and of lines |
+  | Face centers | Of footprints, tops and rectangles; of cylinders, circles, ellipses and arcs |
+  | Anchors | Where an `at` plane flat shapes are drawn on has its origin |
+  | Path nodes | Points of polygons, nodes of paths, ends of lines; not the glyphs of words |
+  | The frame | A flat icon's canvas; a 3-D icon's footprint, at its floor and top |
+  | Alignment guides | As above |
 - **Feedback.** While drawing or dragging, the size or position being
   set is written beside the pointer ("2 × 1 × 0.5", "z 0.75",
   "r 0.25").
@@ -495,3 +516,4 @@ Two dialogs from the top bar manage what is not drawn:
 | Transform, and the turn handles | #115 |
 | Insert and Badge | #116 |
 | Measure, Dropper and Find | #117 |
+| Alignment guides and advanced snapping | #118 |

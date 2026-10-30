@@ -6,6 +6,8 @@
 import type { Map3, NodeAt, Origin } from './backend';
 import type { IrShape } from './isolex/ir';
 import { pick } from './select';
+import { parseAll } from './path';
+import type { Target } from './snap';
 
 export type Point = [number, number];
 export type Point3 = [number, number, number];
@@ -162,46 +164,129 @@ export function topFace(s: Solid): number | null {
   return null;
 }
 
-/** What else is there to snap to, on the viewBox: corners and edges of
-    boxes' and tiles' footprints, at their floor and their top. */
+/** What else is there to snap to, on the viewBox, each of a kind the
+    Advanced list switches (#118): corners and edges of boxes' and tiles'
+    footprints, at their floor and their top, their edges' midpoints and
+    their centers. */
 export interface Targets {
-  points: { at: Point; what: string }[];
-  edges: { a: Point; b: Point; what: string }[];
+  points: { at: Point; what: string; kind: Target }[];
+  edges: { a: Point; b: Point; what: string; kind: Target }[];
 }
 
-/** Corners of flat rectangles, ends of lines and points of polygons, on
-    the viewBox. */
-export function flatTargets(all: Solid[], except: NodeAt | null): Targets {
+const mid = (a: Point, b: Point): Point => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+const IDENTITY: Map3 = [1, 0, 0, 1, 0, 0, 0, 0];
+
+/** A closed outline's corners, edges, edges' midpoints and center, named
+    for `what`. */
+function outline(t: Targets, at: Point[], what: string, corners = true) {
+  at.forEach((p, i) => {
+    const q = at[(i + 1) % at.length]!;
+    if (corners) t.points.push({ at: p, what: `corner of ${what}`, kind: 'corners' });
+    t.points.push({ at: mid(p, q), what: `midpoint of edge of ${what}`, kind: 'midpoints' });
+    t.edges.push({ a: p, b: q, what: `edge of ${what}`, kind: 'edges' });
+  });
+  t.points.push({ at: mid(at[0]!, at[2]!), what: `center of ${what}`, kind: 'centers' });
+}
+
+/** Corners, edges, midpoints and centers of flat rectangles, centers of
+    circles, ellipses and arcs, ends and midpoints of lines, points of
+    polygons and nodes of paths, and the anchors they are drawn on, on
+    the viewBox; none of the glyphs of words set in `fonts`. */
+export function flatTargets(all: Solid[], except: NodeAt | null, fonts: Set<string> = new Set()): Targets {
   const t: Targets = { points: [], edges: [] };
+  const anchors = new Set<string>();
   for (const s of all) {
     if (except && s.node.start === except.start && s.node.file === except.file) continue;
+    if (!FLAT.has(s.kind) || fonts.has(s.origin.definition)) continue;
     const v = s.values;
-    const pts: Point[] = [];
-    if (s.kind === 'rect') pts.push([v[0]!, v[1]!], [v[0]! + v[2]!, v[1]!], [v[0]! + v[2]!, v[1]! + v[3]!], [v[0]!, v[1]! + v[3]!]);
-    else if (s.kind === 'line') pts.push([v[0]!, v[1]!], [v[2]!, v[3]!]);
-    else if (s.kind === 'poly') for (let i = 0; i + 1 < v.length; i += 2) pts.push([v[i]!, v[i + 1]!]);
-    else continue;
-    const at = pts.map((p) => apply(s.map, [p[0], p[1], 0]));
-    at.forEach((p) => t.points.push({ at: p, what: s.kind === 'line' ? 'end of line' : s.kind === 'rect' ? 'corner of rect' : 'point of poly' }));
+    const on = (x: number, y: number) => apply(s.map, [x, y, 0]);
+    if (!same(s.map, IDENTITY)) {
+      const a = on(0, 0);
+      const key = a.map((n) => n.toFixed(6)).join();
+      if (!anchors.has(key)) {
+        anchors.add(key);
+        t.points.push({ at: a, what: 'anchor', kind: 'anchors' });
+      }
+    }
+    if (s.kind === 'rect') outline(t, [on(v[0]!, v[1]!), on(v[0]! + v[2]!, v[1]!), on(v[0]! + v[2]!, v[1]! + v[3]!), on(v[0]!, v[1]! + v[3]!)], 'rect');
+    else if (s.kind === 'line') {
+      const [a, b] = [on(v[0]!, v[1]!), on(v[2]!, v[3]!)];
+      t.points.push({ at: a, what: 'end of line', kind: 'nodes' }, { at: b, what: 'end of line', kind: 'nodes' }, { at: mid(a, b), what: 'midpoint of line', kind: 'midpoints' });
+    } else if (s.kind === 'circle' || s.kind === 'ellipse' || s.kind === 'arc') t.points.push({ at: on(v[0]!, v[1]!), what: `center of ${s.kind}`, kind: 'centers' });
+    else if (s.kind === 'poly') for (let i = 0; i + 1 < v.length; i += 2) t.points.push({ at: on(v[i]!, v[i + 1]!), what: 'point of poly', kind: 'nodes' });
+    else if (s.kind === 'path' && s.d) for (const p of parseAll(s.d) ?? []) for (const k of p.knots) t.points.push({ at: on(k.p[0], k.p[1]), what: 'node of path', kind: 'nodes' });
   }
   return t;
 }
 
 /** Those on the plane at height `at`, when given: a point is snapped on
-    its own plane, and a corner below or above it only looks near. */
+    its own plane, and a corner below or above it only looks near. A
+    cylinder offers its centers. */
 export function targets(all: Solid[], except: NodeAt | null, at?: number): Targets {
   const t: Targets = { points: [], edges: [] };
+  const level = (l: number) => at === undefined || Math.abs(l - at) < 1e-6;
   for (const s of all) {
     if (except && s.node.start === except.start && s.node.file === except.file) continue;
+    if (s.kind === 'cylinder') {
+      const v = s.values;
+      for (const z of [v[2]!, top(s)].filter(level)) t.points.push({ at: apply(s.map, [v[0]!, v[1]!, z]), what: 'center of cylinder', kind: 'centers' });
+      continue;
+    }
     if (s.kind !== 'box' && s.kind !== 'tile') continue;
     const levels = s.kind === 'box' ? [s.values[2]!, top(s)] : [s.values[2]!];
-    for (const z of levels.filter((l) => at === undefined || Math.abs(l - at) < 1e-6)) {
-      const at = footprint(s, z).map((p) => apply(s.map, p));
-      at.forEach((p, i) => {
-        t.points.push({ at: p, what: `corner of ${s.kind}` });
-        t.edges.push({ a: p, b: at[(i + 1) % 4]!, what: `edge of ${s.kind}` });
-      });
-    }
+    for (const z of levels.filter(level)) outline(t, footprint(s, z).map((p) => apply(s.map, p)), s.kind);
   }
   return t;
 }
+
+/** The icon's frame: a flat icon's canvas, or a 3-D icon's footprint at
+    its floor and its top (on the plane at height `at`, when given), its
+    corners, edges, their midpoints and its center all of the frame's
+    kind. */
+export function frameTargets(frame: { canvas?: [number, number]; footprint?: [number, number, number] }, at?: number): Targets {
+  const t: Targets = { points: [], edges: [] };
+  if (frame.canvas) {
+    const [w, h] = frame.canvas;
+    outline(t, [[0, 0], [w, 0], [w, h], [0, h]], 'the canvas');
+  } else if (frame.footprint) {
+    const [w, d, h] = frame.footprint;
+    for (const z of [0, h].filter((l) => at === undefined || Math.abs(l - at) < 1e-6)) {
+      const corners: Point3[] = [[0, 0, z], [w, 0, z], [w, d, z], [0, d, z]];
+      outline(t, corners.map((p) => apply(PROJECTION, p)), 'the footprint');
+    }
+  }
+  for (const p of t.points) p.kind = 'frame';
+  for (const e of t.edges) e.kind = 'frame';
+  return t;
+}
+
+/** The points of a shape that line up as it is moved, from the point it
+    is moved by (its first): a box's or tile's footprint corners, edge
+    midpoints and center; a flat rectangle's likewise; a line's ends and
+    midpoint; a polygon's points. Others move by that point alone. */
+export function moving(s: Solid): Point[] {
+  const v = s.values;
+  const box = (w: number, d: number): Point[] => [
+    [0, 0],
+    [w, 0],
+    [w, d],
+    [0, d],
+    [w / 2, 0],
+    [w, d / 2],
+    [w / 2, d],
+    [0, d / 2],
+    [w / 2, d / 2],
+  ];
+  if (s.kind === 'box' || s.kind === 'tile') return box(v[3]!, v[4]!);
+  if (s.kind === 'rect') return box(v[2]!, v[3]!);
+  if (s.kind === 'line') return [[0, 0], [v[2]! - v[0]!, v[3]! - v[1]!], [(v[2]! - v[0]!) / 2, (v[3]! - v[1]!) / 2]];
+  if (s.kind === 'poly') {
+    const out: Point[] = [];
+    for (let i = 0; i + 1 < v.length; i += 2) out.push([v[i]! - v[0]!, v[i + 1]! - v[1]!]);
+    return out;
+  }
+  return [[0, 0]];
+}
+
+/** Targets together. */
+export const joined = (...all: Targets[]): Targets => ({ points: all.flatMap((t) => t.points), edges: all.flatMap((t) => t.edges) });

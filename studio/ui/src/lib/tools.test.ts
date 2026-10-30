@@ -66,11 +66,15 @@ describe('geometry', () => {
 
   it('offers a box’s corners and edges, at its floor and its top, as targets', () => {
     const t = targets(l3, null);
-    expect(t.points).toHaveLength(8);
+    const corners = t.points.filter((p) => p.kind === 'corners');
+    expect(corners).toHaveLength(8);
     expect(t.edges).toHaveLength(8);
+    // and each face's edge midpoints and center
+    expect(t.points.filter((p) => p.kind === 'midpoints')).toHaveLength(8);
+    expect(t.points.filter((p) => p.kind === 'centers')).toHaveLength(2);
     expect(targets(l3, l3[0]!.node).points).toHaveLength(0);
     // on a plane, only what is on it
-    expect(targets(l3, null, 0.28).points).toHaveLength(4);
+    expect(targets(l3, null, 0.28).points.filter((p) => p.kind === 'corners')).toHaveLength(4);
     expect(targets(l3, null, 0.5).points).toHaveLength(0);
   });
 });
@@ -97,7 +101,7 @@ describe('snapping', () => {
 
   it('goes to the grid away from other shapes', () => {
     const s = snapPoint([3.4, 3.1], 0.5, t, toView, fromView, 1);
-    expect(s).toEqual({ point: [3.5, 3], what: null, at: null });
+    expect(s).toEqual({ point: [3.5, 3], what: null, at: null, guides: [] });
   });
 
   it('goes to a corner within reach on screen, before the grid', () => {
@@ -111,7 +115,8 @@ describe('snapping', () => {
   });
 
   it('goes to an edge when no corner is near', () => {
-    const s = snapPoint([1.03, 1.04], 0.25, t, toView, fromView, 1);
+    // a quarter along the far edge: its midpoint, at (1, 1), out of reach
+    const s = snapPoint([0.53, 1.04], 0.25, t, toView, fromView, 1);
     expect(s.what).toBe('edge of box');
     expect(s.point[1]).toBeCloseTo(1, 1);
   });

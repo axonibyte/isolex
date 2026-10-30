@@ -177,9 +177,11 @@ describe('the text tool', () => {
     await fireEvent.click(within(screen.getByRole('list', { name: 'Icons' })).getByRole('button', { name: /^port-label/ }));
     await screen.findByRole('application', { name: 'Canvas: port-label' });
     await fireEvent.keyDown(window, { key: 'x' });
-    // away from the plate's corners, which would pull it at this zoom
-    await fireEvent.pointerDown(canvas(), { button: 0, clientX: 424, clientY: 308 });
-    await fireEvent.pointerUp(canvas(), { button: 0, clientX: 424, clientY: 308 });
+    // zoomed in four times about the viewBox's origin, so the plate's
+    // center and edges, a few units off, do not pull it
+    await fireEvent.wheel(canvas(), { deltaY: -Math.log(4) / 0.0025, clientX: 400, clientY: 300 });
+    await fireEvent.pointerDown(canvas(), { button: 0, clientX: 496, clientY: 332 });
+    await fireEvent.pointerUp(canvas(), { button: 0, clientX: 496, clientY: 332 });
     await waitFor(async () => expect(await text()).toContain('text 24 8 "Text" font="plain" size=8'));
     await fireEvent.click(screen.getByRole('tab', { name: 'Design' }));
     const words = await screen.findByRole('textbox', { name: 'Words' });

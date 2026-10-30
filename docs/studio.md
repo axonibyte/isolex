@@ -59,8 +59,12 @@ The first icon the library emits opens on the canvas.
   the definition inherits are listed apart, each opening its own.
 - **The canvas:** the wheel zooms at the pointer, Ctrl+wheel pans north
   and south, Shift+wheel east and west, Space+drag or the middle button
-  pans, and 0 fits the icon. The snap step is at its top left, and a
-  hint at its foot says what the tool does.
+  pans, and 0 fits the icon. The snap step is at its top left, with
+  *Advanced* beside it to switch each kind of snap target on or off
+  (the grid, corners, edges, their midpoints, centers, anchors, path
+  nodes, the frame, and alignment guides); a hint at its foot says what
+  the tool does. While dragging, a point lines up with other shapes'
+  along a dashed guide.
 - **Tabs:** Design, Arrange, Source, Tree and Preview.
 - **Status bar:** whether the library compiles (a click lists its
   problems, each opening its place in the Source tab), and where the

@@ -12,7 +12,7 @@ import { measure, said as saidMeasure, type Measured } from './measure';
 import { painted, withPaint } from './paint';
 import { badgeText, drawsFlat, insertText, nearestCorner, refusal } from './place';
 import { around, composed, head, idle, inTiles, middle, pivotHandles, pivotStep, runs, stepped, wrapped, type Step } from './transform';
-import { PROJECTION, apply, counted, flatTargets, footprint, onFloor, onWall, solids as solidsOf, targets, top, topFace, zScale, FLAT, type Point, type Point3, type Solid } from './geometry';
+import { PROJECTION, apply, counted, flatTargets, footprint, frameTargets, joined, moving, onFloor, onWall, solids as solidsOf, targets, top, topFace, zScale, FLAT, type Point, type Point3, type Solid, type Targets } from './geometry';
 import {
   boxText,
   changes,
@@ -36,7 +36,7 @@ import {
 } from './gesture';
 import { angleOf, angled, arcPoints, arcText, atAngle, ellipsePoints, ellipseText, flatStep, lineText, moveFlat, plainData, polyText, rectText, resizeRect, resizeRound, snapAngle, squared, withPoints } from './flat';
 import { insertPoint, moveHandle, movePoint, nearestSide, parseAll, polyline, removePoint, shiftData, toD, toDAll, toggle, type Path } from './path';
-import { clean, PULL, snapPoint, snapValue, type Snapped } from './snap';
+import { clean, PULL, snapPoint, snapValue, switches, type Snapped, type Switches, type Target } from './snap';
 import { atPath, find, same, within } from './select';
 
 export { PROJECTION };
@@ -112,14 +112,17 @@ export class Tools {
   /** The snap step, in tiles; 0 is off. Flat shapes snap at four units a
       tile. */
   step = $state(0.25);
+  /** Which kinds of snap target are on (#118), remembered per person. */
+  snapOn = $state<Switches>(switches(stored(SNAP_KEY)));
   /** Lines of the shape being drawn, on the viewBox. */
   preview = $state<Point[][]>([]);
   /** The points of a polygon or a path being drawn, the first filled. */
   dots = $state<{ at: Point; first: boolean }[]>([]);
   /** The face a face rect would be drawn on, under the pointer. */
   highlight = $state<Point[] | null>(null);
-  /** What a point snapped to, and where. */
-  indicator = $state<{ at: Point; what: string } | null>(null);
+  /** What a point snapped to, and where, with the alignment guides it
+      lined up on. */
+  indicator = $state<{ at: Point; what: string; guides: { a: Point; b: Point }[] } | null>(null);
   /** The size or place being set, beside the pointer. */
   feedback = $state<{ at: Point; text: string } | null>(null);
   /** A choice the core needs, at the handle that asked. */
@@ -157,8 +160,56 @@ export class Tools {
       tile step, or in a glyph a tenth of the em a tile step. */
   get planeStep(): number {
     const g = this.studio.sketch?.glyph;
-    if (!g) return flatStep(this.step);
-    return this.step ? (g.metrics.em * this.step) / 10 : 0;
+    if (!g) return flatStep(this.grid);
+    return this.grid ? (g.metrics.em * this.grid) / 10 : 0;
+  }
+
+  /** The step points snap to: none with the grid switched off. */
+  get grid(): number {
+    return this.snapOn.grid ? this.step : 0;
+  }
+
+  /** A kind of snap target switched on or off, and remembered. */
+  setSnap(kind: Target, on: boolean) {
+    this.snapOn = { ...this.snapOn, [kind]: on };
+    remember(SNAP_KEY, JSON.stringify(this.snapOn));
+  }
+
+  /** What is snapped to besides the shapes: the icon's frame, a 3-D
+      one's on the plane at height `z`; none in a glyph, drawn on its own
+      grid. */
+  private withFrame(t: Targets, z?: number): Targets {
+    const ir = this.studio.drawing?.ir;
+    return ir && !this.studio.sketch?.glyph ? joined(t, frameTargets(ir, z)) : t;
+  }
+
+  /** The fonts whose glyphs words are set in, but the one edited: their
+      outlines are not snapped to. */
+  private get fonts(): Set<string> {
+    const s = this.studio;
+    return new Set((s.view.graph?.definitions ?? []).filter((d) => d.kind === 'Font' && d.name !== s.editing).map((d) => d.name));
+  }
+
+  /** The indicator for a point snapped: where, to what, and the guides
+      it lined up on. */
+  private show(s: Snapped) {
+    this.indicator = s.what && s.at ? { at: s.at, what: s.what, guides: s.guides } : null;
+  }
+
+  /** Snaps a point on the floor at `z`, drawn through `map`, among the
+      solids but `except`, moving with `offsets`. */
+  private snapFloor(p: Point, map: Map3, z: number, except: NodeAt | null, scale: number, offsets?: Point[]): Snapped {
+    const snapped = snapPoint(
+      p,
+      this.grid,
+      this.withFrame(targets(this.solids, except, z), z),
+      (q) => apply(map, [q[0], q[1], z]),
+      (v) => onFloor(map, v, z),
+      scale,
+      { on: this.snapOn, with: offsets },
+    );
+    this.show(snapped);
+    return snapped;
   }
 
   /** Points of the plane, on the viewBox. */
@@ -435,15 +486,7 @@ export class Tools {
       on the floor at height `z`, snapped as a drawing tool snaps. */
   private measurePoint(p: Press, z: number): number[] | null {
     if (this.flat) return this.snapFlat(p.at, null, p.scale);
-    const snapped = snapPoint(
-      onFloor(PROJECTION, p.at, z) ?? [0, 0],
-      this.step,
-      targets(this.solids, null, z),
-      (q) => apply(PROJECTION, [q[0], q[1], z]),
-      (v) => onFloor(PROJECTION, v, z),
-      p.scale,
-    );
-    this.indicator = snapped.what && snapped.at ? { at: snapped.at, what: snapped.what } : null;
+    const snapped = this.snapFloor(onFloor(PROJECTION, p.at, z) ?? [0, 0], PROJECTION, z, null, p.scale);
     return [snapped.point[0], snapped.point[1], z];
   }
 
@@ -562,7 +605,7 @@ export class Tools {
     }
     const floor = onFloor(PROJECTION, at, 0);
     if (!floor) return;
-    const tile: Point = [snapValue(floor[0], this.step), snapValue(floor[1], this.step)];
+    const tile: Point = [snapValue(floor[0], this.grid), snapValue(floor[1], this.grid)];
     return this.insert(insertText(name, params, tile, apply(PROJECTION, [tile[0], tile[1], 0])), 'insert', said);
   }
 
@@ -652,7 +695,7 @@ export class Tools {
     const v = s.values;
     const up = (d.from[1] - p.at[1]) / zScale(s.map);
     if (d.kind === 'lift') {
-      const next = lift(s, up, this.step);
+      const next = lift(s, up, this.grid);
       this.feedback = { at: p.at, text: `z ${clean(next[2]!)}` };
       return next;
     }
@@ -662,25 +705,25 @@ export class Tools {
       if (s.kind === 'facerect') {
         const right = faceOf(s) === 'right';
         const start: Point = [right ? v[1]! : v[0]!, v[2]!];
-        const to: Point = [snapValue(start[0] + here[0] - d.grab[0], this.step), Math.max(0, snapValue(start[1] + here[1] - d.grab[1], this.step))];
+        const to: Point = [snapValue(start[0] + here[0] - d.grab[0], this.grid), Math.max(0, snapValue(start[1] + here[1] - d.grab[1], this.grid))];
         this.feedback = { at: p.at, text: `${right ? 'b' : 'a'} ${to[0]} · z ${to[1]}` };
         return moveTo(s, to);
       }
       const z = s.kind === 'shadow' ? 0 : v[2]!;
-      const snapped = this.snap(s, [v[0]! + here[0] - d.grab[0], v[1]! + here[1] - d.grab[1]], z, p.scale);
+      const snapped = this.snap(s, [v[0]! + here[0] - d.grab[0], v[1]! + here[1] - d.grab[1]], z, p.scale, moving(s));
       this.feedback = { at: p.at, text: `x ${snapped.point[0]} · y ${snapped.point[1]}` };
       return moveTo(s, snapped.point);
     }
     if (d.kind === 'handle') {
       if (d.handle === 'height') {
-        const next = height(s, up, this.step);
+        const next = height(s, up, this.grid);
         this.feedback = { at: p.at, text: `h ${clean(next[s.kind === 'box' ? 5 : 4]!)}` };
         return next;
       }
       if (d.handle === 'radius') {
         const here = onFloor(s.map, p.at, v[2]!);
         if (!here) return null;
-        const next = radius(s, here, this.step);
+        const next = radius(s, here, this.grid);
         this.feedback = { at: p.at, text: `r ${clean(next[3]!)}` };
         return next;
       }
@@ -688,7 +731,7 @@ export class Tools {
       if (d.handle.startsWith('face-')) {
         const here = this.plane(s, p.at);
         if (!here) return null;
-        const next = resizeFace(s, k, [snapValue(here[0], this.step), Math.max(0, snapValue(here[1], this.step))]);
+        const next = resizeFace(s, k, [snapValue(here[0], this.grid), Math.max(0, snapValue(here[1], this.grid))]);
         this.feedback = { at: p.at, text: size(next[3]!, next[4]!) };
         return next;
       }
@@ -718,7 +761,7 @@ export class Tools {
     if (d.kind !== 'move') return;
     const ref = first(s);
     if (!ref) return;
-    const to = this.snapFlat([ref[0] + here[0] - d.grab[0], ref[1] + here[1] - d.grab[1]], s, p.scale);
+    const to = this.snapFlat([ref[0] + here[0] - d.grab[0], ref[1] + here[1] - d.grab[1]], s, p.scale, moving(s));
     const by: Point = [clean(to[0] - ref[0]), clean(to[1] - ref[1])];
     this.feedback = { at: p.at, text: `x ${to[0]} · y ${to[1]}` };
     this.moveFlatBy(s, by, label);
@@ -746,35 +789,28 @@ export class Tools {
     return `Move ${what}`;
   }
 
-  /** Snaps a point on height `z` of a solid's floor. */
-  private snap(s: Solid, p: Point, z: number, scale: number): Snapped {
-    const snapped = snapPoint(
-      p,
-      this.step,
-      targets(this.solids, s.node, z),
-      (q) => apply(s.map, [q[0], q[1], z]),
-      (v) => onFloor(s.map, v, z),
-      scale,
-    );
-    this.indicator = snapped.what && snapped.at ? { at: snapped.at, what: snapped.what } : null;
-    return snapped;
+  /** Snaps a point on height `z` of a solid's floor, moving with
+      `offsets`. */
+  private snap(s: Solid, p: Point, z: number, scale: number, offsets?: Point[]): Snapped {
+    return this.snapFloor(p, s.map, z, s.node, scale, offsets);
   }
 
   /** Snaps a flat point to another flat shape's point or the flat step:
       one in the plane `s` is drawn in, or, with no `s`, one of the viewBox
       in the plane drawn on (`plane`). */
-  private snapFlat(at: Point, s: Solid | null, scale: number): Point {
+  private snapFlat(at: Point, s: Solid | null, scale: number, offsets?: Point[]): Point {
     const map = s?.map ?? this.sheet;
     const p = s ? at : (onFloor(map, at, 0) ?? at);
     const snapped = snapPoint(
       p,
       this.planeStep,
-      flatTargets(this.solids, s?.node ?? null),
+      this.flat ? this.withFrame(flatTargets(this.solids, s?.node ?? null, this.fonts)) : flatTargets(this.solids, s?.node ?? null, this.fonts),
       (q) => apply(map, [q[0], q[1], 0]),
       (v) => onFloor(map, v, 0),
       scale,
+      { on: this.snapOn, with: offsets },
     );
-    this.indicator = snapped.what && snapped.at ? { at: snapped.at, what: snapped.what } : null;
+    this.show(snapped);
     return snapped.point;
   }
 
@@ -1338,7 +1374,7 @@ export class Tools {
         return;
       }
       case 'height': {
-        d.h = Math.max(0, snapValue((d.from - p.at[1]) / zScale(PROJECTION), this.step));
+        d.h = Math.max(0, snapValue((d.from - p.at[1]) / zScale(PROJECTION), this.grid));
         if (d.tool === 'cylinder') {
           this.preview = [this.ring(d.a, d.r, d.z), this.ring(d.a, d.r, d.z + d.h)];
           this.feedback = { at: p.at, text: `r ${d.r} · h ${d.h}` };
@@ -1353,15 +1389,15 @@ export class Tools {
         if (!held) return;
         const at = onFloor(PROJECTION, p.at, d.z);
         if (!at) return;
-        d.r = snapValue(Math.hypot(at[0] - d.c[0], at[1] - d.c[1]), this.step);
+        d.r = snapValue(Math.hypot(at[0] - d.c[0], at[1] - d.c[1]), this.grid);
         this.preview = [this.ring(d.c, d.r, d.z)];
         this.feedback = { at: p.at, text: `r ${d.r}` };
         return;
       }
       case 'shadow': {
         if (!held) return;
-        d.rx = snapValue(Math.abs(p.at[0] - d.from[0]) / PROJECTION[0], this.step);
-        d.ry = snapValue(Math.abs(p.at[1] - d.from[1]) / PROJECTION[1], this.step);
+        d.rx = snapValue(Math.abs(p.at[0] - d.from[0]) / PROJECTION[0], this.grid);
+        d.ry = snapValue(Math.abs(p.at[1] - d.from[1]) / PROJECTION[1], this.grid);
         this.preview = [ellipsePoints(d.from, d.rx * PROJECTION[0], d.ry * PROJECTION[1])];
         this.feedback = { at: p.at, text: `${d.rx} × ${d.ry}` };
         return;
@@ -1579,22 +1615,13 @@ export class Tools {
   private floor(p: Press, z: number): Point | null {
     const at = onFloor(PROJECTION, p.at, z);
     if (!at) return null;
-    const snapped = snapPoint(
-      at,
-      this.step,
-      targets(this.solids, null, z),
-      (q) => apply(PROJECTION, [q[0], q[1], z]),
-      (v) => onFloor(PROJECTION, v, z),
-      p.scale,
-    );
-    this.indicator = snapped.what && snapped.at ? { at: snapped.at, what: snapped.what } : null;
-    return snapped.point;
+    return this.snapFloor(at, PROJECTION, z, null, p.scale).point;
   }
 
   /** The point on a box's side under a press, as (along, z) at the step. */
   private wallPoint(f: { face: 'front' | 'right'; wall: number; map: Map3 }, p: Press): Point | null {
     const at = onWall(f.map, p.at, f.face, f.wall);
-    return at && [snapValue(at[0], this.step), Math.max(0, snapValue(at[1], this.step))];
+    return at && [snapValue(at[0], this.grid), Math.max(0, snapValue(at[1], this.grid))];
   }
 
   /** A box's edges, or a footprint's, on the viewBox. */
@@ -1713,6 +1740,25 @@ const pairs = (v: number[]): Point[] => {
   for (let i = 0; i + 1 < v.length; i += 2) out.push([v[i]!, v[i + 1]!]);
   return out;
 };
+
+/** Where the snap switches are remembered. */
+const SNAP_KEY = 'snapTargets';
+
+function stored(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function remember(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // remembered or not, it applies now
+  }
+}
 
 /** Where a flat shape is: its first point, or its corner or center. */
 function first(s: Solid): Point | null {
