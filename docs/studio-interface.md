@@ -155,9 +155,24 @@ Consecutive flat shapes in a part share the anchor.
 | Polygon | G | Click each corner; click the first, or Enter, to close; Esc cancels. | `poly { pt … }` |
 | Pen | P | Click for a corner; drag for a smooth point with mirrored handles; click the first point to close (dragging there sets its handles); Enter leaves it open; Esc cancels. | `path d="M… C… Z"` |
 | Text | X | Click on an anchor and type; font, style, size and alignment in Design. | `text x y "…" font=…` |
+| Insert | I | Choose a fragment from the list (found by name), then click where it goes; or drag one from the list, or a fragment's card in the Tree's focus view, onto the canvas. | `insert "f" cx=… cy=…` |
+| Badge | Shift+B | Choose an icon, then click near the corner it goes in; or drag one from the list or the Tree. | `badge "icon" corner=…` |
 
 While the pen or polygon tool is drawing, the segment to the pointer is
 shown dashed, the first point is filled, and each point's handles show.
+
+**Insert and Badge** list what they place, as Inkscape's Symbols
+dialog does: the library's fragments, or its icons, found by name. An
+insert goes where it is dropped, at the snap step, as the fragment's own
+params when it has a pair for it (`cx` and `cy`, or `x0` and `y0`; `x`
+and `y` are the language's own), else moved there on the screen by a
+`transform translate=` round it; a flat fragment goes on the anchor flat
+shapes are drawn on. A badge goes at the corner of the frame nearest the
+drop. Either is selected as one thing after, one undo step. One that
+would make a cycle is refused, naming the definitions it would join
+(*That would make a cycle: peg → chain → peg*), as are an icon with a
+badge of its own and what is not a fragment or an icon; the list shows
+those disabled, saying why.
 
 ### Selecting and shaping
 
@@ -225,6 +240,8 @@ With a shape selected:
   `repeat` (`repeat 8 "i" { facerect "front" "0.1 + i * 0.23" … }`);
 - for a path: open or closed;
 - for a badge: the icon, the corner and the scale;
+- for an insert: the fragment, and its params, each as the insert sets
+  it or the fragment's default; each opens what it places;
 - Duplicate, Bring forward, Send back, Delete.
 
 With nothing selected: the icon's footprint (from what is drawn, read
@@ -464,3 +481,4 @@ Two dialogs from the top bar manage what is not drawn:
 | The Tree's focus view | #113 |
 | Align and Distribute, and selecting several | #114 |
 | Transform, and the turn handles | #115 |
+| Insert and Badge | #116 |

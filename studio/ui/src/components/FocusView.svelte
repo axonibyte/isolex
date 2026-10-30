@@ -129,6 +129,8 @@
                 disabled={!n.kind}
                 title={broken ? broken.map((d) => d.message).join('\n') : n.name}
                 onclick={() => open(n)}
+                draggable={n.kind === 'Fragment' || n.kind === 'Icon'}
+                ondragstart={(e) => e.dataTransfer?.setData('application/x-isolex-place', JSON.stringify({ kind: n.kind === 'Fragment' ? 'insert' : 'badge', name: n.name }))}
                 onpointerenter={() => hover(n)}
                 onpointerleave={() => hover(null)}
                 onfocus={() => hover(n)}

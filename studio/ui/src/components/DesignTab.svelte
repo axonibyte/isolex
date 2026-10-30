@@ -14,6 +14,7 @@
   import type { IrIcon } from '../lib/isolex/ir';
   import FontDesign from './FontDesign.svelte';
   import TextDesign from './TextDesign.svelte';
+  import PlacedDesign from './PlacedDesign.svelte';
   import { DEFAULT_PALETTE } from '../lib/theme';
   import { apply, SLOTS, FLAT, type Point } from '../lib/geometry';
   import { argText, counter, inRepeat, propsOf, stepIn, withArg } from '../lib/kdl';
@@ -323,6 +324,8 @@
 
     {#if kind === 'text' && studio.selected}
       <TextDesign {studio} {tools} node={studio.selected} {text} />
+    {:else if (kind === 'insert' || kind === 'badge') && studio.selected}
+      <PlacedDesign {studio} {tools} node={studio.selected} {kind} {text} />
     {:else}
     <section aria-labelledby="paint">
       <h3 id="paint">Paint</h3>

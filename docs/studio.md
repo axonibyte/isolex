@@ -88,6 +88,8 @@ the pointer: a box started on another stands on it.
 | Polygon | G | Click each corner; click the first, or Enter, to close. |
 | Pen | P | Click for a corner, drag for a smooth point; click the first point to close, Enter to leave it open. |
 | Text | X | Click to set words in the library's font. |
+| Insert | I | Choose a fragment, then click where it goes; or drag one onto the canvas, from the list or the Tree. |
+| Badge | Shift+B | Choose an icon, then click near a corner; or drag one onto the canvas. |
 
 Esc stops what is being drawn. Flat shapes are drawn on one anchor at
 the origin, so a flat icon's numbers are its canvas's.

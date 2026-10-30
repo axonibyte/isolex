@@ -17,6 +17,7 @@
   import { TOOLS, fits, toolFor, type Tool } from './lib/keymap';
   import DesignTab from './components/DesignTab.svelte';
   import ArrangeTab from './components/ArrangeTab.svelte';
+  import PlacePicker from './components/PlacePicker.svelte';
   import PreviewTab from './components/PreviewTab.svelte';
   import TreeTab from './components/TreeTab.svelte';
   import LibraryDialog from './components/LibraryDialog.svelte';
@@ -172,6 +173,8 @@
     select: 'Click to select, again to rotate and scale · drag to move · Alt+drag lifts · arrows nudge, PageUp and PageDown raise and lower',
     node: 'Drag a point or a handle · Alt keeps a smooth point’s handles apart · Alt+click switches corner and smooth · double-click a side adds a point · Delete removes one',
     hand: 'Drag to pan',
+    insert: 'Choose a fragment, then click where it goes, or drag it in · it snaps to the step',
+    badge: 'Choose an icon, then click near the corner it goes in, or drag it in',
     box: 'Drag a footprint, move up for the height, and click · started on a top face, it stands on it',
     tile: 'Drag a footprint on the floor',
     cylinder: 'Drag from the center out to the radius, move up for the height, and click',
@@ -404,6 +407,9 @@
               <button aria-pressed={studio.fontStyle.includes(s)} onclick={() => studio.toggleStyle(s)}>{s}</button>
             {/each}
           </div>
+        {/if}
+        {#if icon && (tools.tool === 'insert' || tools.tool === 'badge')}
+          <PlacePicker {studio} {tools} kind={tools.tool} />
         {/if}
         {#if icon}
           <label class="snap">
@@ -670,8 +676,12 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
-    padding: 10px 0;
+    gap: 2px;
+    padding: 8px 0;
+    /* a short window scrolls the tools, never over the status bar */
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-width: none;
     background: var(--panel);
     border-right: 1px solid var(--line);
   }
@@ -683,8 +693,9 @@
   }
   .tool {
     position: relative;
-    width: 38px;
-    height: 38px;
+    flex: none;
+    width: 36px;
+    height: 34px;
     display: grid;
     place-items: center;
     border-radius: 9px;

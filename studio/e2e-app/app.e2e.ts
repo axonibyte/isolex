@@ -1,7 +1,8 @@
 // The built app, end to end (#73): opened on a copy of the sample library
 // from its command line, a box drawn with the box tool and a path with
-// the pen, another icon opened from the Tree, the library saved, and the
-// folder then checked by the compiler, which must find nothing wrong.
+// the pen, another icon opened from the Tree, a fragment inserted with
+// the Insert tool, the library saved, and the folder then checked by the
+// compiler, which must find nothing wrong.
 
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -93,6 +94,13 @@ describe('isolex studio, built', () => {
     await $('[aria-label="Icons"] [data-name="switch-poe"]').click();
     await browser.waitUntil(async () => (await canvas.getAttribute('aria-label')) === 'Canvas: switch-poe', { timeout: 30_000 });
 
+    // a fragment, chosen from the Insert tool's list and clicked in place
+    await browser.keys(['i']);
+    await $('//ul[@aria-label="Fragments"]//button[normalize-space()="disk-stack"]').click();
+    await click(await tile(1, 0.5, 0));
+    await tab('Source').click();
+    await browser.waitUntil(async () => (await sourceText()).includes('insert "disk-stack" cx=1 cy=0.5'), { timeout: 30_000, timeoutMsg: 'the insert was not written' });
+
     // saved: every changed file written
     await browser.keys(['Control', 's']);
     await browser.keys(['Control']);
@@ -101,6 +109,7 @@ describe('isolex studio, built', () => {
     const written = readFileSync(join(library, 'sample.ilx'), 'utf8');
     expect(written).toContain('box 0 2 0 1 1 0.5');
     expect(written).toContain('path d="M-30,40 L-10,40 L-10,52"');
+    expect(written).toContain('insert "disk-stack" cx=1 cy=0.5');
 
     // and the compiler finds nothing wrong with the folder (the sample's
     // one warning is not wrong)

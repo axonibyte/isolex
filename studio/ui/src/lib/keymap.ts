@@ -46,6 +46,9 @@ export const TOOLS: (Tool | null)[] = [
   { id: 'poly', key: 'G', label: 'Polygon', d: 'M10 3 17 8 14 17H6L3 8z', dims: 'any', ready: true },
   { id: 'pen', key: 'P', label: 'Pen', d: 'M4 16 12 4l4 4L6 18zM12 4l2-2 4 4-2 2', dims: 'any', ready: true },
   { id: 'text', key: 'X', label: 'Text', d: 'M4 4h12M10 4v13M7 17h6', dims: 'any', ready: true },
+  null,
+  { id: 'insert', key: 'I', label: 'Insert a fragment', d: 'M3 6h9v11H3zM8 3h9v11M7.5 9v5M5 11.5h5', dims: 'any', ready: true },
+  { id: 'badge', key: 'Shift+B', label: 'Badge an icon', d: 'M3 7h11v10H3zM15 2a3 3 0 1 0 0.01 0', dims: 'any', ready: true },
 ];
 
 /** Keys bound to something other than a tool, with or without Shift. */

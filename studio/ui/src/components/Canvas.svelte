@@ -139,6 +139,24 @@
     }
   }
 
+  /** What a drag from the Insert or Badge list, or the Tree, carries: a
+      fragment to insert or an icon to badge (#116). */
+  const PLACE = 'application/x-isolex-place';
+  function ondragover(e: DragEvent) {
+    if (icon && tools && e.dataTransfer?.types.includes(PLACE)) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+    }
+  }
+  function ondrop(e: DragEvent) {
+    const data = e.dataTransfer?.getData(PLACE);
+    if (!icon || !tools || !data) return;
+    e.preventDefault();
+    const { kind, name } = JSON.parse(data) as { kind: 'insert' | 'badge'; name: string };
+    const at = toCanvas(camera, local(e));
+    if (at.every(Number.isFinite)) void tools.place(kind, name, at);
+  }
+
   function ondblclick(e: MouseEvent) {
     if (!icon || !tools) return;
     tools.double({ at: toCanvas(camera, local(e)), shape: shapeOf(e), handle: handleOf(e), alt: e.altKey, shift: e.shiftKey, scale: camera.k });
@@ -192,6 +210,8 @@
   {onpointermove}
   {onpointerup}
   {ondblclick}
+  {ondragover}
+  {ondrop}
   onpointercancel={() => {
     pan = null;
     pressed = null;

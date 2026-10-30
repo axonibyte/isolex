@@ -88,6 +88,8 @@
         aria-current={open(r) ? 'true' : undefined}
         title={broken ? broken.map((d) => d.message).join('\n') : undefined}
         onclick={() => studio.openRow(r)}
+        draggable={r.kind === 'icon'}
+        ondragstart={(e) => e.dataTransfer?.setData('application/x-isolex-place', JSON.stringify({ kind: 'badge', name: r.name }))}
         onpointerenter={() => (hovered = r)}
         onpointerleave={() => (hovered = null)}
         onfocus={() => (hovered = r)}

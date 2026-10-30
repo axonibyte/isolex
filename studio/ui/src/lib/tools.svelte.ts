@@ -8,6 +8,7 @@
 import type { Answer, Ask, Map3, NodeAt } from './backend';
 import type { Studio } from './state.svelte';
 import { shifted } from './arrange';
+import { badgeText, drawsFlat, insertText, nearestCorner, refusal } from './place';
 import { around, composed, head, idle, inTiles, middle, pivotHandles, pivotStep, runs, stepped, wrapped, type Step } from './transform';
 import { PROJECTION, apply, counted, flatTargets, footprint, onFloor, onWall, solids as solidsOf, targets, top, topFace, zScale, FLAT, type Point, type Point3, type Solid } from './geometry';
 import {
@@ -305,6 +306,7 @@ export class Tools {
       this.studio.message = 'This is a preview: set the param as its default, or reset it, to draw';
       return;
     }
+    if (this.tool === 'insert' || this.tool === 'badge') return this.downPlace(p);
     if (DRAWS.has(this.tool)) return this.downDraw(p);
     if (this.tool === 'node') return this.downNode(p);
     if (this.tool !== 'select') return;
@@ -408,6 +410,56 @@ export class Tools {
     this.end();
     // a turn handle's drag is not a click on nothing
     return !pv && (d?.kind === 'pending' || !d);
+  }
+
+  // --- Insert and Badge ------------------------------------------------------
+
+  /** What a click with the Insert or Badge tool places (#116): a fragment
+      or an icon, chosen from the list. */
+  placing = $state<{ kind: 'insert' | 'badge'; name: string } | null>(null);
+
+  private downPlace(p: Press) {
+    const want = this.tool as 'insert' | 'badge';
+    const what = this.placing?.kind === want ? this.placing.name : null;
+    if (!what) {
+      this.studio.message = want === 'insert' ? 'Choose a fragment to insert: from the list, or drag one in' : 'Choose an icon to badge: from the list, or drag one in';
+      return;
+    }
+    void this.place(want, what, p.at);
+  }
+
+  /** `name` placed where `at` is on the viewBox, as one undo step: a
+      fragment inserted there, at the snap step, or an icon as a badge at
+      the corner nearest it. Refused, saying why, when it would make a
+      cycle, or is not what the tool places. */
+  async place(kind: 'insert' | 'badge', name: string, at: Point) {
+    const s = this.studio;
+    const graph = s.view.graph;
+    const into = s.editing;
+    if (!graph || !into || s.outline?.kind === 'font') return;
+    const why = refusal(graph, into, name, kind);
+    if (why) {
+      s.message = why;
+      return;
+    }
+    if (kind === 'badge') {
+      const vb = s.drawing?.ir.viewbox;
+      if (vb) await this.insert(badgeText(name, nearestCorner(vb, at)), 'badge', `Badge ${name} in ${into}`);
+      return;
+    }
+    const o = await s.backend.outline(name);
+    if (!o) return;
+    const params = o.params.map((q) => q.name);
+    const said = `Insert ${name} in ${into}`;
+    if (this.flat || drawsFlat(o.parts.flatMap((q) => q.shapes))) {
+      const step = this.planeStep;
+      const pt: Point = [snapValue(at[0], step), snapValue(at[1], step)];
+      return this.insertFlat(insertText(name, params, pt, pt), 'insert', said);
+    }
+    const floor = onFloor(PROJECTION, at, 0);
+    if (!floor) return;
+    const tile: Point = [snapValue(floor[0], this.step), snapValue(floor[1], this.step)];
+    return this.insert(insertText(name, params, tile, apply(PROJECTION, [tile[0], tile[1], 0])), 'insert', said);
   }
 
   /** The turn handles shown on the selection, or its own again. */
@@ -1460,15 +1512,15 @@ export class Tools {
 
   /** Writes a drawn shape into the part new shapes go into, or a new part
       when the definition has none of its own, and selects it. */
-  private async insert(text: string, kind: string) {
+  private async insert(text: string, kind: string, said?: string) {
     const s = this.studio;
     const o = s.outline;
     if (!o) return;
     const part = o.parts.find((p) => p.name === s.target && p.op !== 'remove');
     const name = part?.name ?? this.newPart();
     const answer = part
-      ? await s.ask({ kind: 'insert', parent: part.node, text, before: null }, `Draw ${kind} in ${o.definition}`)
-      : await s.ask({ kind: 'insert', parent: o.node, text: `part "${name}" {\n${indent(text)}\n}`, before: null }, `Draw ${kind} in ${o.definition}`);
+      ? await s.ask({ kind: 'insert', parent: part.node, text, before: null }, said ?? `Draw ${kind} in ${o.definition}`)
+      : await s.ask({ kind: 'insert', parent: o.node, text: `part "${name}" {\n${indent(text)}\n}`, before: null }, said ?? `Draw ${kind} in ${o.definition}`);
     if (answer.kind !== 'applied') return;
     s.target = name;
     await s.refresh();
@@ -1479,7 +1531,7 @@ export class Tools {
 
   /** Writes a flat shape on the anchor at the origin that ends the part
       drawn in, or on a new one, and selects it. */
-  private async insertFlat(text: string, kind: string) {
+  private async insertFlat(text: string, kind: string, said?: string) {
     const s = this.studio;
     const o = s.outline;
     if (!o) return;
@@ -1502,7 +1554,7 @@ export class Tools {
     const name = part?.name ?? this.newPart();
     const anchor = part?.shapes.at(-1);
     const shared = anchor?.kind === 'at' && anchor.note === 'at 0 0 0';
-    const label = `Draw ${kind} in ${o.definition}`;
+    const label = said ?? `Draw ${kind} in ${o.definition}`;
     const at = `at 0 0 0 {\n${indent(text)}\n}`;
     const answer = shared
       ? await s.ask({ kind: 'insert', parent: anchor.node, text, before: null }, label)
