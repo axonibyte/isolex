@@ -1,0 +1,307 @@
+{
+  "server, depth 2": {
+    "center": "server",
+    "depth": 2,
+    "nodes": [
+      {
+        "name": "server",
+        "kind": "Icon",
+        "column": 0,
+        "row": 0,
+        "via": null,
+        "edge": null
+      },
+      {
+        "name": "chassis",
+        "kind": "Base",
+        "column": -1,
+        "row": 0,
+        "via": "server",
+        "edge": "extends"
+      },
+      {
+        "name": "state",
+        "kind": "Axis",
+        "column": -1,
+        "row": 1,
+        "via": "server",
+        "edge": "axis"
+      },
+      {
+        "name": "led-row",
+        "kind": "Fragment",
+        "column": -1,
+        "row": 2,
+        "via": "server",
+        "edge": "insert"
+      },
+      {
+        "name": "down",
+        "kind": "Icon",
+        "column": -2,
+        "row": 0,
+        "via": "state",
+        "edge": "badge",
+        "variant": "down"
+      },
+      {
+        "name": "led",
+        "kind": "Fragment",
+        "column": -2,
+        "row": 1,
+        "via": "led-row",
+        "edge": "insert"
+      }
+    ],
+    "links": [
+      {
+        "left": "-2:led",
+        "right": "-1:led-row",
+        "kind": "insert"
+      },
+      {
+        "left": "-2:down",
+        "right": "-1:state",
+        "kind": "badge",
+        "variant": "down"
+      },
+      {
+        "left": "-1:chassis",
+        "right": "0:server",
+        "kind": "extends"
+      },
+      {
+        "left": "-1:state",
+        "right": "0:server",
+        "kind": "axis"
+      },
+      {
+        "left": "-1:led-row",
+        "right": "0:server",
+        "kind": "insert"
+      }
+    ]
+  },
+  "switch, depth 3": {
+    "center": "switch",
+    "depth": 3,
+    "nodes": [
+      {
+        "name": "switch",
+        "kind": "Icon",
+        "column": 0,
+        "row": 0,
+        "via": null,
+        "edge": null
+      },
+      {
+        "name": "chassis",
+        "kind": "Base",
+        "column": -1,
+        "row": 0,
+        "via": "switch",
+        "edge": "extends"
+      },
+      {
+        "name": "led-row",
+        "kind": "Fragment",
+        "column": -1,
+        "row": 1,
+        "via": "switch",
+        "edge": "insert"
+      },
+      {
+        "name": "mono",
+        "kind": "Font",
+        "column": -1,
+        "row": 2,
+        "via": "switch",
+        "edge": "font"
+      },
+      {
+        "name": "led",
+        "kind": "Fragment",
+        "column": -2,
+        "row": 0,
+        "via": "led-row",
+        "edge": "insert"
+      },
+      {
+        "name": "weight",
+        "kind": "Axis",
+        "column": -2,
+        "row": 1,
+        "via": "mono",
+        "edge": "axis"
+      }
+    ],
+    "links": [
+      {
+        "left": "-2:led",
+        "right": "-1:led-row",
+        "kind": "insert"
+      },
+      {
+        "left": "-2:weight",
+        "right": "-1:mono",
+        "kind": "axis"
+      },
+      {
+        "left": "-1:chassis",
+        "right": "0:switch",
+        "kind": "extends"
+      },
+      {
+        "left": "-1:led-row",
+        "right": "0:switch",
+        "kind": "insert"
+      },
+      {
+        "left": "-1:mono",
+        "right": "0:switch",
+        "kind": "font"
+      }
+    ]
+  },
+  "down, depth 3": {
+    "center": "down",
+    "depth": 3,
+    "nodes": [
+      {
+        "name": "down",
+        "kind": "Icon",
+        "column": 0,
+        "row": 0,
+        "via": null,
+        "edge": null
+      },
+      {
+        "name": "state",
+        "kind": "Axis",
+        "column": 1,
+        "row": 0,
+        "via": "down",
+        "edge": "badge",
+        "variant": "down"
+      },
+      {
+        "name": "server",
+        "kind": "Icon",
+        "column": 2,
+        "row": 0,
+        "via": "state",
+        "edge": "axis"
+      }
+    ],
+    "links": [
+      {
+        "left": "0:down",
+        "right": "1:state",
+        "kind": "badge",
+        "variant": "down"
+      },
+      {
+        "left": "1:state",
+        "right": "2:server",
+        "kind": "axis"
+      }
+    ]
+  },
+  "led, depth 3": {
+    "center": "led",
+    "depth": 3,
+    "nodes": [
+      {
+        "name": "led",
+        "kind": "Fragment",
+        "column": 0,
+        "row": 0,
+        "via": null,
+        "edge": null
+      },
+      {
+        "name": "led-row",
+        "kind": "Fragment",
+        "column": 1,
+        "row": 0,
+        "via": "led",
+        "edge": "insert"
+      },
+      {
+        "name": "server",
+        "kind": "Icon",
+        "column": 2,
+        "row": 0,
+        "via": "led-row",
+        "edge": "insert"
+      },
+      {
+        "name": "switch",
+        "kind": "Icon",
+        "column": 2,
+        "row": 1,
+        "via": "led-row",
+        "edge": "insert"
+      }
+    ],
+    "links": [
+      {
+        "left": "0:led",
+        "right": "1:led-row",
+        "kind": "insert"
+      },
+      {
+        "left": "1:led-row",
+        "right": "2:server",
+        "kind": "insert"
+      },
+      {
+        "left": "1:led-row",
+        "right": "2:switch",
+        "kind": "insert"
+      }
+    ]
+  },
+  "mono, depth 1": {
+    "center": "mono",
+    "depth": 1,
+    "nodes": [
+      {
+        "name": "mono",
+        "kind": "Font",
+        "column": 0,
+        "row": 0,
+        "via": null,
+        "edge": null
+      },
+      {
+        "name": "weight",
+        "kind": "Axis",
+        "column": -1,
+        "row": 0,
+        "via": "mono",
+        "edge": "axis"
+      },
+      {
+        "name": "switch",
+        "kind": "Icon",
+        "column": 1,
+        "row": 0,
+        "via": "mono",
+        "edge": "font"
+      }
+    ],
+    "links": [
+      {
+        "left": "-1:weight",
+        "right": "0:mono",
+        "kind": "axis"
+      },
+      {
+        "left": "0:mono",
+        "right": "1:switch",
+        "kind": "font"
+      }
+    ]
+  }
+}

@@ -1,7 +1,8 @@
 // The Tree tab (#71) in the window, over the studio's core: the library
 // nested as the core's tree has it, opening an icon or a variant, an edit
 // marking what it redrew and not drawing again what it did not, a broken
-// icon keeping its last drawing, and how a row relates to what is open.
+// icon keeping its last drawing, and how a row relates to what is open;
+// the focus view (#113) of what is open, to a depth, opening and live.
 // Timed over the generated library of 500 icons.
 
 import { afterEach, describe, expect, it } from 'vitest';
@@ -121,6 +122,84 @@ describe('the Tree tab', () => {
     expect(said()).toBe('switch-poe-planned: Variant planned of axis state, of switch-poe, which is being edited');
     await hover('switch-poe');
     expect(said()).toBe('switch-poe: Being edited');
+  });
+});
+
+describe('the Tree’s focus view', () => {
+  const focused = async () => {
+    const o = await opened();
+    await fireEvent.click(row('switch-poe'));
+    await screen.findByRole('application', { name: 'Canvas: switch-poe' });
+    await fireEvent.click(screen.getByRole('radio', { name: 'Focus' }));
+    return o;
+  };
+  const named = (b: Element) => b.getAttribute('data-key')!.replace(/^-?\d+:/, '');
+  /** The names in a column, by its heading. */
+  const column = (heading: string) => {
+    const ul = screen.queryByRole('list', { name: heading });
+    return ul ? within(ul).getAllByRole('button').map(named) : [];
+  };
+  const card = (name: string) => screen.getAllByRole('button').find((b) => b.hasAttribute('data-key') && named(b) === name)!;
+  const depth = () => screen.getByRole('spinbutton', { name: 'Depth' }) as HTMLInputElement;
+  const deepen = (to: number) => fireEvent.change(depth(), { target: { value: String(to) } });
+
+  it('shows what is open, what it depends on and what depends on it, to a depth', async () => {
+    await focused();
+    expect(column('Being edited')).toEqual(['switch-poe']);
+    expect(column('Depends on, step 1')).toEqual(['switch-l2', 'state', 'mini-glyph', 'disk-stack', 'state-down']);
+    expect(column('Depends on, step 2')).toEqual(['switch', 'state-planned']);
+    expect(column('Depended on by, step 1')).toEqual([]);
+    expect(card('switch-poe').getAttribute('aria-current')).toBe('true');
+    // an icon is drawn; a fragment, an axis and a base are named
+    expect(card('state-down').querySelector('svg')).not.toBeNull();
+    expect(card('disk-stack').textContent).toContain('fragment');
+    await deepen(1);
+    expect(column('Depends on, step 2')).toEqual([]);
+    await deepen(3);
+    expect(column('Depends on, step 3')).toEqual(['rack-unit']);
+    // no further than 3
+    await deepen(7);
+    expect(depth().value).toBe('3');
+  });
+
+  it('opens a definition with a click, and centers on it', async () => {
+    await focused();
+    await fireEvent.click(card('switch-l2'));
+    await screen.findByRole('application', { name: 'Canvas: switch-l2' });
+    await waitFor(() => expect(column('Being edited')).toEqual(['switch-l2']));
+    expect(column('Depended on by, step 1')).toEqual(['switch-l3', 'switch-poe']);
+    // an axis is edited in its icon's frame
+    await fireEvent.click(card('switch-poe'));
+    await waitFor(() => expect(column('Being edited')).toEqual(['switch-poe']));
+    await fireEvent.click(card('state'));
+    await waitFor(() => expect(column('Being edited')).toEqual(['state']));
+    expect(column('Depends on, step 1')).toEqual(['state-down', 'state-planned']);
+    expect(column('Depended on by, step 1')).toEqual(['switch-poe']);
+  });
+
+  it('says how a hovered definition relates to what is open', async () => {
+    await focused();
+    const said = () => within(screen.getByRole('tabpanel')).getAllByRole('status').at(-1)!.textContent;
+    await fireEvent.pointerEnter(card('state-down'));
+    expect(said()).toBe('state-down: switch-poe badges it');
+    await fireEvent.pointerEnter(card('state-planned'));
+    expect(said()).toBe('state-planned: state badges it, in variant planned');
+    await fireEvent.pointerEnter(card('switch'));
+    expect(said()).toBe('switch: switch-l2 extends it');
+  });
+
+  it('marks what an edit redrew, and is remembered', async () => {
+    const { typed } = await focused();
+    expect(card('switch-poe').querySelector('.redrawn')).toBeNull();
+    await typed('tile 0 0 0 2 1', 'tile 0 0 0 2.5 1');
+    await waitFor(() => expect(card('switch-poe').querySelector('.redrawn')).not.toBeNull());
+    expect(card('state-down').querySelector('.redrawn')).toBeNull();
+    // the view and its depth kept, away from the tab and back
+    await deepen(3);
+    await fireEvent.click(screen.getByRole('tab', { name: 'Source' }));
+    await fireEvent.click(screen.getByRole('tab', { name: 'Tree' }));
+    expect((screen.getByRole('radio', { name: 'Focus' }) as HTMLInputElement).checked).toBe(true);
+    expect(column('Depends on, step 3')).toEqual(['rack-unit']);
   });
 });
 

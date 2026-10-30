@@ -112,7 +112,11 @@ it here.
 - **Tree:** every icon as a live thumbnail, nested by `extends`, its
   variants under it, and the fonts with their styles. An edit marks what
   it redrew; a broken icon keeps its last drawing and says why. Hovering
-  says how an icon relates to what is open; a click opens it.
+  says how an icon relates to what is open; a click opens it. *Focus*
+  shows instead what is open in the middle, what it depends on to its
+  left and what depends on it to its right, a column a step, to a depth
+  of 1 to 3, with a line for each reference: extends, inserts, badges,
+  opts into an axis, sets text in a font.
 - **Preview:** the icon at 16 to 128 px, light and dark.
 
 ## Fonts

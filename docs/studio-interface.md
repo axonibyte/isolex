@@ -254,6 +254,15 @@ Every icon of the library as a live thumbnail:
   being edited is marked;
 - hovering an icon says how it relates to what is open.
 
+**Focus** shows the definition being edited as Unreal's Reference
+Viewer shows an asset: it in the middle, what it depends on (`extends`,
+`insert`, `badge`, axes, fonts) in columns to its left and what depends
+on it to its right, a column a step, to a depth of 1 to 3 that a stepper
+sets. A line runs from each definition to what it refers to, drawn by
+kind. It is as live as the library view, a click opens a definition
+and centers the view on it, and hovering one says how it relates to the
+middle. The view and its depth are remembered.
+
 ## Preview
 
 The open icon as isolex draws it at 16, 24, 32, 64 and 128 px, each on
@@ -404,3 +413,4 @@ Two dialogs from the top bar manage what is not drawn:
 | Fonts and the text tool | #84 |
 | The welcome panel, Library and Lexicon Properties, the out-of-sync strip | #72 |
 | Export, and a new library from an exported zip | #112 |
+| The Tree's focus view | #113 |

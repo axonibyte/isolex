@@ -7,6 +7,8 @@
   kept and its errors on hover; one it did not change is not drawn again.
   A click opens that icon, or that variant, for editing; the one being
   edited is marked; hovering says how a row relates to what is open.
+  Its focus view (#113) shows instead what is open, what it depends on
+  and what depends on it, to a depth.
 -->
 <script lang="ts">
   import type { Studio } from '../lib/state.svelte';
@@ -17,6 +19,8 @@
   import { sampleSource } from '../lib/font';
   import type { IrIcon } from '../lib/isolex/ir';
   import { inShell } from '../lib/backend';
+  import { DEPTHS, clampDepth, focusDepth, setFocusDepth, setTreeView, treeView, type TreeView } from '../lib/focus';
+  import FocusView from './FocusView.svelte';
 
   interface Props {
     studio: Studio;
@@ -29,6 +33,13 @@
   const view = $derived(studio.view);
   let hovered = $state<TreeRow | null>(null);
   const said = $derived(hovered && view.graph ? relation(view.graph, hovered, studio.editing, studio.icon) : '');
+  /** What the focus view's hovered node says. */
+  let focusSaid = $state('');
+
+  let mode = $state<TreeView>(treeView());
+  let depth = $state(focusDepth());
+  $effect(() => setTreeView(mode));
+  $effect(() => setFocusDepth(depth));
 
   /** The row open: its definition edited, its icon (if it has one) drawn. */
   const open = (r: TreeRow) => r.definition === studio.editing && (!r.icon || r.icon === studio.icon);
@@ -107,22 +118,49 @@
 {/snippet}
 
 <div class="tree {look}">
-  <ul class="top" aria-label="Icons">
-    {@render rows(view.tree?.icons ?? [], 0)}
-  </ul>
-  <div class="fonts-head">
-    <h3>Fonts</h3>
-    <button onclick={() => (importing = true)} disabled={!inShell()} title={inShell() ? 'A TrueType, OpenType or WOFF font, as an isolex font' : 'Fonts are imported in the studio’s app'}>Import…</button>
+  <div class="head">
+    <div class="views" role="radiogroup" aria-label="Tree view">
+      <label><input type="radio" bind:group={mode} value="library" /> Library</label>
+      <label><input type="radio" bind:group={mode} value="focus" /> Focus</label>
+    </div>
+    {#if mode === 'focus'}
+      <label class="depth">
+        Depth
+        <input
+          type="number"
+          min={DEPTHS[0]}
+          max={DEPTHS.at(-1)}
+          step="1"
+          value={depth}
+          onchange={(e) => {
+            depth = clampDepth(e.currentTarget.valueAsNumber, depth);
+            e.currentTarget.value = String(depth);
+          }}
+        />
+      </label>
+    {/if}
   </div>
-  {#if view.tree?.fonts.length}
-    <ul class="top" aria-label="Fonts">
-      {@render rows(view.tree.fonts, 0)}
-    </ul>
+  {#if mode === 'focus'}
+    <FocusView {studio} {depth} onhint={(s) => (focusSaid = s)} />
+    <p class="said" role="status">{focusSaid}</p>
   {:else}
-    <p class="none">No fonts yet: import one to set text.</p>
+    <ul class="top" aria-label="Icons">
+      {@render rows(view.tree?.icons ?? [], 0)}
+    </ul>
+    <div class="fonts-head">
+      <h3>Fonts</h3>
+      <button onclick={() => (importing = true)} disabled={!inShell()} title={inShell() ? 'A TrueType, OpenType or WOFF font, as an isolex font' : 'Fonts are imported in the studio’s app'}>Import…</button>
+    </div>
+    {#if view.tree?.fonts.length}
+      <ul class="top" aria-label="Fonts">
+        {@render rows(view.tree.fonts, 0)}
+      </ul>
+    {:else}
+      <p class="none">No fonts yet: import one to set text.</p>
+    {/if}
+    {#if importing}<ImportFont {studio} onclose={() => (importing = false)} />{/if}
+    <p class="said" role="status">{said ? `${hovered!.name}: ${said}` : ''}</p>
   {/if}
-  {#if importing}<ImportFont {studio} onclose={() => (importing = false)} />{/if}
-  <p class="said" role="status">{said ? `${hovered!.name}: ${said}` : ''}</p>
 </div>
 
 <style>
@@ -132,6 +170,33 @@
     min-height: 100%;
     padding: 6px 0 0;
     background: transparent;
+  }
+  .head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 0 12px 6px;
+    font-size: 12px;
+  }
+  .views {
+    display: flex;
+    gap: 10px;
+  }
+  .depth {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--muted);
+  }
+  .depth input {
+    width: 3.5em;
+    padding: 1px 4px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: var(--raised);
+    color: var(--fg);
+    font-size: 12px;
   }
   ul {
     margin: 0;
