@@ -10,8 +10,9 @@ isolex compiler draws. Its interface is specified in
 
 ## Installing it
 
-Each release of isolex on the forge carries the studio's installers
-beside the compiler's binaries, with `SHA256SUMS-studio`:
+The studio has releases of its own on the forge, tagged
+`studio-<version>` (`studio-0.2.0`), apart from the compiler's. Each
+carries the installers, with `SHA256SUMS-studio`:
 
 | Platform | File |
 |---|---|
@@ -256,15 +257,20 @@ Windows, run on every push to the GitHub mirror
 (`.github/workflows/studio.yml`); the forge's CI reports what GitHub
 says of the same commit, without failing on it.
 
-**Releases.** A bare version tag (`0.6.0`) makes the forge's CI create
-the release with the compiler's binaries.
-`.github/workflows/studio-release.yml` builds the installers for the
-same tag on GitHub, once the mirror carries it there, and leaves them
-as one artifact with `SHA256SUMS-studio`. The forge's CI waits for that
-run, downloads the artifact, checks it against the sums, and attaches
-it to the release itself. Downloading an artifact needs a GitHub token,
-so the forge holds the secret `GH_ARTIFACTS_TOKEN`: a fine-grained
-token with read-only access to public repositories.
+**Releases.** The studio has a version of its own, written in
+`studio/src-tauri/tauri.conf.json`, `studio/package.json` and
+`studio/src-tauri/Cargo.toml`, and releases on a tag `studio-<version>`
+(`studio-0.2.0`); a bare tag (`0.6.0`) releases the compiler alone. The
+forge's CI refuses a studio tag that is not the version all three
+carry, before anything is released. `.github/workflows/studio-release.yml`
+builds the installers for the tag on GitHub, once the mirror carries it
+there, and leaves them as one artifact with LICENSE, NOTICE and
+`SHA256SUMS-studio`. The forge's CI waits for that run, downloads the
+artifact, checks it against the sums, and only then creates the
+release, *isolex studio <version>*, and attaches it. Downloading an
+artifact needs a GitHub token, so the forge holds the secret
+`GH_ARTIFACTS_TOKEN`: a fine-grained token with read-only access to
+public repositories.
 
 The app's icon is drawn in isolex: `studio/src-tauri/icons/icon.ilx`,
 rendered to `icon.svg`, from which `npm run tauri -- icon

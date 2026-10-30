@@ -37,9 +37,12 @@ name: ci
 on:
   push:
     branches: [main]
-    # Releases are tagged with the bare version, as 0.1.0 and 0.1.1 were:
-    # 0.1.2, never v0.1.2.
-    tags: ['[0-9]*']
+    # The compiler's releases are tagged with the bare version, as 0.1.0
+    # and 0.1.1 were: 0.1.2, never v0.1.2. The studio's are tagged
+    # studio-<version> (studio-0.2.0), and carry only its installers: it
+    # has a version of its own, and releases when the compiler has not
+    # changed.
+    tags: ['[0-9]*', 'studio-*']
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -218,8 +221,8 @@ jobs:
           fi
           exit 0
 
-      - name: on a tag, the tag and Cargo.toml must agree
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: on a compiler tag, the tag and Cargo.toml must agree
+        if: startsWith(github.ref, 'refs/tags/') && !startsWith(github.ref, 'refs/tags/studio-')
         run: |
           set -o pipefail
           cd src
@@ -231,6 +234,27 @@ jobs:
             "$ver") echo "they agree" ;;
             *) echo "REFUSED: tag $tag is not version $ver (tags are the bare version)"; exit 1 ;;
           esac
+
+      # THE STUDIO'S VERSION IS WRITTEN THREE TIMES, and the installers are
+      # named from tauri.conf.json's. A bump that missed one would release
+      # under a name the others contradict, so all three must be the tag's.
+      - name: on a studio tag, the tag and the studio's version must agree
+        if: startsWith(github.ref, 'refs/tags/studio-')
+        run: |
+          set -o pipefail
+          cd src/studio
+          tag="${GITHUB_REF_NAME}"
+          want="${tag#studio-}"
+          bad=0
+          for f in src-tauri/tauri.conf.json package.json src-tauri/Cargo.toml; do
+            # the first version line, and sed quits there: no head to close
+            # the pipe under pipefail
+            ver=$(sed -En '/^ *"?version"? *[:=]/{s/^[^:=]*[:=] *"([^"]*)".*/\1/p;q;}' "$f")
+            echo "$f: ${ver:-NO VERSION}"
+            [ "$ver" = "$want" ] || bad=1
+          done
+          [ "$bad" = 0 ] || { echo "REFUSED: tag $tag is not studio-<the studio's version> in all three"; exit 1; }
+          echo "tag $tag: they agree"
 
       # THE RELEASE PATH, DRIVEN WITHOUT A TAG. Everything in the step below
       # runs only on refs/tags, so nothing exercises the token's reach or the
@@ -315,8 +339,8 @@ jobs:
       # reqPackageAccess -- and it is the same token rumor's tag-pipeline has
       # created every one of its releases with. The destination that is
       # correct is also the one that works without a person's credential.
-      - name: on a tag, create the release and attach the binaries and the module
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: on a compiler tag, create the release and attach the binaries and the module
+        if: startsWith(github.ref, 'refs/tags/') && !startsWith(github.ref, 'refs/tags/studio-')
         env:
           RELEASE_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -441,14 +465,18 @@ jobs:
           cmp -s "../dist/$fname" "../fetched-$fname" || { echo "the served asset is not the file this run built"; exit 1; }
           echo "read back anonymously -> $got, $fname byte-identical to the build"
 
-  # THE STUDIO'S INSTALLERS, ATTACHED BY THIS FORGE, NOT PUSHED TO IT. Tauri
-  # does not build in this jail, so GitHub builds them on the same tag, once
-  # the push mirror carries it there (.github/workflows/studio-release.yml),
-  # and leaves them as one artifact, studio-installers, with
+  # THE STUDIO'S RELEASE, MADE BY THIS FORGE, NOT PUSHED TO IT. A studio
+  # tag (studio-0.2.0) releases the studio alone: the compiler keeps its
+  # own bare tags, and a studio release does not give it a version that
+  # changes nothing. Tauri does not build in this jail, so GitHub builds
+  # the installers on the same tag, once the push mirror carries it there
+  # (.github/workflows/studio-release.yml), and leaves them as one
+  # artifact, studio-installers, with LICENSE, NOTICE and
   # SHA256SUMS-studio inside. This job waits for that run, downloads the
-  # artifact, checks every file against the sums, and attaches them to the
-  # release the build job made, with the token Forgejo mints per run: GitHub
-  # holds no credential for the forge. Downloading an artifact needs a
+  # artifact, checks every file against the sums, then creates the release
+  # and attaches them, with the token Forgejo mints per run: GitHub holds
+  # no credential for the forge. The release is made only once there is
+  # something to put in it, so a failed build leaves no empty release. Downloading an artifact needs a
   # GitHub token even from a public repository, so the forge holds one,
   # GH_ARTIFACTS_TOKEN: a fine-grained token with read-only access to public
   # repositories and nothing else.
@@ -458,11 +486,11 @@ jobs:
   # forge publishing everything itself, and it is paid once per release.
   studio:
     needs: build
-    if: startsWith(github.ref, 'refs/tags/')
+    if: startsWith(github.ref, 'refs/tags/studio-')
     runs-on: freebsd-15-jail
     timeout-minutes: 120
     steps:
-      - name: on a tag, wait for GitHub's studio build, and attach its installers
+      - name: on a studio tag, wait for GitHub's build, and release its installers
         env:
           RELEASE_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_TOKEN: ${{ secrets.GH_ARTIFACTS_TOKEN }}
@@ -472,6 +500,7 @@ jobs:
           [ -n "$GH_TOKEN" ] || { echo "GH_ARTIFACTS_TOKEN is not set: GitHub's artifact cannot be downloaded"; exit 1; }
           command -v jq > /dev/null 2>&1 || { echo "jq is ABSENT and this step reads JSON with it. PROVISIONING finding."; exit 1; }
           tag="${GITHUB_REF_NAME}"
+          ver="${tag#studio-}"
           forge="${GITHUB_SERVER_URL:-https://forge.axonibyte.com}"
           api="$forge/api/v1/repos/${GITHUB_REPOSITORY}"
           gh="https://api.github.com/repos/axonibyte/isolex"
@@ -545,13 +574,24 @@ jobs:
           done < SHA256SUMS-studio
           files=$(ls | grep -cvxF SHA256SUMS-studio)
           [ "$n" -ge 1 ] && [ "$n" = "$files" ] || { echo "SHA256SUMS-studio lists $n file(s) and the artifact holds $files"; exit 1; }
-          echo "checked $n installer(s) against SHA256SUMS-studio"
+          echo "checked $n file(s) against SHA256SUMS-studio"
 
-          # THE RELEASE THE BUILD JOB MADE. A re-run attaches what is missing
-          # and never replaces a file already published.
-          code=$(timeout 60 curl --config "$fcfg" -s -o "$work/rel.json" -w '%{http_code}' "$api/releases/tags/$tag")
-          [ "$code" = 200 ] || { echo "reading release $tag answered $code"; exit 1; }
+          # THE RELEASE, created now, and a prerelease while the studio is
+          # 0.x, as the compiler's are. A re-run finds it (409) and attaches
+          # what is missing; it never replaces a file already published.
+          case "$ver" in 0.*) pre=true ;; *) pre=false ;; esac
+          payload=$(jq -nc --arg t "$tag" --arg n "isolex studio $ver" --argjson p "$pre"                     '{tag_name: $t, name: $n, draft: false, prerelease: $p}')
+          code=$(printf '%s' "$payload" | timeout 60 curl --config "$fcfg" -s -o "$work/rel.json" -w '%{http_code}'                  -X POST -H 'Content-Type: application/json' --data-binary @- "$api/releases")
+          case "$code" in
+            200 | 201) echo "created release $tag" ;;
+            409)
+              code=$(timeout 60 curl --config "$fcfg" -s -o "$work/rel.json" -w '%{http_code}' "$api/releases/tags/$tag")
+              [ "$code" = 200 ] || { echo "release $tag exists and cannot be read back: $code"; exit 1; }
+              echo "release $tag already exists; attaching to it" ;;
+            *) echo "creating the release for $tag answered $code"; head -c 300 "$work/rel.json"; exit 1 ;;
+          esac
           id=$(jq -r '.id' < "$work/rel.json")
+          if [ -z "$id" ] || [ "$id" = null ]; then echo "the forge answered without a release id"; exit 1; fi
           have=$(jq -r '.assets[].name' < "$work/rel.json")
           for f in *; do
             if printf '%s\n' "$have" | grep -qxF "$f"; then
@@ -575,9 +615,10 @@ jobs:
             jq -e --arg f "$f" 'any(.assets[]; .name == $f)' < "$work/rel2.json" > /dev/null \
               || { echo "REFUSED: release $tag does not carry $f"; exit 1; }
           done
-          first=$(ls | awk '$0 != "SHA256SUMS-studio" && !n++')
+          first=$(ls | awk '/^isolex-studio-/ && !n++')
+          [ -n "$first" ] || { echo "the artifact holds no installer"; exit 1; }
           dl=$(jq -r --arg f "$first" '.assets[] | select(.name == $f) | .browser_download_url' < "$work/rel2.json")
           code=$(timeout 900 curl -sS -L -o "$work/fetched" -w '%{http_code}' "$dl")
           [ "$code" = 200 ] || { echo "downloading $first anonymously answered $code"; exit 1; }
           cmp -s "$first" "$work/fetched" || { echo "the served $first is not the file GitHub built"; exit 1; }
-          echo "asserted: release $tag carries the studio's $n installer(s) and SHA256SUMS-studio; $first read back byte-identical"
+          echo "asserted: release $tag carries the studio's $n file(s) and SHA256SUMS-studio; $first read back byte-identical"

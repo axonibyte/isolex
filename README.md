@@ -60,8 +60,9 @@ the IR with the errors and warnings as data; with `"icon"` and
 `"params"` too, it compiles that one icon with those params set, for a
 host drawing a value of one thing (`isolex::compile_one`), and with
 `"requests"`, many such icons from one parse (`isolex::compile_many`); [wasm/src/lib.rs](wasm/src/lib.rs)
-documents its four exports, and `isolex::json` the shapes. Each release
-publishes it as `isolex-<version>.wasm`.
+documents its four exports, and `isolex::json` the shapes. Each of the
+compiler's releases (a bare tag, `0.6.0`) publishes it as
+`isolex-<version>.wasm`.
 
 A host with a file system reads a lexicon's folder with
 `isolex::library::load`, as the command line does: every `.ilx` file
