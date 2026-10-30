@@ -61,7 +61,7 @@ The first icon the library emits opens on the canvas.
   and south, Shift+wheel east and west, Space+drag or the middle button
   pans, and 0 fits the icon. The snap step is at its top left, and a
   hint at its foot says what the tool does.
-- **Tabs:** Design, Source, Tree and Preview.
+- **Tabs:** Design, Arrange, Source, Tree and Preview.
 - **Status bar:** whether the library compiles (a click lists its
   problems, each opening its place in the Source tab), and where the
   pointer is.
@@ -98,7 +98,7 @@ or replace it with a number; a part or a param inherited from a base
 offers to change it there (naming the icons that follow) or to override
 it here.
 
-## Design, Source, Tree, Preview
+## Design, Arrange, Source, Tree, Preview
 
 - **Design**, with a shape selected: its numbers as the source writes
   them (a number, or an expression typed as one), its paint from the
@@ -108,6 +108,11 @@ it here.
   order. With nothing selected: the icon's footprint or canvas, and its
   params, each with a slider that previews a value on the canvas and
   *Set as default*, which writes it.
+- **Arrange** (Ctrl+Shift+A): Align and Distribute the shapes selected
+  (Shift+click for several), along x, y and z, or a flat shape's x and
+  y, relative to the first or last chosen, the selection, or the
+  footprint (a flat icon's canvas); or spread three or more evenly, by
+  middles or gaps. Each is one undo step.
 - **Source:** the file, as you type it; it compiles as you type, and the
   selection follows the caret.
 - **Tree:** every icon as a live thumbnail, nested by `extends`, its

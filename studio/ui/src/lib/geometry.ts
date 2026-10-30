@@ -10,6 +10,10 @@ import { pick } from './select';
 export type Point = [number, number];
 export type Point3 = [number, number, number];
 
+/** The projection a node written in the edited definition is drawn
+    with, unturned (SPEC §7). */
+export const PROJECTION: Map3 = [34.64101615137754, 20, -34.64101615137754, 20, 0, -40, 0, 0];
+
 /** A node's point on the viewBox. */
 export const apply = (m: Map3, [x, y, z]: Point3): Point => [m[0] * x + m[2] * y + m[4] * z + m[6], m[1] * x + m[3] * y + m[5] * z + m[7]];
 

@@ -16,6 +16,7 @@
   import { Tools } from './lib/tools.svelte';
   import { TOOLS, fits, toolFor, type Tool } from './lib/keymap';
   import DesignTab from './components/DesignTab.svelte';
+  import ArrangeTab from './components/ArrangeTab.svelte';
   import PreviewTab from './components/PreviewTab.svelte';
   import TreeTab from './components/TreeTab.svelte';
   import LibraryDialog from './components/LibraryDialog.svelte';
@@ -41,7 +42,7 @@
   const studio = new Studio(backend);
   let windowTheme = $state<Theme>(theme());
   let canvas = $state<CanvasTheme>(canvasTheme());
-  let tab = $state<'design' | 'source' | 'tree' | 'preview'>('source');
+  let tab = $state<'design' | 'arrange' | 'source' | 'tree' | 'preview'>('source');
   let pointer = $state('');
   let versions = $state<{ studio: string; isolex: string } | null>(null);
   let canvasView: ReturnType<typeof Canvas> | undefined = $state();
@@ -188,6 +189,7 @@
 
   const TABS = [
     ['design', 'Design'],
+    ['arrange', 'Arrange'],
     ['source', 'Source'],
     ['tree', 'Tree'],
     ['preview', 'Preview'],
@@ -248,6 +250,12 @@
     if (mod && e.shiftKey && key === 'e' && library) {
       e.preventDefault();
       dialog = 'export';
+      return;
+    }
+    // Align and Distribute, as Inkscape opens it
+    if (mod && e.shiftKey && key === 'a' && library) {
+      e.preventDefault();
+      tab = 'arrange';
       return;
     }
     // in a text field, its own undo and keys apply
@@ -422,6 +430,8 @@
             <SourceTab {studio} />
           {:else if tab === 'design'}
             <DesignTab {studio} {tools} {icon} look={canvas === 'dark' ? 'iso-dark' : 'iso-light'} />
+          {:else if tab === 'arrange'}
+            <ArrangeTab {studio} {tools} />
           {:else if tab === 'preview'}
             <PreviewTab icon={shown} />
           {:else if tab === 'tree'}

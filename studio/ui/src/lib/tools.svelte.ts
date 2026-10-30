@@ -7,7 +7,8 @@
 
 import type { Answer, Ask, Map3, NodeAt } from './backend';
 import type { Studio } from './state.svelte';
-import { apply, counted, flatTargets, footprint, onFloor, onWall, solids as solidsOf, targets, top, topFace, zScale, FLAT, type Point, type Point3, type Solid } from './geometry';
+import { shifted } from './arrange';
+import { PROJECTION, apply, counted, flatTargets, footprint, onFloor, onWall, solids as solidsOf, targets, top, topFace, zScale, FLAT, type Point, type Point3, type Solid } from './geometry';
 import {
   boxText,
   changes,
@@ -34,9 +35,7 @@ import { insertPoint, moveHandle, movePoint, nearestSide, parseAll, polyline, re
 import { clean, PULL, snapPoint, snapValue, type Snapped } from './snap';
 import { atPath, find, same, within } from './select';
 
-/** The projection a node written in the edited definition is drawn
-    with, unturned (SPEC §7). */
-export const PROJECTION: Map3 = [34.64101615137754, 20, -34.64101615137754, 20, 0, -40, 0, 0];
+export { PROJECTION };
 
 /** The flat plane: output units are the viewBox's. */
 const PLANE: Map3 = [1, 0, 0, 1, 0, 0, 0, 0];
@@ -831,6 +830,20 @@ export class Tools {
     this.edit(`Nudge ${s.kind} in ${this.studio.editing}`, apply(s.map, [s.values[0]!, s.values[1]!, 0]), changes(s, next).map(setArg));
     this.end();
     return true;
+  }
+
+  /** Each solid moved by its `by` (along x, y and z, or a flat shape's
+      x and y), as one undo step: Align and Distribute. A value written
+      as an expression asks, as any edit does. */
+  arrange(moves: { solid: Solid; by: number[] }[], label: string) {
+    for (const { solid, by } of moves) {
+      if (by.every((d) => !d)) continue;
+      this.begin(solid);
+      if (FLAT.has(solid.kind)) this.moveFlatBy(solid, [by[0]!, by[1]!], label);
+      else this.edit(label, apply(solid.map, [solid.values[0]!, solid.values[1]!, solid.values[2] ?? 0]), changes(solid, shifted(solid, by)).map(setArg));
+    }
+    this.end();
+    return this.settled();
   }
 
   /** The selected node again, beside it: after it in its part. */

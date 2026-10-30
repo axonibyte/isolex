@@ -84,7 +84,7 @@ lexicon (SPEC §1). It reads and writes nothing else.
   while drawing, the plane being drawn on (top left); a hint line saying
   what the tool does and which keys change it (bottom center); zoom
   out, the zoom level, zoom in and Fit (bottom right).
-- **Tabs (right):** Design, Source, Tree and Preview.
+- **Tabs (right):** Design, Arrange, Source, Tree and Preview.
 - **Status bar:** the compile state (compiled, with the compiler's
   version and how long it took; or *does not compile*, with the first
   error, while the last good drawing stays); the pointer's coordinates
@@ -181,6 +181,7 @@ flat rectangle, radius handles on an ellipse.
 | Ctrl+D | Duplicate beside the original |
 | Delete, Backspace | Delete the selection (or, with Node, a point) |
 | Ctrl+Z, Ctrl+Shift+Z (Ctrl+Y) | Undo, redo |
+| Ctrl+Shift+A | Align and Distribute (the Arrange tab) |
 | Esc | Cancel what is being drawn; else clear the selection, all of it |
 | Enter | Finish a pen path open, or close a polygon |
 | Space (held) | Pan by dragging |
@@ -230,6 +231,26 @@ With nothing selected: the icon's footprint (from what is drawn, read
 only) or its canvas (editable), and its params: a row each, own or
 inherited, with a slider that previews a value and *Set as default*,
 which writes it.
+
+## Arrange
+
+**Align and Distribute,** as Inkscape's dialog (Ctrl+Shift+A), over
+the shapes selected (Shift+click for several):
+
+- **Align** lines up each shape's lowest edge, middle or highest edge
+  along the isometric x, y or z (bottom, middle, top for z); for flat
+  shapes, along their plane's x and y (left, center, right; top,
+  middle, bottom);
+- **relative to** the first chosen, the last chosen, the selection's
+  bounds, or the icon's footprint (a flat icon's canvas);
+- **Distribute** spreads three or more evenly along an axis, by their
+  middles or by the gaps between them, the outermost two staying.
+
+Each is one undo step, written as a drag writes a move: a value
+written as an expression asks. A face rect stays on its wall and a
+shadow on the floor. What draws more than one shape (a part, a group,
+a repeat), text, and shapes in another plane than the selection's are
+left out, and the panel says how many.
 
 ## Source
 
@@ -414,3 +435,4 @@ Two dialogs from the top bar manage what is not drawn:
 | The welcome panel, Library and Lexicon Properties, the out-of-sync strip | #72 |
 | Export, and a new library from an exported zip | #112 |
 | The Tree's focus view | #113 |
+| Align and Distribute, and selecting several | #114 |

@@ -24,7 +24,7 @@ for (const [theme, canvas] of [
     await open(page);
     await page.getByRole('button', { name: theme, exact: true }).click();
     await page.getByRole('button', { name: canvas }).click();
-    for (const tab of ['Source', 'Tree', 'Design', 'Preview']) {
+    for (const tab of ['Source', 'Tree', 'Design', 'Arrange', 'Preview']) {
       await page.getByRole('tab', { name: tab }).click();
       expect(await violations(page), tab).toEqual([]);
     }
