@@ -116,7 +116,8 @@ it here.
   skew or mirror on the screen, written as a `transform` round the
   selection; or turn a 3-D selection a quarter, written as a `turn`. A
   transform selected takes another step of its kind. Each is one undo
-  step.
+  step. On the canvas, click the selection again for its turn handles:
+  drag a corner to rotate, or a side to scale.
 - **Source:** the file, as you type it; it compiles as you type, and the
   selection follows the caret.
 - **Tree:** every icon as a live thumbnail, nested by `extends`, its

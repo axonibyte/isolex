@@ -8,7 +8,7 @@
 import type { Answer, Ask, Map3, NodeAt } from './backend';
 import type { Studio } from './state.svelte';
 import { shifted } from './arrange';
-import { composed, head, idle, inTiles, middle, runs, wrapped, type Step } from './transform';
+import { around, composed, head, idle, inTiles, middle, pivotHandles, pivotStep, runs, stepped, wrapped, type Step } from './transform';
 import { PROJECTION, apply, counted, flatTargets, footprint, onFloor, onWall, solids as solidsOf, targets, top, topFace, zScale, FLAT, type Point, type Point3, type Solid } from './geometry';
 import {
   boxText,
@@ -58,7 +58,7 @@ export interface Press {
 export interface Handle {
   id: string;
   at: Point;
-  kind: 'corner' | 'height' | 'radius' | 'point' | 'control' | 'advance';
+  kind: 'corner' | 'height' | 'radius' | 'point' | 'control' | 'advance' | 'rotate' | 'scale';
   label: string;
   /** A curve's handle is drawn from its point. */
   from?: Point;
@@ -77,7 +77,17 @@ type Drag =
   | { kind: 'lift'; solid: Solid; from: Point }
   | { kind: 'handle'; solid: Solid; handle: string; from: Point }
   | { kind: 'node'; solid: Solid; handle: string; from: Point; moved: boolean; alt: boolean }
-  | { kind: 'pending'; solid: Solid; from: Point };
+  | { kind: 'pending'; solid: Solid; from: Point; again: boolean };
+
+/** A turn handle being dragged (#115): round the box of what is selected,
+    about its middle, and the step it has come to. */
+interface Pivot {
+  handle: string;
+  from: Point;
+  center: Point;
+  box: { lo: Point; hi: Point };
+  step: Step | null;
+}
 
 type Drawing =
   | { phase: 'footprint'; tool: 'box' | 'tile'; z: number; a: Point; b: Point }
@@ -116,6 +126,7 @@ export class Tools {
   touched = $state<number | null>(null);
 
   private drag: Drag | null = null;
+  private pivot: Pivot | null = null;
   private drawing = $state<Drawing | null>(null);
   /** The edits of a gesture, in order, each after the last has landed. */
   private queue: Promise<unknown> = Promise.resolve();
@@ -179,9 +190,30 @@ export class Tools {
     return mine.length === 1 ? mine[0]! : null;
   }
 
+  /** The selection the turn handles are shown for, after a second click
+      on it (#115). */
+  private turning = $state<NodeAt | null>(null);
+
+  /** The turn handles are shown: the select tool's, on the selection
+      they were asked for. */
+  get pivoting(): boolean {
+    const sel = this.studio.selected;
+    return this.tool === 'select' && !!sel && !!this.turning && same(this.turning, sel) && !this.studio.previewing;
+  }
+
+  /** What every node selected draws, round which the turn handles go. */
+  private get chosenSolids(): Solid[] {
+    return this.solids.filter((sol) => sol.select && this.studio.chosen.some((n) => within(sol.select!, n)));
+  }
+
   /** The selected solid's handles: its size with the select tool, its
-      points with the node tool. */
+      points with the node tool; after a second click on the selection,
+      the turn handles round all of it. */
   get handles(): Handle[] {
+    if (this.pivoting) {
+      const b = around(this.chosenSolids, false);
+      return b ? pivotHandles(b) : [];
+    }
     // a glyph's advance, with the select tool, whatever is selected
     const g = this.studio.sketch?.glyph;
     const advance: Handle[] =
@@ -280,6 +312,12 @@ export class Tools {
       this.advancing = true;
       return;
     }
+    if (p.handle && this.pivoting && /^(rot|scale)-/.test(p.handle)) {
+      const box = around(this.chosenSolids, false);
+      this.drag = null;
+      if (box) this.pivot = { handle: p.handle, from: p.at, center: [(box.lo[0] + box.hi[0]) / 2, (box.lo[1] + box.hi[1]) / 2], box, step: null };
+      return;
+    }
     const sel = this.selected;
     if (p.handle && sel) {
       this.drag = { kind: 'handle', solid: sel, handle: p.handle, from: p.at };
@@ -296,12 +334,15 @@ export class Tools {
       // a press on a shape selects it, and a drag from there moves it; one
       // drawn through what it selects (a text's glyph, a fragment's shape)
       // is not the selection's to move
-      if (!this.studio.selected || !within(solid.select, this.studio.selected)) this.studio.select(solid.select);
+      const again = !!this.studio.selected && within(solid.select, this.studio.selected);
+      if (!again) this.studio.select(solid.select);
       if (!same(solid.select, solid.node)) {
+        // a second click on a group selected shows its turn handles
+        if (again) this.toggleTurning();
         this.drag = null;
         return;
       }
-      this.drag = { kind: 'pending', solid, from: p.at };
+      this.drag = { kind: 'pending', solid, from: p.at, again };
       return this.begin(solid);
     }
     this.drag = null;
@@ -314,6 +355,14 @@ export class Tools {
     if (!held) return this.hover(p);
     const d = this.drag;
     if (this.advancing) return this.moveAdvance(p);
+    const pv = this.pivot;
+    if (pv) {
+      pv.step = pivotStep(pv.handle, pv.center, pv.from, p.at, p.shift);
+      this.preview = pv.step ? [stepped(pv.box, pv.center, pv.step)] : [];
+      const s = pv.step;
+      this.feedback = s ? { at: p.at, text: s.kind === 'rotate' ? `rotate ${s.deg}°` : s.kind === 'scale' ? `scale ${clean(s.sx * 100)}% × ${clean(s.sy * 100)}%` : '' } : null;
+      return;
+    }
     if (!d) return;
     if (d.kind === 'node') return this.moveNode(d, p);
     if (d.kind === 'pending') {
@@ -338,12 +387,32 @@ export class Tools {
     this.indicator = null;
     this.feedback = null;
     if (d?.kind === 'node' && !d.moved && d.alt && d.handle.startsWith('pt-')) this.toggleNode(d.solid, Number(d.handle.slice(3)));
+    // a click, not a drag, on what was selected: the turn handles, or not
+    if (d?.kind === 'pending' && d.again) this.toggleTurning();
+    const pv = this.pivot;
+    this.pivot = null;
+    if (pv) {
+      this.preview = [];
+      const step = pv.step;
+      if (step && !idle(step)) {
+        const n = this.studio.chosen.length;
+        const verb = step.kind === 'rotate' ? 'Rotate' : 'Scale';
+        // what it is wrapped in keeps the handles
+        void this.transform(step, `${verb} ${n === 1 ? 'one shape' : `${n} shapes`} in ${this.studio.editing}`).then(() => (this.turning = this.studio.selected));
+      }
+    }
     if (this.advancing) {
       this.advancing = false;
       this.setAdvance(p);
     }
     this.end();
-    return d?.kind === 'pending' || !d;
+    // a turn handle's drag is not a click on nothing
+    return !pv && (d?.kind === 'pending' || !d);
+  }
+
+  /** The turn handles shown on the selection, or its own again. */
+  private toggleTurning() {
+    this.turning = this.pivoting ? null : this.studio.selected;
   }
 
   /** A double-click: with the node tool, a point added on the side under
@@ -390,9 +459,10 @@ export class Tools {
 
   /** Esc: what is being drawn, or the drag, stops. */
   cancel(): boolean {
-    const busy = !!(this.drawing || this.drag || this.choice);
+    const busy = !!(this.drawing || this.drag || this.choice || this.pivot);
     this.drawing = null;
     this.drag = null;
+    this.pivot = null;
     this.choice = null;
     this.clear();
     this.end();

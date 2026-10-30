@@ -3,7 +3,7 @@
 // what is selected.
 
 import { describe, expect, it } from 'vitest';
-import { composed, head, idle, middle, runs, wrapped } from './transform';
+import { composed, head, idle, middle, pivotHandles, pivotStep, runs, stepped, wrapped } from './transform';
 import { PROJECTION, type Solid } from './geometry';
 
 const node = { file: 'a.ilx', start: 0, len: 1 };
@@ -81,5 +81,58 @@ describe('the middle', () => {
     expect(middle([solid('rect', [0, 0, 4, 2], [1, 0, 0, 1, 0, 0, 10, 5])], false)).toEqual([12, 6]);
     // nothing flat turns in tiles
     expect(middle([solid('rect', [0, 0, 4, 2], [1, 0, 0, 1, 0, 0, 0, 0])], true)).toBeNull();
+  });
+});
+
+describe('the turn handles', () => {
+  const box = { lo: [0, 0] as [number, number], hi: [40, 20] as [number, number] };
+
+  it('rotate at the corners and scale at the middles of the sides', () => {
+    const hs = pivotHandles(box);
+    expect(hs.filter((h) => h.kind === 'rotate').map((h) => h.at)).toEqual([
+      [0, 0],
+      [40, 0],
+      [40, 20],
+      [0, 20],
+    ]);
+    expect(hs.filter((h) => h.kind === 'scale').map((h) => [h.id, h.at])).toEqual([
+      ['scale-x0', [0, 10]],
+      ['scale-x1', [40, 10]],
+      ['scale-y0', [20, 0]],
+      ['scale-y1', [20, 20]],
+    ]);
+  });
+
+  it('come, dragged, to a rotation clockwise to 15°, or to 1° with Shift', () => {
+    const c: [number, number] = [20, 10];
+    // a quarter round, clockwise on a screen whose y runs down
+    expect(pivotStep('rot-1', c, [40, 10], [20, 30], false)).toEqual({ kind: 'rotate', deg: 90 });
+    expect(pivotStep('rot-1', c, [40, 10], [20, -10], false)).toEqual({ kind: 'rotate', deg: -90 });
+    // 22° rounds to 15°, or stays 22° with Shift
+    const to: [number, number] = [20 + 20 * Math.cos((22 * Math.PI) / 180), 10 + 20 * Math.sin((22 * Math.PI) / 180)];
+    expect(pivotStep('rot-1', c, [40, 10], to, false)).toEqual({ kind: 'rotate', deg: 15 });
+    expect(pivotStep('rot-1', c, [40, 10], to, true)).toEqual({ kind: 'rotate', deg: 22 });
+    expect(pivotStep('rot-1', c, [40, 10], [0, 10], false)).toEqual({ kind: 'rotate', deg: 180 });
+  });
+
+  it('come to a scale across or down, to 5%, both ways with Shift', () => {
+    const c: [number, number] = [20, 10];
+    expect(pivotStep('scale-x1', c, [40, 10], [61, 12], false)).toEqual({ kind: 'scale', sx: 2.05, sy: 1 });
+    expect(pivotStep('scale-y0', c, [20, 0], [20, 5], false)).toEqual({ kind: 'scale', sx: 1, sy: 0.5 });
+    expect(pivotStep('scale-x0', c, [0, 10], [10, 10], true)).toEqual({ kind: 'scale', sx: 0.5, sy: 0.5 });
+    // never to nothing, nor through to the other side
+    expect(pivotStep('scale-x1', c, [40, 10], [0, 10], false)).toEqual({ kind: 'scale', sx: 0.05, sy: 1 });
+  });
+
+  it('preview the box drawn through the step', () => {
+    const r = stepped(box, [20, 10], { kind: 'rotate', deg: 90 }).map(([x, y]) => [+x.toFixed(6), +y.toFixed(6)]);
+    expect(r).toEqual([
+      [30, -10],
+      [30, 30],
+      [10, 30],
+      [10, -10],
+      [30, -10],
+    ]);
+    expect(stepped(box, [20, 10], { kind: 'scale', sx: 2, sy: 1 })[2]).toEqual([60, 20]);
   });
 });

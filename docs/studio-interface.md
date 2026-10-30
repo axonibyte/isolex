@@ -163,7 +163,7 @@ shown dashed, the first point is filled, and each point's handles show.
 
 | Tool | Key | Gesture |
 |---|---|---|
-| Select | V | Click to select, Shift+click to add to the selection or take out; drag to move a shape on its floor (flat shapes in their plane, face rects along their face); Alt+drag lifts a 3-D shape; drag a handle to resize. |
+| Select | V | Click to select, Shift+click to add to the selection or take out, click again for the turn handles; drag to move a shape on its floor (flat shapes in their plane, face rects along their face); Alt+drag lifts a 3-D shape; drag a handle to resize. |
 | Node | A | Drag a point or a curve handle of a path, polygon or line. A smooth point stays smooth (its handles turn together) unless Alt is held. Alt+click a point switches it between corner and smooth. Double-click a segment adds a point. Delete removes the point last touched, while the shape keeps enough. |
 | Pan | H | Drag to pan. |
 
@@ -264,6 +264,13 @@ groups, repeats, inserts), written as the language writes each (SPEC
 - **Turn** a 3-D selection a quarter either way, or mirror it across
   the diagonal: a `turn` or `mirror-diagonal` round it, in tiles, about
   the middle of its footprint, so it shows the faces it turns toward.
+
+**On the canvas,** as in Inkscape, a second click on the selection
+shows its turn handles in place of its own, round all of what is
+selected: drag a corner round the middle to rotate (to 15°, to 1° with
+Shift), or the middle of a side to scale across or down (to 5%, both
+ways with Shift), the box previewed as it will be. A third click shows
+its own handles again.
 
 Neighbors chosen together go into one transform; others each into
 their own; all of it one undo step. The transform is selected after,
@@ -456,3 +463,4 @@ Two dialogs from the top bar manage what is not drawn:
 | Export, and a new library from an exported zip | #112 |
 | The Tree's focus view | #113 |
 | Align and Distribute, and selecting several | #114 |
+| Transform, and the turn handles | #115 |

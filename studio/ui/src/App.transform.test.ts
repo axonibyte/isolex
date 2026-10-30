@@ -150,6 +150,52 @@ describe('Transform', () => {
     await waitFor(async () => expect(await text()).toBe(LIB.replace('box 1.5 1.5 0 1', 'box 2 1.5 0.25 1').replace('tile 0 0 0 1 1', 'tile 0.5 0 0.25 1 1')));
   });
 
+  it('shows turn handles on a second click, and writes what a drag of one comes to', async () => {
+    const { text } = await editing('blocks');
+    const canvas = screen.getByRole('application');
+    const shape = () => canvas.querySelector('[data-shape="0"]')!;
+    const click = async () => {
+      await fireEvent.pointerDown(shape(), { button: 0, clientX: 5, clientY: 5 });
+      await fireEvent.pointerUp(shape(), { button: 0, clientX: 5, clientY: 5 });
+    };
+    const handle = (id: string) => canvas.querySelector(`[data-handle="${id}"]`);
+    /** A handle dragged from one point of the viewBox to another: the
+        canvas, unsized here, shows the viewBox at 1:1 from (400, 300). */
+    const drag = async (id: string, from: [number, number], to: [number, number]) => {
+      const at = ([x, y]: [number, number]) => ({ clientX: 400 + x, clientY: 300 + y });
+      await fireEvent.pointerDown(handle(id)!, { button: 0, ...at(from) });
+      await fireEvent.pointerMove(canvas, { button: 0, ...at(to) });
+      await fireEvent.pointerUp(canvas, { button: 0, ...at(to) });
+    };
+    await click();
+    expect(handle('rot-0')).toBeNull();
+    expect(handle('corner-0')).not.toBeNull();
+    // again: the turn handles round it, in place of its own
+    await click();
+    expect(handle('rot-0')).not.toBeNull();
+    expect(handle('scale-x1')).not.toBeNull();
+    expect(handle('corner-0')).toBeNull();
+    // and again: its own again; and once more, the turn handles
+    await click();
+    expect(handle('rot-0')).toBeNull();
+    await click();
+
+    // its top-left corner, (-34.64, 20) from the middle (0, 60), carried a
+    // quarter round clockwise, to (40, 25.36)
+    await drag('rot-0', [-34.64, 20], [40, 25.36]);
+    const rotated = LIB.replace('    box 1.5 1.5 0 1 1 1\n', '    transform rotate=90 origin="0 60" {\n      box 1.5 1.5 0 1 1 1\n    }\n');
+    await waitFor(async () => expect(await text()).toBe(rotated));
+    // the transform it is wrapped in keeps them: a side dragged twice as far
+    // out scales it across, round the transform
+    await waitFor(() => expect(handle('scale-x1')).not.toBeNull());
+    const side = handle('scale-x1')!.querySelector('polygon')!.getAttribute('points')!.split(' ').map((p) => p.split(',').map(Number));
+    const [sx, sy] = [(side[1]![0]! + side[3]![0]!) / 2, side[0]![1]! + (side[2]![1]! - side[0]![1]!) / 2];
+    await drag('scale-x1', [sx, sy], [sx * 2, sy]);
+    await waitFor(async () => expect(await text()).toMatch(/\n {4}transform scale="2 1" origin="0 60" \{\n {6}transform rotate=90 origin="0 60" \{\n {8}box 1\.5 1\.5 0 1 1 1\n {6}\}\n {4}\}\n/));
+    for (let i = 0; i < 2; i++) await fireEvent.keyDown(window, { key: 'z', ctrlKey: true });
+    await waitFor(async () => expect(await text()).toBe(LIB));
+  });
+
   it('says why a part is not transformed', async () => {
     await editing('blocks');
     const parts = screen.getByRole('complementary', { name: 'Parts' });

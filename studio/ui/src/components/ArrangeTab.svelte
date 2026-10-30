@@ -68,6 +68,7 @@
   const canSpread = $derived(shapes.length >= 3);
 
   const plural = (n: number) => (n === 1 ? 'one shape' : `${n} shapes`);
+  const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
   async function run(verb: string, by: number[][]) {
     const moves = shapes.map((solid, i) => ({ solid, by: by[i]! }));
@@ -134,7 +135,7 @@
       <p class="empty">Select shapes to line up or spread out: Shift+click to select several.</p>
     {:else}
       <p class="note">
-        {plural(shapes.length)}{flat ? ', flat' : ''}{picked.left ? `; ${picked.left} left out (a part, a group, a repeat, text, or in another plane)` : ''}.
+        {capital(plural(shapes.length))}{flat ? ', flat' : ''}{picked.left ? `; ${picked.left} left out (a part, a group, a repeat, text, or in another plane)` : ''}.
       </p>
     {/if}
     <label class="row">

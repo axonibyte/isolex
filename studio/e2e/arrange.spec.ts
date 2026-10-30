@@ -63,3 +63,31 @@ test('rotates a shape on the screen, written as a transform and drawn so', async
   await page.getByRole('tab', { name: 'Source' }).click();
   await expect(page.getByRole('textbox', { name: /^Source of sample\.ilx/ })).toHaveValue(/transform rotate=15 origin="[-\d. ]+" \{\n {6}tile 0 0 0 2 1/);
 });
+
+test('a second click shows turn handles, and dragging a corner rotates', async ({ page }, info) => {
+  await chosen(page);
+  const parts = page.getByRole('complementary', { name: 'Parts' });
+  await parts.getByRole('button', { name: /^tile/ }).click();
+  const canvas = page.getByRole('application');
+  const tile = canvas.locator('.marked').first();
+  const box = (await tile.boundingBox())!;
+  // a click on the tile selected: its turn handles
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  const corner = canvas.locator('[data-handle="rot-1"]');
+  await expect(corner).toBeVisible();
+  await page.screenshot({ path: info.outputPath('handles.png') });
+  // the top-right corner dragged a quarter round, clockwise, about the middle
+  const c = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  const at = (await corner.boundingBox())!;
+  const from = { x: at.x + at.width / 2, y: at.y + at.height / 2 };
+  const to = { x: c.x - (from.y - c.y), y: c.y + (from.x - c.x) };
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move((from.x + to.x) / 2 + 10, (from.y + to.y) / 2 + 10, { steps: 4 });
+  await page.mouse.move(to.x, to.y, { steps: 4 });
+  await expect(page.getByText(/^rotate 90°$/)).toBeVisible();
+  await page.screenshot({ path: info.outputPath('turning.png') });
+  await page.mouse.up();
+  await page.getByRole('tab', { name: 'Source' }).click();
+  await expect(page.getByRole('textbox', { name: /^Source of sample\.ilx/ })).toHaveValue(/transform rotate=90 origin="[-\d. ]+" \{\n {6}tile 0 0 0 2 1/);
+});

@@ -169,7 +169,7 @@
   const tools = new Tools(studio);
   /** What each tool does, for the hint line. */
   const HINTS: Record<string, string> = {
-    select: 'Click to select · drag to move · Alt+drag lifts · arrows nudge, PageUp and PageDown raise and lower',
+    select: 'Click to select, again to rotate and scale · drag to move · Alt+drag lifts · arrows nudge, PageUp and PageDown raise and lower',
     node: 'Drag a point or a handle · Alt keeps a smooth point’s handles apart · Alt+click switches corner and smooth · double-click a side adds a point · Delete removes one',
     hand: 'Drag to pan',
     box: 'Drag a footprint, move up for the height, and click · started on a top face, it stands on it',

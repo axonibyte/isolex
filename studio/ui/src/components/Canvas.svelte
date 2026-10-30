@@ -264,6 +264,25 @@
                 <rect x={h.at[0] - r * 0.6} y={h.at[1] - 3 * r} width={r * 1.2} height={6 * r} vector-effect="non-scaling-stroke" />
                 <title>{h.label}</title>
               </g>
+            {:else if h.kind === 'rotate'}
+              <g class="handle rotate" data-handle={h.id}>
+                <circle cx={h.at[0]} cy={h.at[1]} r={r * 1.1} vector-effect="non-scaling-stroke" />
+                <path d="M{h.at[0] - r * 0.55},{h.at[1] + r * 0.2} A{r * 0.6},{r * 0.6} 0 1 1 {h.at[0] + r * 0.2},{h.at[1] + r * 0.55}" vector-effect="non-scaling-stroke" />
+                <title>{h.label}</title>
+              </g>
+            {:else if h.kind === 'scale'}
+              <g class="handle scale" data-handle={h.id}>
+                <polygon
+                  points={line([
+                    [h.at[0], h.at[1] - r * 1.3],
+                    [h.at[0] + r * 1.3, h.at[1]],
+                    [h.at[0], h.at[1] + r * 1.3],
+                    [h.at[0] - r * 1.3, h.at[1]],
+                  ])}
+                  vector-effect="non-scaling-stroke"
+                />
+                <title>{h.label}</title>
+              </g>
             {:else if h.kind === 'radius' || h.kind === 'control'}
               <circle class="handle" class:control={h.kind === 'control'} data-handle={h.id} cx={h.at[0]} cy={h.at[1]} r={h.kind === 'control' ? r * 0.8 : r} vector-effect="non-scaling-stroke"><title>{h.label}</title></circle>
             {:else if h.kind === 'point'}
@@ -383,6 +402,22 @@
     stroke: var(--accent);
     stroke-width: 1.5;
     cursor: pointer;
+  }
+  .handle.rotate circle {
+    fill: var(--canvas);
+    stroke: var(--accent);
+    stroke-width: 1.5;
+    cursor: grab;
+  }
+  .handle.rotate path {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 1.2;
+    pointer-events: none;
+  }
+  .handle.scale polygon {
+    fill: var(--accent);
+    cursor: move;
   }
   .handle.height line {
     stroke: var(--accent);
