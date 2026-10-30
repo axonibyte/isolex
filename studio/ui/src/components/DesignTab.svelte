@@ -22,6 +22,7 @@
   import { atPath, find, move, type Move } from '../lib/select';
   import { clean } from '../lib/snap';
   import { plainData } from '../lib/flat';
+  import { DEFAULT_PAINT } from '../lib/paint';
 
   interface Props {
     studio: Studio;
@@ -51,21 +52,7 @@
   /** Widths to choose from: the lexicon's, or the language's own. */
   const widths = $derived(studio.view.lexicon.widths.length ? studio.view.lexicon.widths : [1.2, 1.4]);
 
-  /** What each kind is painted with when its source says nothing. */
-  const DEFAULTS: Record<string, { fill: string; stroke: string; width: number | null }> = {
-    tile: { fill: 'body-top', stroke: 'outline', width: 1.2 },
-    facerect: { fill: 'ink', stroke: 'none', width: null },
-    poly3d: { fill: 'body-top', stroke: 'outline', width: 1.2 },
-    seg: { fill: 'none', stroke: 'ink', width: 1.4 },
-    line: { fill: 'none', stroke: 'ink', width: 1.4 },
-    circle: { fill: 'none', stroke: 'outline', width: 1.2 },
-    ellipse: { fill: 'none', stroke: 'outline', width: 1.2 },
-    rect: { fill: 'none', stroke: 'none', width: 1.4 },
-    arc: { fill: 'none', stroke: 'ink', width: 1.4 },
-    path: { fill: 'none', stroke: 'ink', width: 1.4 },
-    poly: { fill: 'ink', stroke: 'none', width: null },
-  };
-  const paint = $derived(DEFAULTS[kind] ?? null);
+  const paint = $derived(DEFAULT_PAINT[kind] ?? null);
 
   /** Where a choice the core needs is offered: by the selected shape. */
   const anchor = $derived.by((): Point => {

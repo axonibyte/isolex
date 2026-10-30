@@ -28,7 +28,7 @@
     void loaded;
     if (!p || p === revealed || !editor || shown !== p.file || !text) return;
     revealed = p;
-    void editor.reveal({ line: p.line, col: p.col, message: p.message, severity: p.severity });
+    void editor.reveal({ line: p.line, col: p.col, message: p.message, severity: p.severity ?? 'warning' });
   });
   let text = $state('');
   /** What the core holds, as far as this tab knows: edits are made

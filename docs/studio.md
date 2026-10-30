@@ -75,6 +75,8 @@ the pointer: a box started on another stands on it.
 |---|---|---|
 | Select | V | Click to select (Shift+click to select several), drag to move, Alt+drag to lift; handles resize. Arrows nudge (Shift for a whole tile), PageUp and PageDown raise and lower, Ctrl+D duplicates, Delete deletes. |
 | Node | A | Drag a point or a curve's handle of a path, a polygon or a line; Alt keeps a smooth point's handles apart, Alt+click switches corner and smooth, a double-click adds a point, Delete removes the one touched last. |
+| Measure | M | Drag to measure: the distance, the angle and each axis's part, in tiles (units, flat). Esc clears it. |
+| Dropper | D | Click a shape for its fill, Shift+click for its stroke: set on the selection, or on what is drawn next. |
 | Pan | H | Drag to pan. |
 | Box | B | Drag a footprint, move up for the height, click. |
 | Tile | T | Drag a footprint. |
@@ -156,6 +158,11 @@ font's Design, writes it as TrueType or a UFO.
 - **Lexicon** edits the `lexicon` and `palette` blocks: the tokens, each
   token's color on a light and a dark ground, the stroke widths, the
   reserved tokens and the limits.
+
+## Finding
+
+**Find** (Ctrl+F) searches the library's definitions, parts, tokens
+and text; a result opens its definition, and its line in the Source tab.
 
 ## Exporting
 

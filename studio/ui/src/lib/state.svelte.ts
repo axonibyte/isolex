@@ -153,7 +153,9 @@ export class Studio {
   /** A message for the hint line, such as why an edit was refused. */
   message = $state<string>('');
   /** A place in the source to show, such as a problem's. */
-  place = $state<{ file: string; line: number; col: number; message: string; severity: 'error' | 'warning' } | null>(null);
+  /** A place opened in the Source tab: a problem's, or what Find found
+      (which has no severity). */
+  place = $state<{ file: string; line: number; col: number; message: string; severity: 'error' | 'warning' | null } | null>(null);
   /** The styles a font's glyphs are set out in, on the canvas. */
   fontStyle = $state<string[]>([]);
   /** In a font being edited, the glyph open on the canvas, by its name

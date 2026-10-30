@@ -180,6 +180,8 @@ those disabled, saying why.
 |---|---|---|
 | Select | V | Click to select, Shift+click to add to the selection or take out, click again for the turn handles; drag to move a shape on its floor (flat shapes in their plane, face rects along their face); Alt+drag lifts a 3-D shape; drag a handle to resize. |
 | Node | A | Drag a point or a curve handle of a path, polygon or line. A smooth point stays smooth (its handles turn together) unless Alt is held. Alt+click a point switches it between corner and smooth. Double-click a segment adds a point. Delete removes the point last touched, while the shape keeps enough. |
+| Measure | M | Drag to measure, as Inkscape's measure tool: the distance, the angle and how far along each axis, beside the pointer, in tiles on the floor (or on a top face, at its height, when started on one) or in units on a flat canvas; snapped as drawing is. Shown until the next, or Esc; it writes nothing. |
+| Dropper | D | Click a shape to pick its fill, Shift+click its stroke: the token is set on everything selected whose paint is its own, as one undo step, writing only that; with nothing selected, it paints what is drawn next. |
 | Pan | H | Drag to pan. |
 
 **Handles** are drawn in screen size: corner squares on a box's or
@@ -197,6 +199,7 @@ flat rectangle, radius handles on an ellipse.
 | Delete, Backspace | Delete the selection (or, with Node, a point) |
 | Ctrl+Z, Ctrl+Shift+Z (Ctrl+Y) | Undo, redo |
 | Ctrl+Shift+A | Align and Distribute (the Arrange tab) |
+| Ctrl+F | Find, across the library |
 | Esc | Cancel what is being drawn; else clear the selection, all of it |
 | Enter | Finish a pen path open, or close a polygon |
 | Space (held) | Pan by dragging |
@@ -295,6 +298,15 @@ and a step of its own kind adds to it (rotate 15 twice is `rotate=30`,
 not two transforms); any other step wraps it again. What leaves the
 icon's frame is an error, as the language has it, until `bounds=` on
 the transform says otherwise.
+
+## Find
+
+Ctrl+F, as Inkscape's Find dialog: definitions, parts, tokens and text
+across the library, found by a part of their name or words and listed
+by kind, in the order written, with where each is written. A token is
+found where it paints (`fill="accent"`), not where a value only looks
+like one. A definition opens; anything else opens its definition and
+its place in the Source tab. Enter opens the first.
 
 ## Source
 
@@ -482,3 +494,4 @@ Two dialogs from the top bar manage what is not drawn:
 | Align and Distribute, and selecting several | #114 |
 | Transform, and the turn handles | #115 |
 | Insert and Badge | #116 |
+| Measure, Dropper and Find | #117 |

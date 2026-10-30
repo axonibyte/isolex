@@ -8,6 +8,8 @@
 import type { Answer, Ask, Map3, NodeAt } from './backend';
 import type { Studio } from './state.svelte';
 import { shifted } from './arrange';
+import { measure, said as saidMeasure, type Measured } from './measure';
+import { painted, withPaint } from './paint';
 import { badgeText, drawsFlat, insertText, nearestCorner, refusal } from './place';
 import { around, composed, head, idle, inTiles, middle, pivotHandles, pivotStep, runs, stepped, wrapped, type Step } from './transform';
 import { PROJECTION, apply, counted, flatTargets, footprint, onFloor, onWall, solids as solidsOf, targets, top, topFace, zScale, FLAT, type Point, type Point3, type Solid } from './geometry';
@@ -307,6 +309,8 @@ export class Tools {
       return;
     }
     if (this.tool === 'insert' || this.tool === 'badge') return this.downPlace(p);
+    if (this.tool === 'measure') return this.downMeasure(p);
+    if (this.tool === 'dropper') return this.downDropper(p);
     if (DRAWS.has(this.tool)) return this.downDraw(p);
     if (this.tool === 'node') return this.downNode(p);
     if (this.tool !== 'select') return;
@@ -355,6 +359,7 @@ export class Tools {
   move(p: Press, held = true) {
     if (this.drawing) return this.moveDraw(p, held);
     if (!held) return this.hover(p);
+    if (this.measuring) return this.moveMeasure(p);
     const d = this.drag;
     if (this.advancing) return this.moveAdvance(p);
     const pv = this.pivot;
@@ -384,6 +389,12 @@ export class Tools {
 
   up(p: Press) {
     if (this.drawing) return this.upDraw(p);
+    // what was measured stays shown until the next, or Esc
+    if (this.measuring) {
+      this.measuring = null;
+      this.indicator = null;
+      return false;
+    }
     const d = this.drag;
     this.drag = null;
     this.indicator = null;
@@ -410,6 +421,99 @@ export class Tools {
     this.end();
     // a turn handle's drag is not a click on nothing
     return !pv && (d?.kind === 'pending' || !d);
+  }
+
+  // --- Measure and Dropper (#117) ---------------------------------------------
+
+  /** What Measure measured last, shown until the next or Esc. */
+  measured = $state<Measured | null>(null);
+  /** Where a measure started: tiles at the height of the floor or the top
+      face it started on, or flat units. */
+  private measuring: { from: number[]; z: number } | null = null;
+
+  /** The point measured at `at`: flat, in the plane, at the flat step; or
+      on the floor at height `z`, snapped as a drawing tool snaps. */
+  private measurePoint(p: Press, z: number): number[] | null {
+    if (this.flat) return this.snapFlat(p.at, null, p.scale);
+    const snapped = snapPoint(
+      onFloor(PROJECTION, p.at, z) ?? [0, 0],
+      this.step,
+      targets(this.solids, null, z),
+      (q) => apply(PROJECTION, [q[0], q[1], z]),
+      (v) => onFloor(PROJECTION, v, z),
+      p.scale,
+    );
+    this.indicator = snapped.what && snapped.at ? { at: snapped.at, what: snapped.what } : null;
+    return [snapped.point[0], snapped.point[1], z];
+  }
+
+  private downMeasure(p: Press) {
+    // started on a top face: measured at its height
+    const solid = p.shape === null ? null : this.solids.find((s) => s.shapes.includes(p.shape!));
+    const z = solid && !FLAT.has(solid.kind) && topFace(solid) === p.shape ? top(solid) : 0;
+    const from = this.measurePoint(p, z);
+    if (!from) return;
+    this.measuring = { from, z };
+    this.measured = measure(from, from);
+    this.preview = [];
+    this.feedback = null;
+  }
+
+  private moveMeasure(p: Press) {
+    const m = this.measuring!;
+    const to = this.measurePoint(p, m.z);
+    if (!to) return;
+    const done = measure(m.from, to);
+    this.measured = done;
+    const screen = (q: number[]) => (q.length === 2 ? apply(this.sheet, [q[0]!, q[1]!, 0]) : apply(PROJECTION, [q[0]!, q[1]!, q[2]!]));
+    this.preview = [[screen(m.from), screen(to)]];
+    this.feedback = { at: screen(to), text: saidMeasure(done) };
+  }
+
+  /** The paint the Dropper picked for what is drawn next, when nothing
+      was selected to take it. */
+  nextPaint = $state<{ key: 'fill' | 'stroke'; token: string } | null>(null);
+
+  private downDropper(p: Press) {
+    const s = this.studio;
+    const shape = p.shape === null || !s.drawing ? null : counted(s.drawing.ir.shapes)[p.shape];
+    if (!shape) {
+      s.message = 'Click a shape to pick its fill, or Shift+click its stroke';
+      return;
+    }
+    const key = p.shift ? 'stroke' : 'fill';
+    const token = shape[key];
+    if (!token || token === 'none') {
+      s.message = `That shape has no ${key}`;
+      return;
+    }
+    if (s.chosen.length) {
+      void this.paint(key, token);
+      return;
+    }
+    this.nextPaint = { key, token };
+    s.message = `${key === 'fill' ? 'Fill' : 'Stroke'} ${token}: for what is drawn next`;
+  }
+
+  /** `token` set as the `key` of every node selected whose paint is its
+      own, as one undo step: only that property written. */
+  paint(key: 'fill' | 'stroke', token: string): Promise<unknown> {
+    const s = this.studio;
+    const found = s.chosen.map((n) => find(s.outline, n)).filter((f) => !!f?.row && painted(f.row.kind));
+    const left = s.chosen.length - found.length;
+    if (!found.length) {
+      s.message = `Nothing selected takes a ${key} of its own: a box, a cylinder, a shadow, a group or a part is painted otherwise`;
+      return this.settled();
+    }
+    const label = `Paint ${found.length === 1 ? found[0]!.row!.kind : `${found.length} shapes`} in ${s.editing}`;
+    for (const f of found) {
+      this.sent = '';
+      this.path = f!.path;
+      this.edit(label, [0, 0], [(node) => ({ kind: 'set-prop', node, key, value: token })]);
+    }
+    this.end();
+    s.message = `${key === 'fill' ? 'Filled' : 'Stroked'} ${found.length === 1 ? 'one shape' : `${found.length} shapes`} with ${token}${left ? `; ${left} painted otherwise, left as they are` : ''}`;
+    return this.settled();
   }
 
   // --- Insert and Badge ------------------------------------------------------
@@ -515,6 +619,8 @@ export class Tools {
     this.drawing = null;
     this.drag = null;
     this.pivot = null;
+    this.measuring = null;
+    this.measured = null;
     this.choice = null;
     this.clear();
     this.end();
@@ -1513,6 +1619,7 @@ export class Tools {
   /** Writes a drawn shape into the part new shapes go into, or a new part
       when the definition has none of its own, and selects it. */
   private async insert(text: string, kind: string, said?: string) {
+    text = this.withNextPaint(text, kind);
     const s = this.studio;
     const o = s.outline;
     if (!o) return;
@@ -1532,6 +1639,7 @@ export class Tools {
   /** Writes a flat shape on the anchor at the origin that ends the part
       drawn in, or on a new one, and selects it. */
   private async insertFlat(text: string, kind: string, said?: string) {
+    text = this.withNextPaint(text, kind);
     const s = this.studio;
     const o = s.outline;
     if (!o) return;
@@ -1567,6 +1675,12 @@ export class Tools {
     const row = s.outline?.parts.find((q) => q.name === name)?.shapes.at(-1)?.children.at(-1);
     if (row) s.select(row.node);
     s.message = '';
+  }
+
+  /** A shape about to be drawn, with the paint the Dropper picked for it. */
+  private withNextPaint(text: string, kind: string): string {
+    const n = this.nextPaint;
+    return n && painted(kind) ? withPaint(text, n.key, n.token) : text;
   }
 
   /** A name for a new part, not one the definition has or inherits. */

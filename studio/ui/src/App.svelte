@@ -18,6 +18,7 @@
   import DesignTab from './components/DesignTab.svelte';
   import ArrangeTab from './components/ArrangeTab.svelte';
   import PlacePicker from './components/PlacePicker.svelte';
+  import FindDialog from './components/FindDialog.svelte';
   import PreviewTab from './components/PreviewTab.svelte';
   import TreeTab from './components/TreeTab.svelte';
   import LibraryDialog from './components/LibraryDialog.svelte';
@@ -173,6 +174,8 @@
     select: 'Click to select, again to rotate and scale · drag to move · Alt+drag lifts · arrows nudge, PageUp and PageDown raise and lower',
     node: 'Drag a point or a handle · Alt keeps a smooth point’s handles apart · Alt+click switches corner and smooth · double-click a side adds a point · Delete removes one',
     hand: 'Drag to pan',
+    measure: 'Drag to measure: in tiles on the floor, or on a top face started on; in units flat · Esc clears',
+    dropper: 'Click a shape to pick its fill, Shift+click its stroke: set on what is selected, or on what is drawn next',
     insert: 'Choose a fragment, then click where it goes, or drag it in · it snaps to the step',
     badge: 'Choose an icon, then click near the corner it goes in, or drag it in',
     box: 'Drag a footprint, move up for the height, and click · started on a top face, it stands on it',
@@ -217,7 +220,7 @@
   let recents = $state<Recent[]>(recent());
   let startup = $state(showAtStartup());
   let opening = $state('');
-  let dialog = $state<'library' | 'lexicon' | 'new' | 'export' | null>(null);
+  let dialog = $state<'library' | 'lexicon' | 'new' | 'export' | 'find' | null>(null);
   /** Reloading would discard unsaved changes: asked first. */
   let confirming = $state(false);
 
@@ -253,6 +256,12 @@
     if (mod && e.shiftKey && key === 'e' && library) {
       e.preventDefault();
       dialog = 'export';
+      return;
+    }
+    // Find, across the library, as Inkscape opens it
+    if (mod && !e.shiftKey && key === 'f' && library) {
+      e.preventDefault();
+      dialog = 'find';
       return;
     }
     // Align and Distribute, as Inkscape opens it
@@ -468,6 +477,7 @@
     {#if dialog === 'library'}<LibraryDialog {studio} onclose={() => (dialog = null)} />{/if}
     {#if dialog === 'lexicon'}<LexiconDialog {studio} onclose={() => (dialog = null)} />{/if}
     {#if dialog === 'export'}<ExportDialog {studio} onclose={() => (dialog = null)} />{/if}
+    {#if dialog === 'find'}<FindDialog {studio} onclose={() => (dialog = null)} />{/if}
 
     <footer class="status">
       <ProblemsMenu {studio} />

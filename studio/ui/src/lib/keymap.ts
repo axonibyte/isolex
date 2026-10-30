@@ -22,6 +22,8 @@ export interface Tool {
 export const TOOLS: (Tool | null)[] = [
   { id: 'select', key: 'V', label: 'Select and move', d: 'M5 3v13l3.5-3.5 2.6 5 2-1-2.6-5H16z', dims: 'any', ready: true },
   { id: 'node', key: 'A', label: 'Node', d: 'M4 15C6 6 14 6 16 15M2.5 13.5h3v3h-3zM14.5 13.5h3v3h-3zM8.5 4.5h3v3h-3z', dims: 'any', ready: true },
+  { id: 'measure', key: 'M', label: 'Measure', d: 'M2 13 13 2l5 5L7 18zM5 10l2 2M8 7l2 2M11 4l2 2', dims: 'any', ready: true },
+  { id: 'dropper', key: 'D', label: 'Dropper: pick a paint', d: 'M3 17l1-3 8-8 2 2-8 8zM12 6l2-2a2 2 0 0 1 3 3l-2 2', dims: 'any', ready: true },
   {
     id: 'hand',
     key: 'H',
