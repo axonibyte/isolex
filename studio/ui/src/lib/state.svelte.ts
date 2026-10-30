@@ -3,7 +3,7 @@
 // reactive and talks to the backend.
 
 import type { IrIcon } from './isolex/ir';
-import type { Backend, Diag, Drawing, Graph, GraphDef, NodeAt, Notice, Origin, Outline, Row, Tree, TreeRow } from './backend';
+import type { Backend, Diag, Drawing, Graph, GraphDef, NodeAt, Notice, Origin, Outline, Row, Start, Tree, TreeRow } from './backend';
 import { atPath, find, same } from './select';
 import { advanceOf, glyphView, gridSource, metricsOf, type GlyphView } from './font';
 
@@ -347,7 +347,7 @@ export class Studio {
   }
 
   /** A new library at `path`, made and opened. */
-  async create(path: string, start: { from: 'empty' } | { from: 'copy'; of: string }) {
+  async create(path: string, start: Start) {
     this.view = empty();
     this.icon = null;
     this.editing = null;

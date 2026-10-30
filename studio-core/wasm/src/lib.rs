@@ -128,6 +128,22 @@ fn answer(v: &Value) -> Result<Value, String> {
                 to(serde_json::to_value(session.library_op(&op)))
             }
             "lexicon" => to(serde_json::to_value(session.lexicon())),
+            // exported: the interface hands these to the browser to save
+            "export_svgs" => {
+                let icons: Option<Vec<String>> = serde_json::from_value(v["icons"].clone())
+                    .map_err(|e| format!("export_svgs: {e}"))?;
+                let ground = serde_json::from_value(v["ground"].clone())
+                    .map_err(|e| format!("export_svgs: {e}"))?;
+                to(serde_json::to_value(
+                    session.export_svgs(icons.as_deref(), ground)?,
+                ))
+            }
+            "export_ir" => {
+                let icons: Option<Vec<String>> = serde_json::from_value(v["icons"].clone())
+                    .map_err(|e| format!("export_ir: {e}"))?;
+                Ok(json!(session.export_ir(icons.as_deref())?))
+            }
+            "export_zip" => Ok(json!(session.export_zip())),
             // a file changed "on disk": the library's in memory
             "outside" => {
                 let changes: Vec<(String, Option<String>)> =

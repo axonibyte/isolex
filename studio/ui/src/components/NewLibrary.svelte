@@ -1,8 +1,9 @@
 <!--
   A new library (docs/studio-interface.md, A library and the disk): its
   name, the folder it goes in, and what it starts from — a lexicon with
-  the standard tokens, a palette and one box, or a copy of another
-  library. It writes the folder and opens it.
+  the standard tokens, a palette and one box, a copy of another library,
+  or a library exported as a zip (#112). It writes the folder and opens
+  it.
 -->
 <script lang="ts">
   import type { Studio } from '../lib/state.svelte';
@@ -16,7 +17,7 @@
 
   let name = $state('icons');
   let parent = $state('');
-  let from = $state<'empty' | 'copy'>('empty');
+  let from = $state<'empty' | 'copy' | 'zip'>('empty');
   let of = $state('');
   let failed = $state('');
 
@@ -28,10 +29,15 @@
     if (p) set(p);
   }
 
+  async function pickZip() {
+    const p = await studio.backend.pickFile('Choose an exported library', ['zip'], 'Zip');
+    if (p) of = p;
+  }
+
   async function make() {
     failed = '';
     try {
-      await studio.create(path, from === 'copy' ? { from: 'copy', of } : { from: 'empty' });
+      await studio.create(path, from === 'empty' ? { from: 'empty' } : { from, of });
       onclose();
     } catch (e) {
       failed = String(e instanceof Error ? e.message : e);
@@ -63,8 +69,18 @@
       <span class="choices">
         <label><input type="radio" bind:group={from} value="empty" /> A lexicon, a palette and one box</label>
         <label><input type="radio" bind:group={from} value="copy" /> A copy of a library</label>
+        <label><input type="radio" bind:group={from} value="zip" /> A library exported as a zip</label>
       </span>
     </div>
+    {#if from === 'zip'}
+      <div class="row">
+        <span>Zip</span>
+        <span class="pick">
+          <input type="text" bind:value={of} placeholder="The exported zip" aria-label="Exported zip" />
+          <button onclick={pickZip}>Choose…</button>
+        </span>
+      </div>
+    {/if}
     {#if from === 'copy'}
       <div class="row">
         <span>Library</span>
@@ -78,7 +94,7 @@
     {#if failed}<p class="failed" role="alert">{failed}</p>{/if}
     <div class="actions">
       <button onclick={onclose}>Cancel</button>
-      <button class="primary" onclick={make} disabled={!path || (from === 'copy' && !of.trim())}>Make it</button>
+      <button class="primary" onclick={make} disabled={!path || (from !== 'empty' && !of.trim())}>Make it</button>
     </div>
   </div>
 </div>

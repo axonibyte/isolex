@@ -172,7 +172,7 @@
         <button aria-pressed={!ufo} onclick={() => (ufo = false)}>OpenType (.ttf)</button>
         <button aria-pressed={ufo} onclick={() => (ufo = true)}>UFO</button>
       </div>
-      <button class="primary" onclick={exportFont} disabled={!inApp} title={inApp ? '' : 'Fonts are exported in the studio’s app'}>Export…</button>
+      <button class="primary" onclick={exportFont} disabled={!inApp} title={inApp ? '' : 'Fonts are exported in the studio’s app'}>Export font…</button>
       {#if exported}<p class="note" role="status">{exported}</p>{/if}
     </section>
   {:else}

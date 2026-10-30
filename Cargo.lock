@@ -46,6 +46,7 @@ name = "isolex-studio-core"
 version = "0.1.0"
 dependencies = [
  "isolex",
+ "miniz_oxide",
  "serde",
  "serde_json",
 ]

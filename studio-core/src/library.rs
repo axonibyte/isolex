@@ -432,6 +432,8 @@ pub enum Start {
     Empty,
     /// The `.ilx` files of another library, as they are on disk.
     Copy { of: PathBuf },
+    /// The `.ilx` files of a library exported as a zip.
+    Zip { of: PathBuf },
 }
 
 /// A new library in `root`, made if it is not there, from `start`; refused
@@ -451,6 +453,8 @@ pub fn create(root: &Path, start: &Start) -> std::io::Result<()> {
         .into_iter()
         .collect(),
         Start::Copy { of } => read_folder(of)?,
+        Start::Zip { of } => crate::export::unzip(&std::fs::read(of)?)
+            .map_err(|why| std::io::Error::new(std::io::ErrorKind::InvalidData, why))?,
     };
     for (path, text) in &files {
         let at = root.join(path);

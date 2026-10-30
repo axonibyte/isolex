@@ -35,8 +35,8 @@ Check a download against `SHA256SUMS-studio` with `sha256sum -c`
 ## Opening a library
 
 The welcome panel opens a library folder (Ctrl+O), makes a new one
-(Ctrl+N: a lexicon with the standard tokens, a palette and one box, or
-a copy of another library), and lists the libraries you opened lately;
+(Ctrl+N: a lexicon with the standard tokens, a palette and one box, a
+copy of another library, or a library exported as a zip), and lists the libraries you opened lately;
 a double-click opens one. With *Show this at startup* off, the library
 you opened last opens instead. `isolex-studio <folder>` opens that
 folder as it starts.
@@ -46,8 +46,8 @@ The first icon the library emits opens on the canvas.
 ## The window
 
 - **Top bar:** what is being edited, undo and redo, the undo history
-  (every step, a click goes back or forward to it), the Library and
-  Lexicon dialogs, and the switches for a light or dark canvas and
+  (every step, a click goes back or forward to it), the Library,
+  Lexicon and Export dialogs, and the switches for a light or dark canvas and
   window.
 - **Tools** down the left, each with its key.
 - **Parts** (or a font's glyphs): the definition's parts and their
@@ -127,8 +127,8 @@ Every icon that sets text in the font is redrawn as you draw.
 
 *Import…* in the Tree reads a TrueType, OpenType or WOFF font into the
 library (choosing its characters, its em and further styles); a font
-whose license forbids it is refused, saying why. *Export…* writes a
-font as TrueType or a UFO.
+whose license forbids it is refused, saying why. *Export font…*, in a
+font's Design, writes it as TrueType or a UFO.
 
 ## The library and its lexicon
 
@@ -139,6 +139,22 @@ font as TrueType or a UFO.
 - **Lexicon** edits the `lexicon` and `palette` blocks: the tokens, each
   token's color on a light and a dark ground, the stroke widths, the
   reserved tokens and the limits.
+
+## Exporting
+
+*Export…* (Ctrl+Shift+E) writes the open icon, chosen icons or every
+icon:
+
+- as **SVG**, exactly as `isolex render` draws them, on a light ground,
+  a dark one or both;
+- as **PNG** at the sizes you tick (the longer side), on either ground;
+- as **the IR**, exactly as `isolex compile --ir` writes it;
+- or the whole library as **a zip**, unsaved changes included, which
+  *New library…* can start from.
+
+Files are named `x.svg`, `x@dark.svg`, `x@16.png` and `x@16-dark.png`.
+One file is saved where you choose; several go into a folder you
+choose. A library with errors is not exported until they are fixed.
 
 ## Saving, undo and the disk
 

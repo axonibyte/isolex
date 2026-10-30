@@ -21,6 +21,7 @@
   import LibraryDialog from './components/LibraryDialog.svelte';
   import LexiconDialog from './components/LexiconDialog.svelte';
   import NewLibrary from './components/NewLibrary.svelte';
+  import ExportDialog from './components/ExportDialog.svelte';
   import { forget, folderName, recent, remember, setShowAtStartup, showAtStartup, when, type Recent } from './lib/recent';
   import { inShell } from './lib/backend';
   import HistoryMenu from './components/HistoryMenu.svelte';
@@ -205,7 +206,7 @@
   let recents = $state<Recent[]>(recent());
   let startup = $state(showAtStartup());
   let opening = $state('');
-  let dialog = $state<'library' | 'lexicon' | 'new' | null>(null);
+  let dialog = $state<'library' | 'lexicon' | 'new' | 'export' | null>(null);
   /** Reloading would discard unsaved changes: asked first. */
   let confirming = $state(false);
 
@@ -236,6 +237,11 @@
     if (mod && !e.shiftKey && key === 'n' && inShell()) {
       e.preventDefault();
       dialog = 'new';
+      return;
+    }
+    if (mod && e.shiftKey && key === 'e' && library) {
+      e.preventDefault();
+      dialog = 'export';
       return;
     }
     // in a text field, its own undo and keys apply
@@ -327,6 +333,7 @@
       <HistoryMenu {studio} />
       <button class="text-btn" onclick={() => (dialog = 'library')}>Library</button>
       <button class="text-btn" onclick={() => (dialog = 'lexicon')}>Lexicon</button>
+      <button class="text-btn" onclick={() => (dialog = 'export')} title="Ctrl+Shift+E">Export…</button>
       <span class="spacer"></span>
       <div class="seg" role="group" aria-label="Canvas">
         <button aria-pressed={canvas === 'light'} onclick={() => chooseCanvas('light')}>Light canvas</button>
@@ -438,6 +445,7 @@
     {/if}
     {#if dialog === 'library'}<LibraryDialog {studio} onclose={() => (dialog = null)} />{/if}
     {#if dialog === 'lexicon'}<LexiconDialog {studio} onclose={() => (dialog = null)} />{/if}
+    {#if dialog === 'export'}<ExportDialog {studio} onclose={() => (dialog = null)} />{/if}
 
     <footer class="status">
       <ProblemsMenu {studio} />

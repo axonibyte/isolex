@@ -16,6 +16,9 @@ isolex = { path = "..", default-features = false }
 serde = { version = "1", features = ["derive"] }
 # the save journal
 serde_json = "1"
+# deflating and inflating an exported zip of the library, as isolex's
+# font converter does WOFF
+miniz_oxide = { version = "0.9", features = ["with-alloc"] }
 
 [dev-dependencies]
 serde_json = "1"

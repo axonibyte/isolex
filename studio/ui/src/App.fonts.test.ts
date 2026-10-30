@@ -96,7 +96,7 @@ describe('a font on the canvas', () => {
     await fireEvent.click(screen.getByRole('tab', { name: 'Design' }));
     expect((screen.getByRole('textbox', { name: 'em' }) as HTMLInputElement).value).toBe('10');
     expect(screen.getByRole('button', { name: 'stroke' }).getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByRole('button', { name: 'Export…' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByRole('button', { name: 'Export font…' }).hasAttribute('disabled')).toBe(true);
   });
 
   it('opens a glyph from its cell', async () => {

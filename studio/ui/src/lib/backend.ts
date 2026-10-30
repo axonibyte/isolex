@@ -217,6 +217,18 @@ export interface Source {
   text: string;
 }
 
+/** The ground an exported SVG is drawn for. */
+export type Ground = 'light' | 'dark';
+
+/** An exported icon: its name and its SVG. */
+export interface ExportedSvg {
+  name: string;
+  svg: string;
+}
+
+/** What a new library starts from. */
+export type Start = { from: 'empty' } | { from: 'copy'; of: string } | { from: 'zip'; of: string };
+
 /** Everything the interface asks of the studio. */
 export interface Backend {
   /** The studio's and the compiler's versions, or none outside the app. */
@@ -224,8 +236,9 @@ export interface Backend {
   /** The library folder the app was started with (`isolex-studio
       <folder>`), which opens first; none outside the app. */
   startup(): Promise<string | null>;
-  /** Asks the person for a library folder; none if they cancel. */
-  pickFolder(): Promise<string | null>;
+  /** Asks the person for a folder (a library to open, unless `title`
+      says otherwise); none if they cancel. */
+  pickFolder(title?: string): Promise<string | null>;
   open(path: string): Promise<void>;
   view(editing: string | null, icon: string | null, visible: string[]): Promise<void>;
   source(file: string): Promise<Source | null>;
@@ -243,19 +256,33 @@ export interface Backend {
   /** A font written in `styles` as TrueType, or a UFO, at `out`: where,
       or an error saying why. */
   exportFont(font: string, styles: string[], out: string, ufo: boolean): Promise<string>;
+  /** `icons` (or every icon) as SVG on `ground`, as `isolex render`
+      draws them (#112); refused, saying why, if the library has errors. */
+  exportSvgs(icons: string[] | null, ground: Ground): Promise<ExportedSvg[]>;
+  /** The IR of `icons` (or every icon), as `isolex compile --ir` writes
+      it. */
+  exportIr(icons: string[] | null): Promise<string>;
+  /** The library as it is open, saved or not, as a zip. */
+  exportZip(): Promise<Uint8Array>;
+  /** A file an export made: in the app, written at `path`; outside it,
+      downloaded as its file name. */
+  writeExport(path: string, data: string | Uint8Array): Promise<void>;
   /** A file or definition made, renamed or moved: one undo step. */
   libraryOp(op: LibraryOp): Promise<Answer>;
   /** The `lexicon` and `palette` blocks as written. */
   lexicon(): Promise<LexiconRows>;
-  /** A new library at `path`, empty or a copy of another, opened. */
-  newLibrary(path: string, start: { from: 'empty' } | { from: 'copy'; of: string }): Promise<void>;
+  /** A new library at `path`, empty, a copy of another or from an
+      exported zip, opened. */
+  newLibrary(path: string, start: Start): Promise<void>;
   /** Files changed "on disk" (a text, or none for removed): only the core
       outside the app, which keeps its disk in memory, does this. */
   outside?(changes: [string, string | null][]): Promise<void>;
   /** Asks the person for a file to read, or a place to write; none if
       they cancel, or outside the app. */
-  pickFile(title: string, extensions: string[]): Promise<string | null>;
-  pickSave(title: string, name: string, extensions: string[]): Promise<string | null>;
+  pickFile(title: string, extensions: string[], kind?: string): Promise<string | null>;
+  /** `kind` names the files `extensions` filter for: "Font", unless
+      said. */
+  pickSave(title: string, name: string, extensions: string[], kind?: string): Promise<string | null>;
   ask(ask: Ask, label: string): Promise<Answer>;
   choose(id: number, option: number): Promise<Answer>;
   beginGesture(): Promise<void>;
@@ -279,8 +306,8 @@ export async function shell(): Promise<Backend> {
   return {
     about: () => invoke('about'),
     startup: () => invoke('startup'),
-    pickFolder: async () => {
-      const picked = await dialog.open({ directory: true, multiple: false, title: 'Open a library folder' });
+    pickFolder: async (title = 'Open a library folder') => {
+      const picked = await dialog.open({ directory: true, multiple: false, title });
       return typeof picked === 'string' ? picked : null;
     },
     open: (path) => invoke('open', { path }),
@@ -294,11 +321,16 @@ export async function shell(): Promise<Backend> {
     lexicon: () => invoke('lexicon'),
     newLibrary: (path, start) => invoke('new_library', { path, start }),
     exportFont: (font, styles, out, ufo) => invoke('export_font', { font, styles, out, ufo }),
-    pickFile: async (title, extensions) => {
-      const picked = await dialog.open({ title, multiple: false, filters: [{ name: 'Fonts', extensions }] });
+    pickFile: async (title, extensions, kind = 'Fonts') => {
+      const picked = await dialog.open({ title, multiple: false, filters: [{ name: kind, extensions }] });
       return typeof picked === 'string' ? picked : null;
     },
-    pickSave: async (title, name, extensions) => (await dialog.save({ title, defaultPath: name, filters: extensions.length ? [{ name: 'Font', extensions }] : [] })) ?? null,
+    pickSave: async (title, name, extensions, kind = 'Font') => (await dialog.save({ title, defaultPath: name, filters: extensions.length ? [{ name: kind, extensions }] : [] })) ?? null,
+    exportSvgs: (icons, ground) => invoke('export_svgs', { icons, ground }),
+    exportIr: (icons) => invoke('export_ir', { icons }),
+    exportZip: async () => new Uint8Array(await invoke<number[]>('export_zip')),
+    // bytes as a list of numbers, which the command reads as Vec<u8>
+    writeExport: (path, data) => invoke('write_export', { out: path, data: Array.from(typeof data === 'string' ? new TextEncoder().encode(data) : data) }),
     ask: (ask, label) => invoke('ask', { ask, label }),
     choose: (id, option) => invoke('choose', { id, option }),
     beginGesture: () => invoke('begin_gesture'),

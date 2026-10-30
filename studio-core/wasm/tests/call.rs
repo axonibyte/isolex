@@ -111,3 +111,25 @@ fn what_it_refuses() {
         "0.1.0"
     );
 }
+
+#[test]
+fn the_library_exported_as_svg_ir_and_a_zip() {
+    send(json!({ "call": "open", "files": [["sample.ilx", SAMPLE]] }));
+    let svgs = send(json!({ "call": "export_svgs", "icons": ["switch-l3"], "ground": "dark" }));
+    let svgs = svgs["result"].as_array().unwrap();
+    assert_eq!(svgs.len(), 1);
+    assert_eq!(svgs[0]["name"], "switch-l3");
+    assert!(svgs[0]["svg"].as_str().unwrap().starts_with("<svg"));
+
+    let ir = send(json!({ "call": "export_ir", "icons": null }));
+    let doc: Value = serde_json::from_str(ir["result"].as_str().unwrap()).unwrap();
+    assert!(doc["icons"].as_array().unwrap().len() > 5);
+
+    let zip = send(json!({ "call": "export_zip" }));
+    let bytes: Vec<u8> = serde_json::from_value(zip["result"].clone()).unwrap();
+    let files = isolex_studio_core::export::unzip(&bytes).unwrap();
+    assert_eq!(files["sample.ilx"], SAMPLE);
+
+    let refused = send(json!({ "call": "export_svgs", "icons": ["nope"], "ground": "light" }));
+    assert!(refused["error"].as_str().unwrap().contains("nope"));
+}

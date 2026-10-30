@@ -3,12 +3,27 @@
 // (studio-core/wasm), over the compiler's sample library kept in memory.
 // It edits, undoes and compiles as the app does; its disk is kept in
 // memory, which saving writes, reloading reads, and `outside` changes as
-// another program would.
+// another program would. What it exports is downloaded, or handed to
+// `saved` (a test's record of it).
 // `npm run core` builds the module into this folder.
 
 import moduleUrl from './studio-core.wasm?url';
 import sampleSource from '../../../../tests/fixtures/sample.ilx?raw';
-import type { Answer, Backend, Drawing, LexiconRows, Notice, Outline, Source } from './backend';
+import type { Answer, Backend, Drawing, ExportedSvg, LexiconRows, Notice, Outline, Source } from './backend';
+
+/** Where an exported file goes outside the app: its name and its bytes. */
+export type Saved = (name: string, data: string | Uint8Array) => void;
+
+/** A file downloaded, as a link to it clicked. */
+function download(name: string, data: string | Uint8Array) {
+  const type = name.endsWith('.svg') ? 'image/svg+xml' : name.endsWith('.png') ? 'image/png' : name.endsWith('.zip') ? 'application/zip' : 'application/json';
+  const url = URL.createObjectURL(new Blob([data as BlobPart], { type }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 
 interface Exports {
   memory: WebAssembly.Memory;
@@ -29,7 +44,7 @@ async function bytes(): Promise<BufferSource> {
 
 /** The core, with a library to open: the sample, unless given another
     as files. */
-export async function core(files: [string, string][] = [['sample.ilx', sampleSource]]): Promise<Backend> {
+export async function core(files: [string, string][] = [['sample.ilx', sampleSource]], saved: Saved = download): Promise<Backend> {
   const { instance } = await WebAssembly.instantiate(await bytes(), {});
   const x = instance.exports as unknown as Exports;
   const encoder = new TextEncoder();
@@ -67,6 +82,11 @@ export async function core(files: [string, string][] = [['sample.ilx', sampleSou
     exportFont: async () => {
       throw new Error('Fonts are exported in the studio’s app');
     },
+    exportSvgs: (icons, ground) => later<ExportedSvg[]>({ call: 'export_svgs', icons, ground }),
+    exportIr: (icons) => later<string>({ call: 'export_ir', icons }),
+    exportZip: async () => new Uint8Array(call<number[]>({ call: 'export_zip' })),
+    // no disk: a download, named as the file would be
+    writeExport: async (path, data) => saved(path.split(/[\\/]/).pop() ?? path, data),
     libraryOp: (op) => later<Answer>({ call: 'library_op', op }),
     lexicon: () => later<LexiconRows>({ call: 'lexicon' }),
     newLibrary: async () => {

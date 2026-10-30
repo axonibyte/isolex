@@ -455,6 +455,26 @@ impl Session {
         .map_err(|ds| ds.join("\n"))
     }
 
+    /// The IR of `icons` (or every icon) as `isolex compile --ir` writes it.
+    pub fn export_ir(&self, icons: Option<&[String]>) -> Result<String, String> {
+        crate::export::ir(&self.lib.sources(), icons)
+    }
+
+    /// The library as it is open, saved or not, as a zip.
+    pub fn export_zip(&self) -> Vec<u8> {
+        crate::export::zip(&self.lib.sources())
+    }
+
+    /// `icons` (or every icon) as SVG on `ground` (#112), which the
+    /// interface writes, or draws as PNG.
+    pub fn export_svgs(
+        &self,
+        icons: Option<&[String]>,
+        ground: crate::export::Ground,
+    ) -> Result<Vec<crate::export::Svg>, String> {
+        crate::export::svgs(&self.lib.sources(), icons, ground)
+    }
+
     /// What the interface shows: the definition and icon open, and the
     /// thumbnails on screen, which compile first.
     pub fn view(&mut self, editing: Option<String>, open: Option<String>, visible: Vec<String>) {

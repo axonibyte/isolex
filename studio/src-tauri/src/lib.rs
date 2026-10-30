@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use isolex_studio_core::compile::Drawing;
+use isolex_studio_core::export::{Ground, Svg};
 use isolex_studio_core::lexicon::LexiconRows;
 use isolex_studio_core::library::Start;
 use isolex_studio_core::outline::Outline;
@@ -145,6 +146,35 @@ fn export_font(
     ufo: bool,
 ) -> Result<String, String> {
     with(&open, |s| s.export_font(&font, &styles, &out, ufo))?
+}
+
+/// `icons` (or every icon) as SVG on `ground` (#112), which the interface
+/// writes, or draws as PNG.
+#[tauri::command]
+fn export_svgs(
+    open: State<Open>,
+    icons: Option<Vec<String>>,
+    ground: Ground,
+) -> Result<Vec<Svg>, String> {
+    with(&open, |s| s.export_svgs(icons.as_deref(), ground))?
+}
+
+/// The IR of `icons` (or every icon), as `isolex compile --ir` writes it.
+#[tauri::command]
+fn export_ir(open: State<Open>, icons: Option<Vec<String>>) -> Result<String, String> {
+    with(&open, |s| s.export_ir(icons.as_deref()))?
+}
+
+/// The library as it is open, as a zip.
+#[tauri::command]
+fn export_zip(open: State<Open>) -> Result<Vec<u8>, String> {
+    with(&open, |s| s.export_zip())
+}
+
+/// A file an export made, written to `out`: only an SVG, PNG, JSON or zip.
+#[tauri::command]
+fn write_export(out: String, data: Vec<u8>) -> Result<(), String> {
+    isolex_studio_core::export::write(std::path::Path::new(&out), &data)
 }
 
 #[tauri::command]
@@ -298,6 +328,10 @@ pub fn run() {
             sketch,
             import_font,
             export_font,
+            export_svgs,
+            export_ir,
+            export_zip,
+            write_export,
             ask,
             choose,
             begin_gesture,

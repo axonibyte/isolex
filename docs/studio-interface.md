@@ -71,7 +71,8 @@ lexicon (SPEC §1). It reads and writes nothing else.
   extends server-2u", "variant down of axis") and a name field that
   renames it; undo and redo, and beside them the undo history (every
   step done, oldest first, then those undone; a click goes back or
-  forward to one); the two theme switches.
+  forward to one); the Library, Lexicon and Export dialogs; the two
+  theme switches.
 - **Tool rail (left):** one button per tool with its key, grouped:
   selecting (Select, Node, Pan), 3-D (Box, Tile, Cylinder, Face rect,
   Shadow, Segment, 3-D polygon), flat (Line, Rectangle, Ellipse, Arc,
@@ -318,9 +319,10 @@ Fonts are part of the library and are edited in the same editor (#84):
   the recent libraries (name, path, definition count, when opened;
   double-click opens). *Show this at startup* is a checkbox.
 - **New library:** a name and a folder, and what to start from (empty:
-  a lexicon with the standard tokens, a palette and one box; or a copy
-  of a library). It writes `lexicon.ilx` and `icons.ilx`. Starting from
-  an exported zip waits for export.
+  a lexicon with the standard tokens, a palette and one box, written as
+  `lexicon.ilx` and `icons.ilx`; a copy of a library; or a library
+  exported as a zip, whose `.ilx` files it takes, without a folder that
+  wraps them all).
 - **Opening** reads the folder as the CLI does (`isolex::library`).
 - **Saving** (Ctrl+S) writes every changed file at once, each to a
   temporary file and renamed into place, so the folder is never
@@ -356,6 +358,29 @@ Two dialogs from the top bar manage what is not drawn:
   change edits its own node where it is written; a block not yet
   written is added, a palette after the lexicon block.
 
+## Export
+
+*Export…* (Ctrl+Shift+E), as Inkscape's Export dialog:
+
+- **What:** the open icon, chosen icons (a checklist, with All and
+  None), or every icon the library emits.
+- **As:**
+  - **SVG,** as `isolex render` draws it: on a light ground with the
+    palette block's light colors over isolex's own; on a dark ground
+    with its dark colors over the studio's dark defaults.
+  - **PNG,** drawn from that SVG by the window at each size chosen (16,
+    24, 32, 48, 64, 128, 256), its longer side the size, as Preview
+    fits an icon.
+  - **The IR,** as `isolex compile --ir` writes it, of the icons chosen.
+  - **The library as a zip:** every file as it is open, saved or not,
+    which *New library…* starts from.
+- **Grounds,** for SVG and PNG: light, dark or both.
+- **Names:** `x.svg`, `x@dark.svg`, `x@16.png`, `x@16-dark.png`; an
+  icon's name never holds `@`, so none meet.
+- **Where:** one file is saved where the person picks; several go into
+  a folder they pick. A library that does not compile is not exported,
+  and the dialog says so.
+
 ## Accessibility
 
 - Every tool, tab, panel and control is reachable by keyboard, with a
@@ -378,3 +403,4 @@ Two dialogs from the top bar manage what is not drawn:
 | Tree | #71 |
 | Fonts and the text tool | #84 |
 | The welcome panel, Library and Lexicon Properties, the out-of-sync strip | #72 |
+| Export, and a new library from an exported zip | #112 |

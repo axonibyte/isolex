@@ -1,10 +1,12 @@
 //! Managing a library (#72): its lexicon and palette blocks as Lexicon
 //! Properties lists them, its files and definitions made, renamed and
 //! moved through a session, each one undo step, a change on disk loaded
-//! or flagged (in memory as on disk), and a new library made.
+//! or flagged (in memory as on disk), a new library made, and the library
+//! exported (#112).
 
 use std::sync::{Arc, Mutex};
 
+use isolex_studio_core::export::{write, Ground};
 use isolex_studio_core::lexicon::lexicon;
 use isolex_studio_core::library::{create, Start};
 use isolex_studio_core::session::{Answer, LibraryOp, Notice, Session, Sink};
@@ -219,4 +221,56 @@ fn a_new_library_starts_empty_or_as_a_copy_and_never_over_one() {
     let err = create(&empty, &Start::Empty).unwrap_err();
     assert!(err.to_string().contains("holds a library already"), "{err}");
     let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn an_exported_zip_starts_a_new_library_with_the_unsaved_text() {
+    let root = std::env::temp_dir().join(format!("isolex-studio-zip-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    let (mut s, _) = session(&[("sample.ilx", SAMPLE), ("more/palette.ilx", PALETTE)]);
+    // an edit not saved is in the zip: it is the library as it is open
+    let a = s.library_op(&LibraryOp::NewFile {
+        path: "extra.ilx".into(),
+    });
+    assert!(matches!(a, Answer::Applied { .. }), "{a:?}");
+    let zip = root.join("lib.zip");
+    write(&zip, &s.export_zip()).unwrap();
+
+    let made = root.join("made");
+    create(&made, &Start::Zip { of: zip.clone() }).unwrap();
+    assert_eq!(Library::open(&made).unwrap().files(), s.library().files());
+
+    // not a zip: refused, and nothing made
+    std::fs::write(root.join("bad.zip"), "nope").unwrap();
+    let err = create(
+        &root.join("bad"),
+        &Start::Zip {
+            of: root.join("bad.zip"),
+        },
+    )
+    .unwrap_err();
+    assert!(err.to_string().contains("not a zip"), "{err}");
+    assert!(!root.join("bad").exists());
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_session_exports_svgs_on_either_ground_and_the_ir() {
+    let (s, _) = session(&[("palette.ilx", PALETTE)]);
+    let light = s.export_svgs(None, Ground::Light).unwrap();
+    let dark = s.export_svgs(None, Ground::Dark).unwrap();
+    assert_eq!(light.len(), dark.len());
+    assert!(light
+        .iter()
+        .zip(&dark)
+        .all(|(l, d)| l.name == d.name && l.svg != d.svg));
+    let one = vec![light[0].name.clone()];
+    assert_eq!(
+        s.export_svgs(Some(&one), Ground::Light).unwrap(),
+        light[..1]
+    );
+
+    let doc: serde_json::Value = serde_json::from_str(&s.export_ir(None).unwrap()).unwrap();
+    assert_eq!(doc["icons"].as_array().unwrap().len(), light.len());
 }
