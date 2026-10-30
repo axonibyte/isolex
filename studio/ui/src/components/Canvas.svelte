@@ -30,8 +30,9 @@
     hidden?: Set<number>;
     /** Where the pointer is: tile x and y on the floor, or flat x and y. */
     onpointer?: (at: string) => void;
-    /** A click on the shape at this index, or on none. */
-    onpick?: (shape: number | null) => void;
+    /** A click on the shape at this index, or on none, and whether Shift
+        was held. */
+    onpick?: (shape: number | null, shift: boolean) => void;
     /** The shape under the pointer, or none. */
     onhover?: (shape: number | null) => void;
   }
@@ -114,7 +115,7 @@
     pressed = null;
     if (!p) return;
     const click = tools ? tools.up(press(e, p.shape, null)) : true;
-    if (click && tool === 'select') onpick?.(p.shape);
+    if (click && tool === 'select') onpick?.(p.shape, e.shiftKey);
   }
 
   function onpointermove(e: PointerEvent) {

@@ -92,8 +92,8 @@
   const def = $derived(studio.definition);
   const flat = $derived(!!icon?.canvas);
   const sources = $derived(studio.drawing?.sources ?? []);
-  /** The selected node's shapes on the canvas. */
-  const marked = $derived(marks(sources, studio.editingNode, studio.selected));
+  /** The shapes on the canvas of every node selected. */
+  const marked = $derived(new Set(studio.chosen.flatMap((n) => [...marks(sources, studio.editingNode, n)])));
   /** The parts hidden in the editor, by node. */
   const partNodes = (names: Set<string>) => studio.outline?.parts.filter((p) => names.has(p.name)).map((p) => p.node) ?? [];
   const hidden = $derived.by(() => {
@@ -118,7 +118,9 @@
 
   /** A click on the canvas: the shape's node selected, if it is the edited
       definition's and its part is not locked. */
-  function onpick(i: number | null) {
+  /** A click on a shape, or on nothing; with Shift, the shape's node
+      added to what is selected, or taken out. */
+  function onpick(i: number | null, shift = false) {
     const o = i === null ? null : sources[i];
     // a font's glyphs set out: a click opens the glyph
     if (studio.font && !studio.glyph) {
@@ -134,6 +136,10 @@
     const locked = n && studio.outline?.parts.find((p) => studio.locked.has(p.name) && within(n, p.node));
     if (locked) {
       studio.message = `Part ${locked.name} is locked`;
+      return;
+    }
+    if (shift) {
+      if (n) studio.add(n);
       return;
     }
     studio.select(n);

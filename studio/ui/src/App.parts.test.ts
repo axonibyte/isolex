@@ -1,6 +1,6 @@
 // The Parts panel and selection (#68), in the window over the stand-in
-// for the core: selecting in each of the three places, and what the panel
-// asks the core for.
+// for the core: selecting in each of the three places, several with Shift
+// (#114), and what the panel asks the core for.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
@@ -42,9 +42,9 @@ function shapeAt(needle: string, nth = 0): Element {
   const found = studio.sources[name]!.map((o, k) => [o, k] as const).filter(([o]) => source.slice(o.node.start).startsWith(needle));
   return canvas().querySelector(`[data-shape="${found[nth]![1]}"]`)!;
 }
-async function click(el: Element) {
-  await fireEvent.pointerDown(el, { button: 0, clientX: 5, clientY: 5 });
-  await fireEvent.pointerUp(el, { button: 0, clientX: 5, clientY: 5 });
+async function click(el: Element, shiftKey = false) {
+  await fireEvent.pointerDown(el, { button: 0, clientX: 5, clientY: 5, shiftKey });
+  await fireEvent.pointerUp(el, { button: 0, clientX: 5, clientY: 5, shiftKey });
 }
 const highlighted = () => document.querySelector('.ln.hl .num')?.textContent;
 const current = (parts: HTMLElement, name: RegExp) => within(parts).getByRole('button', { name }).getAttribute('aria-current');
@@ -79,6 +79,37 @@ describe('Parts and selection', () => {
     // a click on nothing clears it
     await click(canvas());
     expect(current(parts, /^path/)).toBe('false');
+  });
+
+  it('selects several with Shift, in the panel and on the canvas, and Esc lets them all go', async () => {
+    const parts = await editing('switch-poe');
+    const row = (name: RegExp) => within(parts).getByRole('button', { name });
+    const marked = () => canvas().querySelectorAll('.marked').length;
+    await fireEvent.click(row(/^tile/));
+    const one = marked();
+    await fireEvent.click(row(/^cylinder/), { shiftKey: true });
+    expect([current(parts, /^tile/), current(parts, /^cylinder/)]).toEqual(['true', 'true']);
+    expect(marked()).toBeGreaterThan(one);
+    // again, and it is taken out; Ctrl adds as Shift does
+    await fireEvent.click(row(/^cylinder/), { shiftKey: true });
+    expect([current(parts, /^tile/), current(parts, /^cylinder/)]).toEqual(['true', 'false']);
+    expect(marked()).toBe(one);
+    await fireEvent.click(row(/^shadow/), { ctrlKey: true });
+    expect(current(parts, /^shadow/)).toBe('true');
+    // a plain click selects only what it is on
+    await fireEvent.click(row(/^cylinder/));
+    expect([current(parts, /^tile/), current(parts, /^shadow/), current(parts, /^cylinder/)]).toEqual(['false', 'false', 'true']);
+
+    // on the canvas
+    await click(shapeAt('tile'));
+    await click(shapeAt('shadow'), true);
+    expect([current(parts, /^tile/), current(parts, /^shadow/), current(parts, /^cylinder/)]).toEqual(['true', 'true', 'false']);
+    // Shift+click on nothing keeps them
+    await click(canvas(), true);
+    expect(current(parts, /^tile/)).toBe('true');
+    await fireEvent.keyDown(window, { key: 'Escape' });
+    expect([current(parts, /^tile/), current(parts, /^shadow/)]).toEqual(['false', 'false']);
+    expect(marked()).toBe(0);
   });
 
   it('selects by the caret in the source', async () => {

@@ -286,6 +286,12 @@ export class Tools {
       return this.begin(sel);
     }
     const solid = p.shape === null ? null : (this.solids.find((s) => s.shapes.includes(p.shape!)) ?? null);
+    // Shift+click adds to what is selected, or takes out, as the click
+    // says: no drag
+    if (p.shift) {
+      this.drag = null;
+      return;
+    }
     if (solid?.select && !this.locked(solid.select)) {
       // a press on a shape selects it, and a drag from there moves it; one
       // drawn through what it selects (a text's glyph, a fragment's shape)

@@ -51,7 +51,8 @@ The first icon the library emits opens on the canvas.
   window.
 - **Tools** down the left, each with its key.
 - **Parts** (or a font's glyphs): the definition's parts and their
-  shapes, the topmost first; a click selects, *drawing here* marks the
+  shapes, the topmost first; a click selects (Shift or Ctrl+click
+  selects several), *drawing here* marks the
   part new shapes go into, a double-click renames a part, a drag or
   PageUp, PageDown, Home and End reorders, and the eye and the lock
   hide and lock a part in the editor only. Parts
@@ -72,7 +73,7 @@ the pointer: a box started on another stands on it.
 
 | Tool | Key | How |
 |---|---|---|
-| Select | V | Click to select, drag to move, Alt+drag to lift; handles resize. Arrows nudge (Shift for a whole tile), PageUp and PageDown raise and lower, Ctrl+D duplicates, Delete deletes. |
+| Select | V | Click to select (Shift+click to select several), drag to move, Alt+drag to lift; handles resize. Arrows nudge (Shift for a whole tile), PageUp and PageDown raise and lower, Ctrl+D duplicates, Delete deletes. |
 | Node | A | Drag a point or a curve's handle of a path, a polygon or a line; Alt keeps a smooth point's handles apart, Alt+click switches corner and smooth, a double-click adds a point, Delete removes the one touched last. |
 | Pan | H | Drag to pan. |
 | Box | B | Drag a footprint, move up for the height, click. |

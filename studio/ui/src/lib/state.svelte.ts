@@ -141,6 +141,9 @@ export class Studio {
       found again once an edit moves it in the source. */
   selected = $state<NodeAt | null>(null);
   private selectedPath: string | null = null;
+  /** The nodes chosen before it with Shift, in the order chosen, each
+      with its place in the outline. */
+  private others = $state<{ node: NodeAt; path: string }[]>([]);
   /** The part new shapes go into, by name. */
   target = $state<string | null>(null);
   /** Parts hidden or locked in the editor, by name; never written to the
@@ -242,6 +245,7 @@ export class Studio {
     this.glyph = name;
     this.selected = null;
     this.selectedPath = null;
+    this.others = [];
     this.target = name;
     void this.redrawSketch();
   }
@@ -305,6 +309,7 @@ export class Studio {
       this.outline = null;
       this.selected = null;
       this.selectedPath = null;
+      this.others = [];
       this.target = null;
       this.hidden = new Set();
       this.locked = new Set();
@@ -322,6 +327,10 @@ export class Studio {
     const again = this.selectedPath ? atPath(outline, this.selectedPath) : null;
     this.selected = again ? (again.row?.node ?? again.part.node) : null;
     if (!again) this.selectedPath = null;
+    this.others = this.others.flatMap((o) => {
+      const f = atPath(outline, o.path);
+      return f ? [{ node: f.row?.node ?? f.part.node, path: o.path }] : [];
+    });
     const own = outline?.parts.filter((p) => p.op !== 'remove') ?? [];
     if (!own.some((p) => p.name === this.target)) this.target = own.at(-1)?.name ?? null;
     // in a font, what is drawn goes into the glyph open
@@ -338,6 +347,35 @@ export class Studio {
     const f = find(this.outline, node);
     this.selected = f ? node : null;
     this.selectedPath = f?.path ?? null;
+    this.others = [];
+  }
+
+  /** Everything selected, in the order chosen: the selection last. */
+  get chosen(): NodeAt[] {
+    return this.selected ? [...this.others.map((o) => o.node), this.selected] : [];
+  }
+
+  /** Adds the node at `node` to what is selected, as Shift+click does,
+      or takes it out if it is in. It becomes the selection; the one
+      before stays chosen. */
+  add(node: NodeAt) {
+    const f = find(this.outline, node);
+    if (!f) return;
+    if (this.selected && same(this.selected, node)) {
+      const last = this.others.at(-1);
+      this.others = this.others.slice(0, -1);
+      this.selected = last?.node ?? null;
+      this.selectedPath = last?.path ?? null;
+      return;
+    }
+    const kept = this.others.filter((o) => !same(o.node, node));
+    if (kept.length < this.others.length) {
+      this.others = kept;
+      return;
+    }
+    if (this.selected && this.selectedPath) this.others = [...this.others, { node: this.selected, path: this.selectedPath }];
+    this.selected = node;
+    this.selectedPath = f.path;
   }
 
   /** Keeps the selection on the row at `path` of the outline to come,
@@ -354,6 +392,7 @@ export class Studio {
     this.outline = null;
     this.selected = null;
     this.selectedPath = null;
+    this.others = [];
     await this.backend.newLibrary(path, start);
   }
 
@@ -364,6 +403,7 @@ export class Studio {
     this.outline = null;
     this.selected = null;
     this.selectedPath = null;
+    this.others = [];
     await this.backend.open(path);
   }
 
@@ -383,6 +423,8 @@ export class Studio {
     const to = ask.before ? siblings.filter((_, i) => i !== index).findIndex((r) => same(r.node, ask.before!)) : siblings.length - 1;
     const parent = path.slice(0, path.lastIndexOf('/'));
     const was = this.selected && same(this.selected, moved.node);
+    // the rows after it move: only the one moved stays chosen
+    this.others = [];
     if (was) this.follow(`${parent}/${to}`);
     const answer = await this.ask({ kind: 'move-before', node: ask.node, before: ask.before }, `Move ${moved.kind} in ${outline.definition}`);
     if (answer.kind !== 'applied' && was) this.follow(path);

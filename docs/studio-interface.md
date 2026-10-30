@@ -163,7 +163,7 @@ shown dashed, the first point is filled, and each point's handles show.
 
 | Tool | Key | Gesture |
 |---|---|---|
-| Select | V | Click to select; drag to move a shape on its floor (flat shapes in their plane, face rects along their face); Alt+drag lifts a 3-D shape; drag a handle to resize. |
+| Select | V | Click to select, Shift+click to add to the selection or take out; drag to move a shape on its floor (flat shapes in their plane, face rects along their face); Alt+drag lifts a 3-D shape; drag a handle to resize. |
 | Node | A | Drag a point or a curve handle of a path, polygon or line. A smooth point stays smooth (its handles turn together) unless Alt is held. Alt+click a point switches it between corner and smooth. Double-click a segment adds a point. Delete removes the point last touched, while the shape keeps enough. |
 | Pan | H | Drag to pan. |
 
@@ -181,7 +181,7 @@ flat rectangle, radius handles on an ellipse.
 | Ctrl+D | Duplicate beside the original |
 | Delete, Backspace | Delete the selection (or, with Node, a point) |
 | Ctrl+Z, Ctrl+Shift+Z (Ctrl+Y) | Undo, redo |
-| Esc | Cancel what is being drawn; else clear the selection |
+| Esc | Cancel what is being drawn; else clear the selection, all of it |
 | Enter | Finish a pen path open, or close a polygon |
 | Space (held) | Pan by dragging |
 

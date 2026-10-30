@@ -26,7 +26,10 @@
 
   const KEYS: Record<string, Move> = { PageUp: 'raise', PageDown: 'lower', Home: 'top', End: 'bottom' };
 
-  const isSelected = (n: NodeAt) => !!studio.selected && same(studio.selected, n);
+  const isSelected = (n: NodeAt) => studio.chosen.some((c) => same(c, n));
+  /** A click on a row: with Shift or Ctrl, added to what is selected, or
+      taken out. */
+  const pickRow = (e: MouseEvent, n: NodeAt) => (e.shiftKey || e.ctrlKey || e.metaKey ? studio.add(n) : studio.select(n));
 
   function pickPart(p: Part) {
     // a font's glyph opens on the canvas, to draw in
@@ -129,7 +132,7 @@
         aria-current={isSelected(r.node)}
         draggable="true"
         title="PageUp, PageDown, Home and End move it in painter order; drag to reorder"
-        onclick={() => studio.select(r.node)}
+        onclick={(e) => pickRow(e, r.node)}
         onkeydown={(e) => onrowkey(e, list, i, here)}
         ondragstart={(e) => {
           dragging = { siblings: list, index: i, path: here };
