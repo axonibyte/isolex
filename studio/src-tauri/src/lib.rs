@@ -313,6 +313,35 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
+    /// Every dialog the interface asks for is one its window may open:
+    /// without `dialog:allow-save`, a font's *Export…* failed in the app
+    /// and nowhere else.
+    #[test]
+    fn the_window_may_open_every_dialog_the_interface_asks_for() {
+        let capability: serde_json::Value =
+            serde_json::from_str(include_str!("../capabilities/default.json")).unwrap();
+        let granted: Vec<&str> = capability["permissions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|p| p.as_str())
+            .collect();
+        let backend = include_str!("../../ui/src/lib/backend.ts");
+        for (call, permission) in [
+            ("dialog.open(", "dialog:allow-open"),
+            ("dialog.save(", "dialog:allow-save"),
+        ] {
+            assert!(
+                backend.contains(call),
+                "the interface no longer calls {call}"
+            );
+            assert!(
+                granted.contains(&permission),
+                "the interface calls {call} and the window is not granted {permission}"
+            );
+        }
+    }
+
     #[test]
     fn about_names_the_compiler_it_is_built_with() {
         let about = super::about();
