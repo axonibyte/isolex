@@ -4,14 +4,17 @@
   (Shift+click for several) lined up by an edge or their middles along
   x, y and z, or a flat shape's x and y; relative to the first or last
   chosen, the selection's bounds, or the icon's footprint (a flat icon's
-  canvas); or spread evenly, by their middles or their gaps. Each is one
-  undo step.
+  canvas); or spread evenly, by their middles or their gaps. Transform
+  (#115), as Inkscape's dialog: moved by tiles (units, flat), rotated,
+  scaled, skewed or mirrored on the screen, or turned a quarter in tiles,
+  written as the language writes each. Each is one undo step.
 -->
 <script lang="ts">
   import type { Studio } from '../lib/state.svelte';
   import type { Tools } from '../lib/tools.svelte';
   import { FLAT, type Solid } from '../lib/geometry';
-  import { same } from '../lib/select';
+  import { same, within } from '../lib/select';
+  import type { Step } from '../lib/transform';
   import { align, distribute, extentOf, frameOf, reference, sameFrame, type Edge, type Relative, type Spread } from '../lib/arrange';
 
   interface Props {
@@ -86,6 +89,39 @@
     if (ref) void run('Aligned', along(axis, align(extents, axis, edge, ref)));
   }
 
+  // --- Transform ---------------------------------------------------------
+
+  let moveBy = $state([0, 0, 0]);
+  let degrees = $state(15);
+  let scale = $state({ w: 100, h: 100, keep: true });
+  let skew = $state({ x: 0, y: 0 });
+
+  /** What the selection draws is all flat: no z, and nothing turns in
+      tiles. */
+  const allFlat = $derived.by(() => {
+    const drawn = tools.solids.filter((s) => s.select && studio.chosen.some((n) => within(s.select!, n)));
+    return drawn.length > 0 && drawn.every((s) => FLAT.has(s.kind));
+  });
+  const any = $derived(studio.chosen.length > 0);
+
+  function move() {
+    const by = moveBy.slice(0, flat ? 2 : 3);
+    void run('Moved', shapes.map(() => by));
+  }
+
+  async function apply(step: Step, verb: string) {
+    const n = studio.chosen.length;
+    studio.message = '';
+    await tools.transform(step, `${verb} ${plural(n)} in ${studio.editing}`);
+    if (!studio.message) studio.message = `${verb} ${plural(n)}`;
+  }
+
+  /** A percentage typed, as a factor; the other side kept with it. */
+  function scaled(side: 'w' | 'h', v: number) {
+    scale[side] = v;
+    if (scale.keep) scale[side === 'w' ? 'h' : 'w'] = v;
+  }
+
   function spread(axis: number, how: Spread) {
     void run('Distributed', along(axis, distribute(shapes.map((s) => extentOf(s)!), axis, how)));
   }
@@ -137,6 +173,67 @@
       </tbody>
     </table>
   </section>
+
+  <section aria-labelledby="transform-title">
+    <h3 id="transform-title">Transform</h3>
+    {#if !any}
+      <p class="empty">Select shapes to move, rotate, scale, skew, mirror or turn.</p>
+    {:else}
+      <p class="note">About the middle of what is selected; a transform or turn selected takes another step of its kind.</p>
+    {/if}
+    <div class="row" role="group" aria-label="Move">
+      <span class="label">Move</span>
+      <span class="fields">
+        {#each (flat ? ['x', 'y'] : ['x', 'y', 'z']) as axis, i (axis)}
+          <label>{axis} <input type="number" step={flat ? 1 : 0.25} bind:value={moveBy[i]} aria-label="Move by {axis}" /></label>
+        {/each}
+        <span class="unit">{flat ? 'units' : 'tiles'}</span>
+        <button disabled={!shapes.length} onclick={move}>Move</button>
+      </span>
+    </div>
+    <div class="row" role="group" aria-label="Rotate">
+      <span class="label">Rotate</span>
+      <span class="fields">
+        <label><input type="number" step="15" bind:value={degrees} aria-label="Degrees, clockwise" />°</label>
+        <button disabled={!any} onclick={() => apply({ kind: 'rotate', deg: -degrees }, 'Rotated')} aria-label="Rotate counter-clockwise">⟲</button>
+        <button disabled={!any} onclick={() => apply({ kind: 'rotate', deg: degrees }, 'Rotated')} aria-label="Rotate clockwise">⟳</button>
+      </span>
+    </div>
+    <div class="row" role="group" aria-label="Scale">
+      <span class="label">Scale</span>
+      <span class="fields">
+        <label>w <input type="number" step="10" value={scale.w} oninput={(e) => scaled('w', e.currentTarget.valueAsNumber)} aria-label="Width, percent" />%</label>
+        <label>h <input type="number" step="10" value={scale.h} oninput={(e) => scaled('h', e.currentTarget.valueAsNumber)} aria-label="Height, percent" />%</label>
+        <label class="check"><input type="checkbox" bind:checked={scale.keep} /> Keep proportions</label>
+        <button disabled={!any || !(scale.w > 0) || !(scale.h > 0)} onclick={() => apply({ kind: 'scale', sx: scale.w / 100, sy: scale.h / 100 }, 'Scaled')}>Scale</button>
+      </span>
+    </div>
+    <div class="row" role="group" aria-label="Skew">
+      <span class="label">Skew</span>
+      <span class="fields">
+        <label>x <input type="number" step="5" bind:value={skew.x} aria-label="Skew x, degrees" />°</label>
+        <label>y <input type="number" step="5" bind:value={skew.y} aria-label="Skew y, degrees" />°</label>
+        <button disabled={!any} onclick={() => apply({ kind: 'skew', x: skew.x, y: skew.y }, 'Skewed')}>Skew</button>
+      </span>
+    </div>
+    <div class="row" role="group" aria-label="Mirror">
+      <span class="label">Mirror</span>
+      <span class="fields">
+        <button disabled={!any} onclick={() => apply({ kind: 'mirror', how: 'across' }, 'Mirrored')} title="Left for right, on the screen">Across</button>
+        <button disabled={!any} onclick={() => apply({ kind: 'mirror', how: 'down' }, 'Mirrored')} title="Top for bottom, on the screen">Down</button>
+      </span>
+    </div>
+    {#if !allFlat}
+      <div class="row" role="group" aria-label="Turn in tiles">
+        <span class="label">Turn</span>
+        <span class="fields">
+          <button disabled={!any} onclick={() => apply({ kind: 'turn', deg: 270 }, 'Turned')} aria-label="Turn a quarter back" title="A quarter-turn the other way, in tiles: the faces it turns toward drawn">Quarter back</button>
+          <button disabled={!any} onclick={() => apply({ kind: 'turn', deg: 90 }, 'Turned')} aria-label="Turn a quarter" title="A quarter-turn, +x onto +y, in tiles: the faces it turns toward drawn">Quarter</button>
+          <button disabled={!any} onclick={() => apply({ kind: 'mirror-diagonal' }, 'Mirrored')} title="Across the diagonal, x for y, in tiles">Diagonal</button>
+        </span>
+      </div>
+    {/if}
+  </section>
 </div>
 
 <style>
@@ -157,6 +254,31 @@
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 0.05em;
+    color: var(--muted);
+  }
+  .fields {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+  }
+  .fields label {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    color: var(--muted);
+  }
+  .fields input[type='number'] {
+    width: 3.6em;
+    padding: 2px 4px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: var(--raised);
+    color: var(--fg);
+    font-size: 12px;
+  }
+  .unit {
     color: var(--muted);
   }
   .row {

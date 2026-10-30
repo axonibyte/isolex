@@ -112,7 +112,11 @@ it here.
   (Shift+click for several), along x, y and z, or a flat shape's x and
   y, relative to the first or last chosen, the selection, or the
   footprint (a flat icon's canvas); or spread three or more evenly, by
-  middles or gaps. Each is one undo step.
+  middles or gaps. Below it, Transform: move by tiles; rotate, scale,
+  skew or mirror on the screen, written as a `transform` round the
+  selection; or turn a 3-D selection a quarter, written as a `turn`. A
+  transform selected takes another step of its kind. Each is one undo
+  step.
 - **Source:** the file, as you type it; it compiles as you type, and the
   selection follows the caret.
 - **Tree:** every icon as a live thumbnail, nested by `extends`, its

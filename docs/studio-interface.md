@@ -252,6 +252,26 @@ shadow on the floor. What draws more than one shape (a part, a group,
 a repeat), text, and shapes in another plane than the selection's are
 left out, and the panel says how many.
 
+**Transform,** as Inkscape's dialog, over what is selected (shapes,
+groups, repeats, inserts), written as the language writes each (SPEC
+§4), never by rewriting numbers or path data:
+
+- **Move** by tiles (units, for flat shapes), as their numbers;
+- **Rotate** by the degrees given, either way, **Scale** by percentages
+  (proportions kept, or not), **Skew** by degrees, and **Mirror** across
+  or down: a `transform` round what is selected, on the screen, about
+  the middle of what it draws (`transform rotate=15 origin="0 60"`);
+- **Turn** a 3-D selection a quarter either way, or mirror it across
+  the diagonal: a `turn` or `mirror-diagonal` round it, in tiles, about
+  the middle of its footprint, so it shows the faces it turns toward.
+
+Neighbors chosen together go into one transform; others each into
+their own; all of it one undo step. The transform is selected after,
+and a step of its own kind adds to it (rotate 15 twice is `rotate=30`,
+not two transforms); any other step wraps it again. What leaves the
+icon's frame is an error, as the language has it, until `bounds=` on
+the transform says otherwise.
+
 ## Source
 
 The library's source, with the selection's line highlighted and kept in

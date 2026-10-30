@@ -50,3 +50,16 @@ test('lines up the shapes chosen, as one undo step', async ({ page }, info) => {
   await expect(source).toHaveValue(/cylinder 0\.5 0\.5 0 0\.4 0\.12/);
   await expect(source).toHaveValue(/shadow 0\.5 0\.5 0\.48 0\.48/);
 });
+
+test('rotates a shape on the screen, written as a transform and drawn so', async ({ page }, info) => {
+  const panel = await chosen(page);
+  const parts = page.getByRole('complementary', { name: 'Parts' });
+  await parts.getByRole('button', { name: /^tile/ }).click();
+  await panel.getByRole('button', { name: 'Rotate clockwise' }).click();
+  await expect(page.getByText('Rotated one shape')).toBeVisible();
+  // the canvas draws the tile through the map, as the language says
+  await expect(page.getByRole('application').locator('g[transform^="matrix("]').first()).toBeAttached();
+  await page.screenshot({ path: info.outputPath('transform.png') });
+  await page.getByRole('tab', { name: 'Source' }).click();
+  await expect(page.getByRole('textbox', { name: /^Source of sample\.ilx/ })).toHaveValue(/transform rotate=15 origin="[-\d. ]+" \{\n {6}tile 0 0 0 2 1/);
+});

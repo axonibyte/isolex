@@ -8,6 +8,7 @@
 import type { Answer, Ask, Map3, NodeAt } from './backend';
 import type { Studio } from './state.svelte';
 import { shifted } from './arrange';
+import { composed, head, idle, inTiles, middle, runs, wrapped, type Step } from './transform';
 import { PROJECTION, apply, counted, flatTargets, footprint, onFloor, onWall, solids as solidsOf, targets, top, topFace, zScale, FLAT, type Point, type Point3, type Solid } from './geometry';
 import {
   boxText,
@@ -843,6 +844,72 @@ export class Tools {
       else this.edit(label, apply(solid.map, [solid.values[0]!, solid.values[1]!, solid.values[2] ?? 0]), changes(solid, shifted(solid, by)).map(setArg));
     }
     this.end();
+    return this.settled();
+  }
+
+  /** The nodes chosen drawn through `step`, as one undo step (#115): a
+      transform or turn selected takes the step if it is one of its kind,
+      written as a number; else each run of neighbors chosen is wrapped in
+      one, about the middle of what they draw. Says why when it cannot. */
+  transform(step: Step, label: string): Promise<unknown> {
+    this.queue = this.queue.then(async () => {
+      const s = this.studio;
+      if (idle(step)) return this.refuse('That changes nothing');
+      const found = s.chosen.map((n) => find(s.outline, n));
+      if (!found.length) return this.refuse('Select shapes to transform');
+      if (found.some((f) => !f?.row)) return this.refuse('A part is not transformed: select the shapes in it');
+      const rows = found.map((f) => f!);
+      if (rows.some((f) => f.row!.kind === 'pt')) return this.refuse('A point of a polygon is not transformed: select the polygon');
+      if (rows.length === 1) {
+        const f = rows[0]!;
+        const c = composed(f.row!.kind, await this.text(f.row!.node), step);
+        if (c) {
+          const ask: Ask = 'key' in c ? { kind: 'set-prop', node: f.row!.node, key: c.key, value: c.value } : { kind: 'set-arg', node: f.row!.node, index: c.index, value: c.value };
+          if ((await s.ask(ask, label)).kind === 'applied') await s.refresh();
+          return;
+        }
+      }
+      // what is in an anchor is drawn flat: only the screen's steps
+      const inAnchor = (path: string) => {
+        const steps = path.split('/');
+        for (let i = 2; i < steps.length; i++) if (atPath(s.outline, steps.slice(0, i).join('/'))?.row?.kind === 'at') return true;
+        return false;
+      };
+      if (inTiles(step) && rows.some((f) => inAnchor(f.path) || FLAT.has(f.row!.kind) || f.row!.kind === 'text')) {
+        return this.refuse('Only 3-D shapes turn in tiles: rotate or mirror flat shapes on the screen');
+      }
+      const drawn = this.solids.filter((sol) => sol.select && s.chosen.some((n) => within(sol.select!, n)));
+      const origin = middle(drawn, inTiles(step)) ?? [0, 0];
+      const file = rows[0]!.row!.node.file;
+      const src = await s.backend.source(file);
+      if (!src || rows.some((f) => f.row!.node.file !== file)) return this.refuse('The shapes are written in more than one file');
+      const bytes = new TextEncoder().encode(src.text);
+      const decode = (a: number, b: number) => new TextDecoder().decode(bytes.slice(a, b));
+      const groups = runs(rows.map((f) => ({ ...f, at: f.row!.node.start })));
+      const opened = head(step, origin);
+      const asks: Ask[] = groups
+        .map((g) => {
+          const start = g[0]!.at;
+          const last = g.at(-1)!.row!.node;
+          const end = last.start + last.len;
+          const lineStart = bytes.lastIndexOf(0x0a, start - 1) + 1;
+          const indent = decode(lineStart, start).match(/^\s*/)![0];
+          return { kind: 'type' as const, file, at: start, len: end - start, text: wrapped(decode(start, end), indent, opened) };
+        })
+        // the last first, so where each earlier one is stays put
+        .sort((a, b) => b.at - a.at);
+      const firstPath = groups[0]![0]!.path;
+      await s.backend.beginGesture();
+      let applied = true;
+      for (const ask of asks) applied = (await s.ask(ask, label)).kind === 'applied' && applied;
+      await s.backend.endGesture();
+      await s.refresh();
+      // what it is wrapped in is selected, to add to
+      if (applied) {
+        const again = atPath(s.outline, firstPath);
+        if (again?.row) s.select(again.row.node);
+      }
+    });
     return this.settled();
   }
 
