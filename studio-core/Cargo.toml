@@ -5,7 +5,7 @@ edition = "2021"
 rust-version = "1.97"
 description = "What isolex studio does, without a window: the library, its edits and undo, saving, compiling in the background and watching the folder."
 authors = ["Axonibyte Innovations, LLC"]
-license = "Apache-2.0"
+license = "BlueOak-1.0.0"
 repository = "https://github.com/axonibyte/isolex"
 publish = false
 

@@ -107,5 +107,4 @@ converts fonts as `isolex font import` and `isolex font export` do.
 Every example in the guides is compile-checked against the current
 compiler.
 
-Copyright Axonibyte Innovations, LLC. Licensed under the Apache License,
-Version 2.0 (see [LICENSE](LICENSE) and [NOTICE](NOTICE)).
+Copyright Axonibyte Innovations, LLC. Licensed under the Blue Oak Model License 1.0.0.

@@ -10,7 +10,7 @@ They are © the KDL contributors and licensed under the
 [Creative Commons Attribution-ShareAlike 4.0 International License](https://creativecommons.org/licenses/by-sa/4.0/),
 as `LICENSE.md` beside this file says. That license covers these files
 only; they are test data, read by `tests/kdl_conformance.rs`, and no part
-of the isolex compiler, which is Apache-2.0.
+of the isolex compiler, which is under the Blue Oak Model License 1.0.0.
 
 Every input must parse exactly when it has a file of the same name in
 `expected_kdl/` (an input meant to fail ends in `_fail` and has none), and

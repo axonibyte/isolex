@@ -374,8 +374,9 @@ jobs:
           # The module is the same file on every platform, so its name carries
           # no target.
           cp target/wasm32-unknown-unknown/release/isolex_wasm.wasm "../dist/$crate-$ver.wasm" || exit 1
-          # The license and notice go with every release (Apache-2.0 section
-          # 4), so whoever takes a binary or the module from here has them.
+          # The license and notice go with every release (Blue Oak's Notices
+          # section, and the attributions NOTICE carries), so whoever takes a
+          # binary or the module from here has them.
           cp LICENSE ../dist/LICENSE || exit 1
           cp NOTICE ../dist/NOTICE || exit 1
           n=$((n + 3))

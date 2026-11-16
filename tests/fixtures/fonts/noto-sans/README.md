@@ -2,7 +2,7 @@
 
 These fonts are subsets of Noto Sans, by the Noto Project Authors, and
 are licensed under the SIL Open Font License, Version 1.1 (OFL.txt), not
-under isolex's Apache License: every file in this directory is, including
+under isolex's own license: every file in this directory is, including
 the isolex font files converted from them. Noto is a trademark of Google
 LLC. Noto Sans declares no Reserved Font Name.
 
